@@ -88,20 +88,18 @@ export default function AdminBlog() {
       updated_at: new Date().toISOString(),
     };
 
+    // Cast supabase client to any to bypass strict TypeScript table types
+    const db = supabase as any;
+
     if (editingPost.id) {
-      // Update
-      const { error } = await supabase
-        .from('blog_posts')
-        .update(payload as unknown as Record<string, any>)
-        .eq('id', editingPost.id);
+      const { error } = await db.from('blog_posts').update(payload).eq('id', editingPost.id);
       if (error) {
         toast.error(error.message);
         return;
       }
       toast.success('Post updated');
     } else {
-      // Insert
-      const { error } = await supabase.from('blog_posts').insert(payload as unknown as Record<string, any>);
+      const { error } = await db.from('blog_posts').insert(payload);
       if (error) {
         toast.error(error.message);
         return;
