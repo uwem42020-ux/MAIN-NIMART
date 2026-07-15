@@ -8,6 +8,8 @@ import { Mail, Send, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { NimartSpinner } from '@/components/common/NimartSpinner';
 
+const db = supabase as any;
+
 export default function AdminBulkEmail() {
   const { user } = useAuth();
   const [subject, setSubject] = useState('');
@@ -18,7 +20,7 @@ export default function AdminBulkEmail() {
 
   async function previewRecipients() {
     setLoading(true);
-    let query = supabase.from('profiles').select('id', { count: 'exact', head: true });
+    let query = db.from('profiles').select('id', { count: 'exact', head: true });
 
     if (recipientType === 'customers') {
       query = query.eq('role', 'customer');
@@ -44,7 +46,7 @@ export default function AdminBulkEmail() {
     setLoading(true);
     try {
       // Step 1 – Get profile IDs of the chosen role
-      let profileQuery = supabase.from('profiles').select('id');
+      let profileQuery = db.from('profiles').select('id');
       if (recipientType === 'customers') {
         profileQuery = profileQuery.eq('role', 'customer');
       } else if (recipientType === 'providers') {
@@ -58,7 +60,7 @@ export default function AdminBulkEmail() {
         return;
       }
 
-      const userIds = profiles.map((p) => p.id);
+      const userIds = profiles.map((p: any) => p.id);
 
       // Step 2 – Fetch emails via the secure RPC
       const { data: emailsData, error: rpcError } = await supabase
@@ -81,7 +83,7 @@ export default function AdminBulkEmail() {
       if (sendError) throw sendError;
 
       // Log the bulk email
-      await supabase.from('bulk_email_logs').insert({
+      await db.from('bulk_email_logs').insert({
         admin_id: user!.id,
         subject,
         content,
