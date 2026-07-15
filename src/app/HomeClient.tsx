@@ -137,7 +137,7 @@ export function HomeClient({ initialProviders }: HomeClientProps) {
           const distMap = new Map(distances.map((d: any) => [d.provider_id, d.distance_meters]));
           result = result.map(p => ({
             ...p,
-            distance: distMap.has(p.id) ? distMap.get(p.id)! / 1000 : undefined,
+            distance: distMap.has(p.id) ? Number(distMap.get(p.id)) / 1000 : undefined,
           }));
         }
       }
