@@ -47,7 +47,6 @@ export function HomeClient({ initialProviders }: HomeClientProps) {
   const isOffline = useOffline();
   const [mounted, setMounted] = useState(false);
 
-  // Hydration guard – render server data until client mounts
   const [isClient, setIsClient] = useState(false);
   useEffect(() => { setIsClient(true); }, []);
 
@@ -65,7 +64,6 @@ export function HomeClient({ initialProviders }: HomeClientProps) {
     20
   );
 
-  // Preload states & LGAs for location dropdown
   useEffect(() => {
     async function preloadLocations() {
       const { data: allStates } = await supabase
@@ -92,16 +90,14 @@ export function HomeClient({ initialProviders }: HomeClientProps) {
     preloadLocations();
   }, []);
 
-  // Main query – uses the fast RPC and initialData from the server
   const { data: featuredProviders, isLoading } = useQuery({
     queryKey: ['featured-providers', userLat, userLng, stateFilter, lgaFilter],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc('get_featured_providers', { limit_count: 50 });
+      const { data, error } = await (supabase.rpc as any)('get_featured_providers', { limit_count: 50 });
       if (error || !data) return [] as ProviderWithProfile[];
 
       const providers: any[] = Array.isArray(data) ? data : [];
 
-      // Apply client‑side location filter (state/LGA) – not done by the RPC
       let filtered = providers;
       if (lgaFilter) {
         filtered = providers.filter((p: any) => p.profile?.lga_id?.toString() === lgaFilter);
@@ -130,7 +126,6 @@ export function HomeClient({ initialProviders }: HomeClientProps) {
         lastSignInAt: null as string | null,
       })) as ProviderWithProfile[];
 
-      // Add distances if user location available
       const providerIds = result.map(p => p.id);
       if (userLat && userLng && providerIds.length > 0) {
         const { data: distances } = await supabase.rpc('get_provider_distances', {
@@ -147,7 +142,6 @@ export function HomeClient({ initialProviders }: HomeClientProps) {
         }
       }
 
-      // Add last sign‑in times
       if (providerIds.length > 0) {
         const { data: signIns } = await supabase.rpc('get_users_last_sign_in', { user_ids: providerIds });
         if (signIns) {
@@ -159,7 +153,6 @@ export function HomeClient({ initialProviders }: HomeClientProps) {
         }
       }
 
-      // Apply smart sort
       if (smartSortData?.length) {
         const scoreMap = new Map(smartSortData.map(s => [s.provider_id, s.score]));
         result.sort((a, b) => (scoreMap.get(b.id) || 0) - (scoreMap.get(a.id) || 0));
@@ -171,7 +164,6 @@ export function HomeClient({ initialProviders }: HomeClientProps) {
     staleTime: 1000 * 60 * 5,
   });
 
-  // Derive provider counts – use initial data during hydration, live data after
   const providerCounts = useMemo(() => {
     const providers = isClient ? featuredProviders : initialProviders;
     const counts: Record<string, number> = {};
@@ -194,7 +186,6 @@ export function HomeClient({ initialProviders }: HomeClientProps) {
     return counts;
   }, [isClient, featuredProviders, initialProviders]);
 
-  // Prefetch provider profiles for top 5 cards
   useEffect(() => {
     if (!featuredProviders?.length) return;
     featuredProviders.slice(0, 5).forEach(provider => {
@@ -206,7 +197,6 @@ export function HomeClient({ initialProviders }: HomeClientProps) {
     });
   }, [featuredProviders, queryClient]);
 
-  // Real‑time updates
   useEffect(() => {
     const channel = supabase
       .channel('providers-status')
@@ -219,7 +209,6 @@ export function HomeClient({ initialProviders }: HomeClientProps) {
     return () => { supabase.removeChannel(channel); };
   }, [queryClient]);
 
-  // Handlers (unchanged logic)
   const handleLocationSelect = (type: 'state' | 'lga', id: string, label: string) => {
     const params = new URLSearchParams(searchParams.toString());
     if (type === 'state') {
@@ -297,7 +286,6 @@ export function HomeClient({ initialProviders }: HomeClientProps) {
     </div>
   );
 
-  // Render content – matches server HTML during hydration
   const renderContent = () => {
     const show = isClient ? featuredProviders : initialProviders;
 
