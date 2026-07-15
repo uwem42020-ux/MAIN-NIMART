@@ -148,7 +148,7 @@ export function HomeClient({ initialProviders }: HomeClientProps) {
           const signInMap = new Map(signIns.map((s: any) => [s.user_id, s.last_sign_in_at]));
           result = result.map(p => ({
             ...p,
-            lastSignInAt: signInMap.get(p.id) ?? null,
+            lastSignInAt: (signInMap.get(p.id) as string) ?? null,
           }));
         }
       }
