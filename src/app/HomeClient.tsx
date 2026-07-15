@@ -106,7 +106,7 @@ export function HomeClient({ initialProviders }: HomeClientProps) {
       }
       if (filtered.length === 0) return [] as ProviderWithProfile[];
 
-      let result = filtered.map((item: any) => ({
+      let result = (filtered.map((item: any) => ({
         id: item.id,
         business_name: item.business_name,
         description: item.description,
@@ -124,7 +124,7 @@ export function HomeClient({ initialProviders }: HomeClientProps) {
         review_count: item.review_stats?.review_count ?? 0,
         distance: undefined as number | undefined,
         lastSignInAt: null as string | null,
-      })) as ProviderWithProfile[];
+      })) as any) as ProviderWithProfile[];
 
       const providerIds = result.map(p => p.id);
       if (userLat && userLng && providerIds.length > 0) {
