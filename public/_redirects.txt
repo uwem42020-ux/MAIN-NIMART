@@ -1,0 +1,2 @@
+/login   /auth/signin   301
+/login/*  /auth/signin   301

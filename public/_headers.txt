@@ -1,0 +1,7 @@
+# Cache static assets aggressively (JS, CSS, images, fonts)
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Cache other static files (favicon, manifest, robots.txt)
+/*
+  Cache-Control: public, max-age=86400

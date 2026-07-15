@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  
+  <!-- Home icon – solid house -->
+  <symbol id="home" viewBox="0 0 24 24">
+    <path fill="currentColor" d="M12 3L2 12h3v9h6v-6h2v6h6v-9h3L12 3z"/>
+  </symbol>
+
+  <!-- Booking icon – solid calendar with a checkmark inside a circle -->
+  <symbol id="booking" viewBox="0 0 24 24">
+    <path fill="currentColor" d="M7 2v2H5v14c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V6h-2V4h-2v2H9V2H7zM9 8h6v2H9v-2zm0 4h6v2H9v-2zm-2 4h10v2H7v-2z"/>
+    <circle cx="14" cy="14" r="4" fill="currentColor"/>
+    <path fill="white" d="M13 12v3.5l2.5 2.5L17 16.5l-3-3V12z"/>
+  </symbol>
+
+  <!-- Message icon – solid speech bubble with three white dots -->
+  <symbol id="message" viewBox="0 0 24 24">
+    <path fill="currentColor" d="M20 2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h14l4 4V4c0-1.1-.9-2-2-2z"/>
+    <circle cx="8" cy="11" r="2" fill="white"/>
+    <circle cx="12" cy="11" r="2" fill="white"/>
+    <circle cx="16" cy="11" r="2" fill="white"/>
+  </symbol>
+
+  <!-- Bell icon – solid bell with a solid notification dot -->
+  <symbol id="bell" viewBox="0 0 24 24">
+    <path fill="currentColor" d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm7-5h-2V9c0-2.8-2.2-5-5-5S7 6.2 7 9v8H5v2h14v-2z"/>
+    <circle cx="17" cy="6" r="4" fill="currentColor"/>
+  </symbol>
+
+  <!-- Avatar icon – solid face with smile and badge (reverse style) -->
+  <symbol id="avatar" viewBox="0 0 24 24">
+    <path fill="currentColor" d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+    <circle cx="18" cy="18" r="3" fill="currentColor"/>
+    <path fill="white" d="M9 10a1 1 0 1 0 0-2 1 1 0 0 0 0 2zm6 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2z"/>
+  </symbol>
+
+  <!-- Map icon – solid location pin with white inner dot -->
+  <symbol id="map" viewBox="0 0 24 24">
+    <path fill="currentColor" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
+    <circle cx="12" cy="9" r="4" fill="white"/>
+  </symbol>
+
+</svg>
