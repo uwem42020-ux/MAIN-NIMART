@@ -92,7 +92,7 @@ export default function AdminBlog() {
       // Update
       const { error } = await supabase
         .from('blog_posts')
-        .update(payload)
+        .update(payload as any)
         .eq('id', editingPost.id);
       if (error) {
         toast.error(error.message);
@@ -101,7 +101,7 @@ export default function AdminBlog() {
       toast.success('Post updated');
     } else {
       // Insert
-      const { error } = await supabase.from('blog_posts').insert(payload);
+      const { error } = await supabase.from('blog_posts').insert(payload as any);
       if (error) {
         toast.error(error.message);
         return;
