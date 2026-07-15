@@ -128,7 +128,7 @@ export function HomeClient({ initialProviders }: HomeClientProps) {
 
       const providerIds = result.map(p => p.id);
       if (userLat && userLng && providerIds.length > 0) {
-        const { data: distances } = await supabase.rpc('get_provider_distances', {
+        const { data: distances } = await (supabase.rpc as any)('get_provider_distances', {
           user_lat: userLat,
           user_lng: userLng,
           provider_ids: providerIds,
@@ -143,7 +143,7 @@ export function HomeClient({ initialProviders }: HomeClientProps) {
       }
 
       if (providerIds.length > 0) {
-        const { data: signIns } = await supabase.rpc('get_users_last_sign_in', { user_ids: providerIds });
+        const { data: signIns } = await (supabase.rpc as any)('get_users_last_sign_in', { user_ids: providerIds });
         if (signIns) {
           const signInMap = new Map(signIns.map((s: any) => [s.user_id, s.last_sign_in_at]));
           result = result.map(p => ({
