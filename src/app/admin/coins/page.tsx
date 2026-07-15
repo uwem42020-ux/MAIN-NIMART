@@ -73,7 +73,7 @@ export default function AdminCoins() {
       });
 
       // Update balance (RPC sends notification automatically)
-      await supabase.rpc('adjust_coin_balance', {
+      await (supabase.rpc as any)('adjust_coin_balance', {
         p_provider_id: selectedProvider.id,
         p_amount: finalAmount,
       });
