@@ -88,7 +88,6 @@ export default function AdminBlog() {
       updated_at: new Date().toISOString(),
     };
 
-    // Cast supabase client to any to bypass strict TypeScript table types
     const db = supabase as any;
 
     if (editingPost.id) {
@@ -112,7 +111,8 @@ export default function AdminBlog() {
   };
 
   const handleTogglePublished = async (post: BlogPost) => {
-    const { error } = await supabase
+    const db = supabase as any;
+    const { error } = await db
       .from('blog_posts')
       .update({ published: !post.published })
       .eq('id', post.id);
