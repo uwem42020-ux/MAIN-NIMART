@@ -72,7 +72,7 @@ export function HomeClient({ initialProviders }: HomeClientProps) {
         .from('lga_centers')
         .select('state_id, state_name')
         .order('state_name');
-      const uniqueStates = allStates?.filter((v, i, a) => a.findIndex(t => t.state_id === v.state_id) === i) || [];
+      const uniqueStates = (allStates as any[])?.filter((v: any, i: number, a: any[]) => a.findIndex((t: any) => t.state_id === v.state_id) === i) || [];
       setStates(uniqueStates);
 
       const { data: allLgas } = await supabase
@@ -81,7 +81,7 @@ export function HomeClient({ initialProviders }: HomeClientProps) {
         .order('lga_name');
       if (allLgas) {
         const grouped: Record<string, any[]> = {};
-        allLgas.forEach((lga) => {
+        (allLgas as any[]).forEach((lga) => {
           const key = lga.state_id.toString();
           if (!grouped[key]) grouped[key] = [];
           grouped[key].push(lga);
