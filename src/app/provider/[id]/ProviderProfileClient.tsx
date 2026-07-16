@@ -160,7 +160,7 @@ export function ProviderProfileClient({
         services: servicesRes.data ?? [],
         completedBookings: completedRes.data ?? 0,
         lastSignInAt: lastSignInRes.data ?? null,
-        created_at: profileRes.data?.created_at ?? null,
+        created_at: (profileRes.data as any)?.created_at ?? null,
       } as FullProvider;
     },
     initialData: initialProvider,
