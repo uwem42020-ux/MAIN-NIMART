@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/supabase-any';
 import { useAuth } from '@/contexts/AuthContext';
 import toast from 'react-hot-toast';
 import { User, Briefcase, CheckCircle } from 'lucide-react';
@@ -41,7 +42,7 @@ export default function AuthCallback() {
         if (!mounted) return;
         setUser(currentUser);
 
-        const { data: profile, error: profileError } = await supabase
+        const { data: profile, error: profileError } = await db
           .from('profiles')
           .select('role, full_name, is_complete')
           .eq('id', currentUser.id)
@@ -84,7 +85,7 @@ export default function AuthCallback() {
     e.preventDefault();
     if (!user) return;
 
-    const { data: existingProfile, error: existingError } = await supabase
+    const { data: existingProfile, error: existingError } = await db
       .from('profiles')
       .select('role')
       .eq('id', user.id)
@@ -105,7 +106,7 @@ export default function AuthCallback() {
     setSubmitting(true);
     try {
       if (role === 'customer') {
-        const { error: profileError } = await supabase
+        const { error: profileError } = await db
           .from('profiles')
           .update({ full_name: fullName, role, is_complete: true })
           .eq('id', user.id);
@@ -117,26 +118,26 @@ export default function AuthCallback() {
         router.push('/customer/dashboard');
       } else {
         if (referralCode.trim()) {
-          const { data: referrer } = await supabase
+          const { data: referrer } = await db
             .from('providers')
             .select('id')
             .eq('referral_code', referralCode.trim().toUpperCase())
             .single();
 
           if (referrer && referrer.id !== user.id) {
-            await supabase
+            await db
               .from('providers')
               .update({ referred_by: referrer.id })
               .eq('id', user.id);
 
-            await supabase.from('referrals').insert({
+            await db.from('referrals').insert({
               referrer_id: referrer.id,
               referred_provider_id: user.id,
             });
           }
         }
 
-        const { error: profileError } = await supabase
+        const { error: profileError } = await db
           .from('profiles')
           .update({ full_name: fullName, role, is_complete: false })
           .eq('id', user.id);
