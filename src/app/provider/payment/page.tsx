@@ -4,6 +4,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/supabase-any';
 import {
   Send, Copy, CheckCircle,
   ArrowUpRight, ArrowDownLeft, Search, Coins, Info, ChevronDown
@@ -52,15 +53,15 @@ export default function ProviderPayment() {
     setWalletLoading(true);
     try {
       const [providerRes, txnsRes] = await Promise.all([
-        supabase.from('providers').select('coin_balance').eq('id', user!.id).single(),
-        supabase
+        db.from('providers').select('coin_balance').eq('id', user!.id).single(),
+        db
           .from('coin_transactions')
           .select('*')
           .eq('provider_id', user!.id)
           .order('created_at', { ascending: false })
           .limit(50),
       ]);
-      if (providerRes.data) setBalance(providerRes.data.coin_balance || 0);
+      if (providerRes.data) setBalance((providerRes.data as any).coin_balance || 0);
       setTransactions(txnsRes.data || []);
     } catch (err) {
       console.error(err);
@@ -110,12 +111,12 @@ export default function ProviderPayment() {
     setShareLoading(true);
     try {
       const amount = parseInt(shareAmount);
-      await supabase.rpc('adjust_coin_balance', { p_provider_id: user!.id, p_amount: -amount });
-      await supabase.rpc('adjust_coin_balance', {
+      await db.rpc('adjust_coin_balance', { p_provider_id: user!.id, p_amount: -amount });
+      await db.rpc('adjust_coin_balance', {
         p_provider_id: selectedRecipient.id,
         p_amount: amount,
       });
-      await supabase.from('coin_transactions').insert([
+      await db.from('coin_transactions').insert([
         { provider_id: user!.id, amount: -amount, type: 'transfer_out', reference_id: selectedRecipient.id },
         { provider_id: selectedRecipient.id, amount: amount, type: 'transfer_in', reference_id: user!.id },
       ]);
@@ -134,26 +135,24 @@ export default function ProviderPayment() {
 
   const handleSearchProvider = async () => {
     if (!searchTerm.trim()) return;
-    const { data: profiles } = await supabase
+    const { data: profiles } = await db
       .from('profiles')
       .select('id, full_name, email')
       .or(`full_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`)
       .limit(10);
     if (!profiles) return;
-    const profileIds = profiles.map((p: any) => p.id);
-    const { data: providers } = await supabase
+    const profileIds = (profiles as any[]).map((p: any) => p.id);
+    const { data: providers } = await db
       .from('providers')
       .select('id')
       .in('id', profileIds);
-    const providerIds = new Set(providers?.map((p: any) => p.id));
-    const filtered = profiles.filter((p: any) => p.id !== user!.id && providerIds.has(p.id));
+    const providerIds = new Set((providers as any[])?.map((p: any) => p.id));
+    const filtered = (profiles as any[]).filter((p: any) => p.id !== user!.id && providerIds.has(p.id));
     setSearchResults(filtered);
   };
 
-  // 1 NGN = 1 Nicoin
   const nicoinAmount = amount ? parseInt(amount) : 0;
 
-  // Paystack configuration – refreshes balance on success
   const paystackConfig = {
     email: user?.email || '',
     amount: amount ? parseInt(amount) * 100 : 0,
