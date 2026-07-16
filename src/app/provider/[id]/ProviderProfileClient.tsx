@@ -153,7 +153,7 @@ export function ProviderProfileClient({
       ]);
 
       return {
-        ...providerRes.data,
+        ...(providerRes.data as any),
         profile: profileRes.data ?? null,
         portfolio_images: portfolioRes.data ?? [],
         reviews: (reviewsRes.data as ReviewRow[]) ?? [],
