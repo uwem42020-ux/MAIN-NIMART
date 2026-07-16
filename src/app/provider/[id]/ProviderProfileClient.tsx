@@ -41,7 +41,6 @@ import { formatDistanceToNow } from 'date-fns';
 import { useSmartSort } from '@/hooks/useSmartSort';
 import dynamic from 'next/dynamic';
 
-// Dynamic imports for heavy components (loaded only when needed)
 const BookingFormModal = dynamic(
   () => import('@/components/customer/BookingFormModal').then(mod => ({ default: mod.BookingFormModal })),
   {
@@ -80,7 +79,6 @@ interface FullProvider extends ProviderRow {
   distance?: number;
   completedBookings?: number;
   lastSignInAt?: string | null;
-  // created_at is inherited from ProviderRow — do NOT override it
 }
 
 const statusIconMap: Record<string, string> = {
@@ -130,7 +128,6 @@ export function ProviderProfileClient({
   const [coverModalOpen, setCoverModalOpen] = useState(false);
   const [showFullDescription, setShowFullDescription] = useState(false);
 
-  // Main provider query – uses initial data from server, refetchable
   const { data: provider, isLoading, refetch } = useQuery({
     queryKey: ['provider', id],
     queryFn: async () => {
@@ -143,11 +140,11 @@ export function ProviderProfileClient({
         completedRes,
         lastSignInRes,
       ] = await Promise.all([
-        supabase.from('providers').select('*').eq('id', id).single(),
-        supabase.from('profiles').select('*').eq('id', id).single(),
-        supabase.from('portfolio_images').select('*').eq('provider_id', id).order('created_at', { ascending: false }),
-        supabase.from('reviews').select(`id, rating, content, created_at, reviewer:reviewer_id(full_name, avatar_url)`).eq('provider_id', id).order('created_at', { ascending: false }),
-        supabase.from('provider_services').select('*').eq('provider_id', id).order('created_at', { ascending: true }),
+        db.from('providers').select('*').eq('id', id).single(),
+        db.from('profiles').select('*').eq('id', id).single(),
+        db.from('portfolio_images').select('*').eq('provider_id', id).order('created_at', { ascending: false }),
+        db.from('reviews').select(`id, rating, content, created_at, reviewer:reviewer_id(full_name, avatar_url)`).eq('provider_id', id).order('created_at', { ascending: false }),
+        db.from('provider_services').select('*').eq('provider_id', id).order('created_at', { ascending: true }),
         db.rpc('get_provider_completed_bookings', { provider_id: id }),
         db.rpc('get_user_last_sign_in', { user_id: id }),
       ]);
@@ -167,7 +164,6 @@ export function ProviderProfileClient({
     staleTime: 1000 * 60 * 5,
   });
 
-  // Smart sort data
   const { data: smartSortData } = useSmartSort(
     profile?.id,
     provider?.profile?.lat ?? undefined,
@@ -177,18 +173,18 @@ export function ProviderProfileClient({
     20
   );
 
-  // Similar providers
   const { data: similarProviders } = useQuery({
     queryKey: ['similar-providers', id, smartSortData],
     queryFn: async () => {
       if (!id || !provider) return [];
-      const { data: currentProfile } = await supabase
+
+      const { data: currentProfile } = await db
         .from('profiles')
         .select('lat, lng')
         .eq('id', id)
         .single();
 
-      const { data: allProviders } = await supabase
+      const { data: allProviders } = await db
         .from('providers')
         .select('id, business_name, selected_category_slug, selected_tier_slug')
         .neq('id', id)
@@ -198,7 +194,8 @@ export function ProviderProfileClient({
       if (!allProviders || allProviders.length === 0) return [];
 
       const providerIds = allProviders.map((p: any) => p.id);
-      const { data: profiles } = await supabase
+
+      const { data: profiles } = await db
         .from('profiles')
         .select('id, lat, lng, avatar_url, full_name')
         .in('id', providerIds);
@@ -206,8 +203,8 @@ export function ProviderProfileClient({
       const profileMap = new Map<string, any>();
       profiles?.forEach((prof: any) => profileMap.set(prof.id, prof));
 
-      const userLat = currentProfile?.lat;
-      const userLng = currentProfile?.lng;
+      const userLat = (currentProfile as any)?.lat;
+      const userLng = (currentProfile as any)?.lng;
 
       const enriched = allProviders
         .filter((p: any) => profileMap.has(p.id))
@@ -260,7 +257,6 @@ export function ProviderProfileClient({
     enabled: !!id && !!provider,
   });
 
-  // Handlers (unchanged)
   const requireAuth = (callback: () => void) => {
     if (!user) {
       toast.error('Please sign in to continue');
@@ -281,7 +277,7 @@ export function ProviderProfileClient({
   const startConversation = async () => {
     if (!user || !id) return;
 
-    let { data: existingThread } = await supabase
+    let { data: existingThread } = await db
       .from('threads')
       .select('id')
       .eq('provider_id', user.id)
@@ -290,7 +286,7 @@ export function ProviderProfileClient({
       .maybeSingle();
 
     if (!existingThread) {
-      const { data: reverse } = await supabase
+      const { data: reverse } = await db
         .from('threads')
         .select('id')
         .eq('provider_id', id)
@@ -308,7 +304,7 @@ export function ProviderProfileClient({
     }
 
     try {
-      const { data: newThread, error } = await supabase
+      const { data: newThread, error } = await db
         .from('threads')
         .insert({
           provider_id: id,
@@ -381,14 +377,14 @@ export function ProviderProfileClient({
     const bookingId = searchParams.get('bookingId');
     setSubmittingReview(true);
     try {
-      const { data: existingReview } = await supabase
+      const { data: existingReview } = await db
         .from('reviews')
         .select('id')
         .eq('reviewer_id', user.id)
         .eq('provider_id', id!)
         .maybeSingle();
       if (existingReview) { toast.error('You have already reviewed this provider'); setShowReviewModal(false); return; }
-      const { error } = await supabase.from('reviews').insert([{
+      const { error } = await db.from('reviews').insert([{
         reviewer_id: user.id,
         provider_id: id!,
         booking_id: bookingId || null,
@@ -408,7 +404,7 @@ export function ProviderProfileClient({
     if (!reportReason.trim()) { toast.error('Please provide a reason for the report'); return; }
     setSubmittingReport(true);
     try {
-      const { error } = await supabase.from('reports').insert({
+      const { error } = await db.from('reports').insert({
         reporter_id: user.id,
         provider_id: id!,
         reason: reportReason.trim(),
@@ -438,7 +434,6 @@ export function ProviderProfileClient({
     touchEndX.current = null;
   };
 
-  // Derived values
   const avgRating = provider?.reviews?.length
     ? provider.reviews.reduce((acc, r) => acc + r.rating, 0) / provider.reviews.length
     : 0;
@@ -486,7 +481,6 @@ export function ProviderProfileClient({
     <div className="max-w-7xl mx-auto px-0 sm:px-4 sm:px-6 lg:px-8 py-0 sm:py-8">
       {/* ========== MOBILE LAYOUT ========== */}
       <div className="block md:hidden">
-        {/* Cover photo – fixed height, plain img */}
         <div className="relative h-48 sm:h-52 bg-gray-100 overflow-hidden">
           {provider?.profile?.cover_photo ? (
             <button onClick={() => setCoverModalOpen(true)} className="w-full h-full relative group">
@@ -572,7 +566,6 @@ export function ProviderProfileClient({
           </div>
         </div>
 
-        {/* Action buttons */}
         <div className="px-2 mb-6">
           <div className="flex flex-nowrap gap-1 justify-center">
             <button onClick={() => requireAuth(() => setShowBookingModal(true))} className="flex-shrink-0 flex flex-col items-center justify-center gap-1 px-2 py-1.5 bg-primary-600 text-white text-[10px] font-semibold rounded-xl w-14 shadow-md shadow-primary-600/20">
@@ -714,7 +707,6 @@ export function ProviderProfileClient({
           <ArrowLeft className="h-4 w-4 mr-1" /> Back to results
         </button>
 
-        {/* Profile hero card */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-6">
           <div className="relative h-56 bg-gray-100 overflow-hidden">
             {provider?.profile?.cover_photo ? (
@@ -736,7 +728,6 @@ export function ProviderProfileClient({
 
           <div className="px-6 sm:px-8 pt-6 pb-4">
             <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4">
-              {/* Avatar */}
               <div className="relative w-32 h-32 rounded-full border-4 border-white shadow-xl overflow-hidden bg-white flex-shrink-0 -mt-16">
                 {provider?.profile?.avatar_url ? (
                   <button onClick={() => setAvatarModalOpen(true)} className="w-full h-full relative group">
@@ -750,7 +741,6 @@ export function ProviderProfileClient({
                 )}
               </div>
 
-              {/* Name, category, description */}
               <div className="flex-1 text-center sm:text-left">
                 <div className="flex items-center justify-center sm:justify-start gap-3 mb-1 flex-wrap">
                   <h1 className="text-2xl font-bold text-gray-900">{providerName}</h1>
@@ -776,7 +766,6 @@ export function ProviderProfileClient({
                 )}
               </div>
 
-              {/* Action buttons */}
               <div className="flex flex-wrap gap-2 mt-0 sm:mt-0">
                 <button onClick={() => requireAuth(() => setShowBookingModal(true))} className="flex items-center gap-2 px-5 py-2.5 bg-primary-600 text-white text-sm font-semibold rounded-xl hover:bg-primary-700 shadow-md shadow-primary-600/20 transition-all"><Calendar className="h-5 w-5" /> Book</button>
                 <button onClick={() => requireAuth(openChat)} className="flex items-center gap-2 px-5 py-2.5 border border-gray-200 bg-white text-gray-700 text-sm font-semibold rounded-xl hover:bg-gray-50 shadow-sm transition-all"><MessageCircle className="h-5 w-5" /> Message</button>
@@ -792,7 +781,6 @@ export function ProviderProfileClient({
             </div>
           </div>
 
-          {/* Stats bar */}
           <div className="mx-6 border-t border-gray-100 pt-4 pb-4">
             <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600">
               <div className="flex items-center gap-1.5 bg-gray-50 rounded-lg px-3 py-1.5 border border-gray-100"><MapPin className="h-4 w-4 text-primary-500" /><span>{locationString}</span></div>
@@ -808,7 +796,6 @@ export function ProviderProfileClient({
           </div>
         </div>
 
-        {/* Services & Portfolio */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
           {provider?.services?.length > 0 && (
             <Card>
@@ -844,7 +831,6 @@ export function ProviderProfileClient({
           )}
         </div>
 
-        {/* About & Reviews */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
           <Card>
             <h2 className="text-lg font-bold text-gray-900 mb-4">About</h2>
@@ -862,7 +848,6 @@ export function ProviderProfileClient({
           </Card>
         </div>
 
-        {/* Similar Providers */}
         {similarProviders && similarProviders.length > 0 && (
           <div className="mt-8 mb-8">
             <div className="flex items-center justify-between mb-5">
@@ -880,9 +865,6 @@ export function ProviderProfileClient({
         )}
       </div>
 
-      {/* ========== MODALS ========== */}
-
-      {/* Avatar full‑screen modal */}
       {avatarModalOpen && provider?.profile?.avatar_url && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={() => setAvatarModalOpen(false)}>
           <button className="absolute top-4 right-4 text-white" onClick={() => setAvatarModalOpen(false)}>
@@ -892,7 +874,6 @@ export function ProviderProfileClient({
         </div>
       )}
 
-      {/* Cover full‑screen modal */}
       {coverModalOpen && provider?.profile?.cover_photo && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={() => setCoverModalOpen(false)}>
           <button className="absolute top-4 right-4 text-white" onClick={() => setCoverModalOpen(false)}>
@@ -902,7 +883,6 @@ export function ProviderProfileClient({
         </div>
       )}
 
-      {/* Full description modal */}
       {showFullDescription && provider?.description && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setShowFullDescription(false)}>
           <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[80vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
