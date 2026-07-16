@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/supabase-any';
 import { SetPasswordForm } from '@/components/profile/SetPasswordForm';
 import { LocationPickerModal } from '@/components/provider/LocationPickerModal';
 import { NimartSpinner } from '@/components/common/NimartSpinner';
@@ -55,13 +56,12 @@ export default function ProviderProfile() {
   const [cooldownTimer, setCooldownTimer] = useState<string>('');
   const [changingLocation, setChangingLocation] = useState(false);
 
-  // Password status – now uses the database flag instead of localStorage
   const [hasPassword, setHasPassword] = useState(false);
 
   // --- Helper: fetch location change status ---
   const fetchLocationStatus = async () => {
     if (!user) return;
-    const { data, error } = await supabase.rpc('get_location_change_status', { p_provider_id: user.id });
+    const { data, error } = await db.rpc('get_location_change_status', { p_provider_id: user.id });
     if (error) console.error(error);
     else setLocationStatus(data);
   };
@@ -72,50 +72,50 @@ export default function ProviderProfile() {
 
     const fetchData = async () => {
       // Provider business info
-      const { data: providerData } = await supabase
+      const { data: providerData } = await db
         .from('providers')
         .select('business_name, description')
         .eq('id', user.id)
         .single();
       if (providerData) {
-        setBusinessName(providerData.business_name || '');
-        setDescription(providerData.description || '');
+        setBusinessName((providerData as any).business_name || '');
+        setDescription((providerData as any).description || '');
       }
 
       // Profile data
-      const { data: profileData } = await supabase
+      const { data: profileData } = await db
         .from('profiles')
         .select('*')
         .eq('id', user.id)
         .single();
       if (profileData) {
-        setFullName(profileData.full_name || '');
-        setPhone(profileData.phone || '');
-        setStreetAddress(profileData.street_address || '');
-        setLandmark(profileData.landmark || '');
-        setAddressArea(profileData.address_area || '');
-        setAvatarUrl(profileData.avatar_url);
-        setCoverPhoto(profileData.cover_photo);
-        setGender(profileData.gender || '');
-        setAge(profileData.age ? String(profileData.age) : '');
-        setEducation(profileData.education || '');
-        setLanguages(profileData.languages || '');
-        setLgaName(profileData.lga_name || '');
-        setLat(profileData.lat);
-        setLng(profileData.lng);
-        // Password flag from database
-        setHasPassword(profileData.has_password || false);
+        const p = profileData as any;
+        setFullName(p.full_name || '');
+        setPhone(p.phone || '');
+        setStreetAddress(p.street_address || '');
+        setLandmark(p.landmark || '');
+        setAddressArea(p.address_area || '');
+        setAvatarUrl(p.avatar_url);
+        setCoverPhoto(p.cover_photo);
+        setGender(p.gender || '');
+        setAge(p.age ? String(p.age) : '');
+        setEducation(p.education || '');
+        setLanguages(p.languages || '');
+        setLgaName(p.lga_name || '');
+        setLat(p.lat);
+        setLng(p.lng);
+        setHasPassword(p.has_password || false);
 
         // Get state name from lga_centers if not directly stored
-        if (profileData.lga_id && !profileData.state_name) {
-          const { data: lgaInfo } = await supabase
+        if (p.lga_id && !p.state_name) {
+          const { data: lgaInfo } = await db
             .from('lga_centers')
             .select('state_name')
-            .eq('lga_id', profileData.lga_id)
+            .eq('lga_id', p.lga_id)
             .single();
-          if (lgaInfo) setStateName(lgaInfo.state_name);
+          if (lgaInfo) setStateName((lgaInfo as any).state_name);
         } else {
-          setStateName(profileData.state_name || '');
+          setStateName(p.state_name || '');
         }
       }
 
@@ -172,7 +172,7 @@ export default function ProviderProfile() {
     else setPhoneError('');
   };
 
-  // --- Avatar upload ---
+  // --- Avatar upload (storage uses supabase directly) ---
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -238,7 +238,7 @@ export default function ProviderProfile() {
     }
   };
 
-  // --- Location change handler ---
+  // --- Location change handler (uses RPCs) ---
   const handleLocationChange = async (data: {
     lat: number;
     lng: number;
@@ -265,11 +265,11 @@ export default function ProviderProfile() {
         rpcName = 'change_location_paid';
         params.p_cost = 5000;
       } else {
-        toast.error('No change option available. Please check your cooldown or Nicoin balance.');
+        toast.error('No change option available.');
         return;
       }
 
-      const { data: result, error } = await supabase.rpc(rpcName, params);
+      const { data: result, error } = await db.rpc(rpcName, params);
       if (error) throw error;
       if (!result.success) throw new Error(result.error);
 
