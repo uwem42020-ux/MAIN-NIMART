@@ -5,6 +5,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/supabase-any';
 import { Upload, X, CheckCircle, Clock, XCircle, Loader2, AlertCircle, Camera } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { cn } from '@/lib/utils';
@@ -64,18 +65,18 @@ export default function ProviderVerification() {
   const { data: documents = [], isLoading } = useQuery({
     queryKey: ['verification-documents', user?.id],
     queryFn: async () => {
-      const { data } = await supabase
+      const { data } = await db
         .from('verification_documents')
         .select('*')
         .eq('provider_id', user!.id)
         .order('created_at', { ascending: false });
-      return (data || []) as VerificationDocument[];
+      return (data as any[]) as VerificationDocument[];
     },
     enabled: !!user,
     staleTime: 1000 * 60 * 5,
   });
 
-  // Realtime subscription
+  // Realtime subscription (uses supabase directly - no type issues)
   useEffect(() => {
     if (!user) return;
 
@@ -198,13 +199,13 @@ export default function ProviderVerification() {
         .from('verification-documents')
         .getPublicUrl(fileName);
 
-      const { error: dbError } = await supabase
+      const { error: dbError } = await db
         .from('verification_documents')
         .insert({
           provider_id: user!.id,
           document_type: selectedType,
           document_url: urlData.publicUrl,
-        });
+        } as any);
 
       if (dbError) throw dbError;
 
@@ -232,7 +233,7 @@ export default function ProviderVerification() {
       const filePath = urlParts.slice(-2).join('/');
       await supabase.storage.from('verification-documents').remove([filePath]);
 
-      const { error: dbError } = await supabase
+      const { error: dbError } = await db
         .from('verification_documents')
         .delete()
         .eq('id', id);
