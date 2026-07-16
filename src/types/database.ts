@@ -25,6 +25,26 @@ export interface Database {
           is_active: boolean
           created_at: string
           updated_at: string
+          cover_photo: string | null
+          education: string | null
+          languages: string | null
+          gender: string | null
+          age: number | null
+          state_name: string | null
+          street_address: string | null
+          landmark: string | null
+          is_banned: boolean
+          banned_at: string | null
+          banned_reason: string | null
+          deleted_at: string | null
+          email: string | null
+          nin_number: string | null
+          address_area: string | null
+          last_location_change_at: string | null
+          customer_flag_count: number
+          fcm_token: string | null
+          has_password: boolean
+          has_used_free_location_change: boolean
         }
         Insert: {
           id: string
@@ -41,6 +61,26 @@ export interface Database {
           is_active?: boolean
           created_at?: string
           updated_at?: string
+          cover_photo?: string | null
+          education?: string | null
+          languages?: string | null
+          gender?: string | null
+          age?: number | null
+          state_name?: string | null
+          street_address?: string | null
+          landmark?: string | null
+          is_banned?: boolean
+          banned_at?: string | null
+          banned_reason?: string | null
+          deleted_at?: string | null
+          email?: string | null
+          nin_number?: string | null
+          address_area?: string | null
+          last_location_change_at?: string | null
+          customer_flag_count?: number
+          fcm_token?: string | null
+          has_password?: boolean
+          has_used_free_location_change?: boolean
         }
         Update: {
           id?: string
@@ -57,6 +97,26 @@ export interface Database {
           is_active?: boolean
           created_at?: string
           updated_at?: string
+          cover_photo?: string | null
+          education?: string | null
+          languages?: string | null
+          gender?: string | null
+          age?: number | null
+          state_name?: string | null
+          street_address?: string | null
+          landmark?: string | null
+          is_banned?: boolean
+          banned_at?: string | null
+          banned_reason?: string | null
+          deleted_at?: string | null
+          email?: string | null
+          nin_number?: string | null
+          address_area?: string | null
+          last_location_change_at?: string | null
+          customer_flag_count?: number
+          fcm_token?: string | null
+          has_password?: boolean
+          has_used_free_location_change?: boolean
         }
       }
       providers: {
