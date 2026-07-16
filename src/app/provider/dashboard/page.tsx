@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/supabase-any';
 import { ProviderStatusToggle } from '@/components/provider/ProviderStatusToggle';
 import {
   Calendar, Star, Settings, Image, Package, Shield, Coins,
@@ -52,7 +53,6 @@ export default function ProviderDashboard() {
   const [isVerified, setIsVerified] = useState(false);
   const [hasPendingVerification, setHasPendingVerification] = useState(false);
 
-  // Coin state
   const [coinBalance, setCoinBalance] = useState(0);
   const [showBoostModal, setShowBoostModal] = useState(false);
   const [showTopPlacementModal, setShowTopPlacementModal] = useState(false);
@@ -61,7 +61,6 @@ export default function ProviderDashboard() {
   const [boostType, setBoostType] = useState<'standard' | 'premium'>('standard');
   const [extraCategorySlug, setExtraCategorySlug] = useState('');
 
-  // Referral state
   const [referralCode, setReferralCode] = useState('');
   const [referralStats, setReferralStats] = useState<ReferralStats>({
     total: 0,
@@ -69,7 +68,6 @@ export default function ProviderDashboard() {
     awarded: 0,
   });
 
-  // --- Data fetching effects (all guarded by user) ---
   useEffect(() => {
     if (!user) return;
     fetchProviderData();
@@ -84,37 +82,37 @@ export default function ProviderDashboard() {
   }, [user]);
 
   async function fetchCoinData() {
-    const { data } = await supabase
+    const { data } = await db
       .from('providers')
       .select('coin_balance')
       .eq('id', user!.id)
       .single();
-    if (data) setCoinBalance(data.coin_balance || 0);
+    if (data) setCoinBalance((data as any).coin_balance || 0);
   }
 
   async function fetchProviderData() {
-    const { data: provider } = await supabase
+    const { data: provider } = await db
       .from('providers')
       .select('*')
       .eq('id', user!.id)
       .single();
-    const { data: profile } = await supabase
+    const { data: profileData } = await db
       .from('profiles')
       .select('*')
       .eq('id', user!.id)
       .single();
-    const combined = { ...provider, profile };
-    setProviderData(combined);
-    setIsVerified(profile?.is_verified || false);
 
-    // Generate referral code if missing
-    if (provider && !provider.referral_code) {
-      const name = provider.business_name || profile?.full_name || 'Provider';
+    const combined = { ...(provider as any), profile: profileData };
+    setProviderData(combined);
+    setIsVerified((profileData as any)?.is_verified || false);
+
+    if (provider && !(provider as any).referral_code) {
+      const name = (provider as any).business_name || (profileData as any)?.full_name || 'Provider';
       const code = await generateUniqueReferralCode(name);
-      await supabase.from('providers').update({ referral_code: code }).eq('id', user!.id);
+      await db.from('providers').update({ referral_code: code }).eq('id', user!.id);
       setReferralCode(code);
-    } else if (provider?.referral_code) {
-      setReferralCode(provider.referral_code);
+    } else if ((provider as any)?.referral_code) {
+      setReferralCode((provider as any).referral_code);
     }
 
     if (combined && (!combined.profile?.lga_id || !combined.business_name)) {
@@ -123,50 +121,50 @@ export default function ProviderDashboard() {
   }
 
   async function fetchStats() {
-    const { data: bookings } = await supabase
+    const { data: bookings } = await db
       .from('bookings')
       .select('*')
       .eq('provider_id', user!.id);
-    const totalCount = bookings?.length || 0;
-    const pendingCount = bookings?.filter(b => b.status === 'pending').length || 0;
-    const completedCount = bookings?.filter(b => b.status === 'completed').length || 0;
-    const { data: reviews } = await supabase
+    const totalCount = (bookings as any[])?.length || 0;
+    const pendingCount = (bookings as any[])?.filter((b: any) => b.status === 'pending').length || 0;
+    const completedCount = (bookings as any[])?.filter((b: any) => b.status === 'completed').length || 0;
+    const { data: reviews } = await db
       .from('reviews')
       .select('rating')
       .eq('provider_id', user!.id);
-    const avgRating = reviews?.length
-      ? reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length
+    const avgRating = (reviews as any[])?.length
+      ? (reviews as any[]).reduce((acc: number, r: any) => acc + r.rating, 0) / (reviews as any[]).length
       : 0;
     setStats({
       totalBookings: totalCount,
       pendingBookings: pendingCount,
       completedBookings: completedCount,
       averageRating: avgRating,
-      reviewCount: reviews?.length || 0,
+      reviewCount: (reviews as any[])?.length || 0,
     });
   }
 
   async function checkVerificationStatus() {
-    const { data } = await supabase
+    const { data } = await db
       .from('verification_documents')
       .select('status')
       .eq('provider_id', user!.id)
       .eq('status', 'pending')
       .limit(1);
-    setHasPendingVerification(data && data.length > 0);
+    setHasPendingVerification(data && (data as any[]).length > 0);
   }
 
   async function fetchReferralStats() {
-    const { count: total } = await supabase
+    const { count: total } = await db
       .from('referrals')
       .select('*', { count: 'exact', head: true })
       .eq('referrer_id', user!.id);
-    const { count: pending } = await supabase
+    const { count: pending } = await db
       .from('referrals')
       .select('*', { count: 'exact', head: true })
       .eq('referrer_id', user!.id)
       .eq('status', 'pending');
-    const { count: awarded } = await supabase
+    const { count: awarded } = await db
       .from('referrals')
       .select('*', { count: 'exact', head: true })
       .eq('referrer_id', user!.id)
@@ -178,28 +176,27 @@ export default function ProviderDashboard() {
     });
   }
 
-  // ---- Boost Handlers ----
   const handleBoost = async () => {
     setBoostLoading(true);
     try {
       const cost = boostType === 'standard' ? STANDARD_BOOST_COST : PREMIUM_BOOST_COST;
-      const { data: provider } = await supabase
+      const { data: provider } = await db
         .from('providers')
         .select('coin_balance, status')
         .eq('id', user!.id)
         .single();
-      if (!provider || provider.coin_balance < cost) {
+      if (!provider || (provider as any).coin_balance < cost) {
         toast.error('Insufficient Nicoin');
         return;
       }
-      if (provider.status === 'away') {
+      if ((provider as any).status === 'away') {
         toast.error('Set your status to Available or Busy to boost');
         return;
       }
       const duration = boostType === 'standard' ? 7 : 30;
       const newBoost = new Date();
       newBoost.setDate(newBoost.getDate() + duration);
-      await supabase.rpc('purchase_boost', {
+      await db.rpc('purchase_boost', {
         p_provider_id: user!.id,
         p_cost: cost,
         p_boost_until: newBoost.toISOString(),
@@ -219,22 +216,22 @@ export default function ProviderDashboard() {
     setBoostLoading(true);
     try {
       const cost = TOP_PLACEMENT_COST;
-      const { data: provider } = await supabase
+      const { data: provider } = await db
         .from('providers')
         .select('coin_balance, status')
         .eq('id', user!.id)
         .single();
-      if (!provider || provider.coin_balance < cost) {
+      if (!provider || (provider as any).coin_balance < cost) {
         toast.error('Insufficient Nicoin');
         return;
       }
-      if (provider.status === 'away') {
+      if ((provider as any).status === 'away') {
         toast.error('Set your status to Available or Busy to use Top Placement');
         return;
       }
       const newTop = new Date();
       newTop.setDate(newTop.getDate() + 7);
-      await supabase.rpc('purchase_top_placement', {
+      await db.rpc('purchase_top_placement', {
         p_provider_id: user!.id,
         p_cost: cost,
         p_top_until: newTop.toISOString(),
@@ -255,7 +252,7 @@ export default function ProviderDashboard() {
     setBoostLoading(true);
     try {
       const cost = EXTRA_CATEGORY_COST;
-      await supabase.rpc('purchase_extra_category', {
+      await db.rpc('purchase_extra_category', {
         p_provider_id: user!.id,
         p_category_slug: extraCategorySlug,
         p_cost: cost,
@@ -271,7 +268,6 @@ export default function ProviderDashboard() {
     }
   };
 
-  // ---- Referral Actions ----
   const copyReferralLink = () => {
     const link = `https://nimart.ng/auth/signup?role=provider&ref=${referralCode}`;
     navigator.clipboard.writeText(link);
@@ -289,8 +285,8 @@ export default function ProviderDashboard() {
     }
   };
 
-  // ---- CRITICAL FIX: guard against rendering when user is null ----
-  if (loading) {
+  // Guard: if user is not yet loaded, show spinner
+  if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <NimartSpinner size="lg" />
@@ -298,13 +294,6 @@ export default function ProviderDashboard() {
     );
   }
 
-  if (!user) {
-    // User not logged in – redirect to signin or return null
-    // router.push('/auth/signin');
-    return null; // or a redirect
-  }
-
-  // ---- From here on, user is guaranteed non-null ----
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* Header */}
@@ -478,7 +467,6 @@ export default function ProviderDashboard() {
           </h2>
         </div>
 
-        {/* Referral code and share */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
           <div>
             <p className="text-sm text-gray-500 mb-1">Your Referral Code</p>
@@ -506,7 +494,6 @@ export default function ProviderDashboard() {
             </p>
           </div>
 
-          {/* Referral stats */}
           <div className="flex gap-6">
             <div className="text-center">
               <p className="text-2xl font-bold text-gray-900">{referralStats.total}</p>
