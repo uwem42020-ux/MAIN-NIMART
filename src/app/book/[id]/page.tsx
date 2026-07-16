@@ -4,6 +4,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/supabase-any';
 import { useAuth } from '@/contexts/AuthContext';
 import toast from 'react-hot-toast';
 import {
@@ -55,7 +56,7 @@ export default function BookProviderPage() {
 
     (async () => {
       setLoadingPage(true);
-      const { data: prov, error } = await supabase
+      const { data: prov, error } = await db
         .from('providers')
         .select('*')
         .eq('id', providerId)
@@ -68,13 +69,13 @@ export default function BookProviderPage() {
       }
 
       // Also fetch the provider’s profile for name/rating/avatar
-      const { data: profileData } = await supabase
+      const { data: profileData } = await db
         .from('profiles')
         .select('full_name, avatar_url, lat, lng, lga_name')
         .eq('id', providerId)
         .single();
 
-      setProvider({ ...prov, profile: profileData || null });
+      setProvider({ ...(prov as any), profile: profileData || null });
       setLoadingPage(false);
     })();
   }, [providerId, router]);
@@ -126,7 +127,7 @@ export default function BookProviderPage() {
 
       const receiptToken = crypto.randomUUID();
 
-      const { error } = await supabase.from('bookings').insert({
+      const { error } = await db.from('bookings').insert({
         customer_id: user.id,
         provider_id: providerId,
         service_name: formData.serviceName,
@@ -147,7 +148,7 @@ export default function BookProviderPage() {
       toast.success('Booking request sent!');
 
       // ---- Notifications (email + push) ----
-      const { data: providerProfile } = await supabase
+      const { data: providerProfile } = await db
         .from('profiles')
         .select('email, fcm_token')
         .eq('id', providerId)
@@ -188,7 +189,7 @@ export default function BookProviderPage() {
         );
       }
 
-      const { data: customerProfile } = await supabase
+      const { data: customerProfile } = await db
         .from('profiles')
         .select('fcm_token')
         .eq('id', user.id)

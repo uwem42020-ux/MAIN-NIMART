@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/supabase-any';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatDistanceToNow } from 'date-fns';
 import { Bell, CheckCircle, Calendar, MessageCircle, AlertCircle, XCircle } from 'lucide-react';
@@ -29,7 +30,7 @@ const iconMap: Record<string, React.ElementType> = {
 };
 
 export default function NotificationsPage() {
-  const { user } = useAuth(); // ✅ Now reactive
+  const { user } = useAuth();
   const router = useRouter();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
@@ -68,17 +69,17 @@ export default function NotificationsPage() {
   async function fetchNotifications() {
     if (!user) return;
     setLoading(true);
-    const { data } = await supabase
+    const { data } = await db
       .from('notifications')
       .select('*')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false });
-    setNotifications(data || []);
+    setNotifications((data as Notification[]) || []);
     setLoading(false);
   }
 
   async function markAsRead(id: string) {
-    await supabase
+    await db
       .from('notifications')
       .update({ is_read: true, read_at: new Date().toISOString() })
       .eq('id', id);
@@ -86,7 +87,7 @@ export default function NotificationsPage() {
 
   async function markAllAsRead() {
     if (!user) return;
-    await supabase
+    await db
       .from('notifications')
       .update({ is_read: true, read_at: new Date().toISOString() })
       .eq('user_id', user.id)
@@ -96,7 +97,7 @@ export default function NotificationsPage() {
   }
 
   async function deleteNotification(id: string) {
-    await supabase.from('notifications').delete().eq('id', id);
+    await db.from('notifications').delete().eq('id', id);
     setNotifications(prev => prev.filter(n => n.id !== id));
   }
 

@@ -52,7 +52,7 @@ export default function Blog() {
         .eq('published', true)
         .not('category', 'is', null);
       if (error) throw error;
-      const cats = [...new Set(data.map((p: any) => p.category))];
+      const cats = [...new Set((data as any[]).map((p: any) => p.category))];
       return cats as string[];
     },
   });
@@ -75,7 +75,6 @@ export default function Blog() {
           Tips, guides, and stories to help you find and hire trusted service providers across Nigeria.
         </p>
 
-        {/* Category filter */}
         {categories && categories.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-8">
             <button
@@ -135,7 +134,6 @@ export default function Blog() {
               ))}
             </div>
 
-            {/* Pagination */}
             {totalPages > 1 && (
               <div className="flex justify-center items-center gap-4 mt-12">
                 <button

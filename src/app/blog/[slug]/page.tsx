@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/supabase-any';
 import { useAuth } from '@/contexts/AuthContext';
 import { SEO } from '@/components/common/SEO';
 import { NimartSpinner } from '@/components/common/NimartSpinner';
@@ -57,43 +58,45 @@ export default function BlogPost() {
     enabled: !!slug,
   });
 
+  const postAny = post as any;
+
   const { data: comments, isLoading: commentsLoading } = useQuery({
-    queryKey: ['blog-comments', post?.id],
+    queryKey: ['blog-comments', postAny?.id],
     queryFn: async () => {
-      if (!post?.id) return [];
-      const { data, error } = await supabase
+      if (!postAny?.id) return [];
+      const { data, error } = await db
         .from('blog_comments')
         .select('*, profile:user_id (full_name, avatar_url)')
-        .eq('blog_post_id', post.id)
+        .eq('blog_post_id', postAny.id)
         .order('created_at', { ascending: true });
       if (error) throw error;
       return data as Comment[];
     },
-    enabled: !!post?.id,
+    enabled: !!postAny?.id,
   });
 
   const { data: relatedPosts } = useQuery({
-    queryKey: ['related-posts', post?.category, post?.id],
+    queryKey: ['related-posts', postAny?.category, postAny?.id],
     queryFn: async () => {
-      if (!post?.category || !post?.id) return [];
+      if (!postAny?.category || !postAny?.id) return [];
       const { data } = await supabase
         .from('blog_posts')
         .select('id, slug, title, featured_image, created_at')
         .eq('published', true)
-        .eq('category', post.category)
-        .neq('id', post.id)
+        .eq('category', postAny.category)
+        .neq('id', postAny.id)
         .order('created_at', { ascending: false })
         .limit(3);
       return data ?? [];
     },
-    enabled: !!post?.category && !!post?.id,
+    enabled: !!postAny?.category && !!postAny?.id,
   });
 
   const shareUrl = `https://nimart.ng/blog/${slug}`;
 
   const handleShare = () => {
     if (navigator.share) {
-      navigator.share({ title: post?.title, url: shareUrl }).catch(() => copyLink());
+      navigator.share({ title: postAny?.title, url: shareUrl }).catch(() => copyLink());
     } else {
       copyLink();
     }
@@ -110,8 +113,8 @@ export default function BlogPost() {
       return;
     }
     if (!newComment.trim()) return;
-    const { error } = await supabase.from('blog_comments').insert({
-      blog_post_id: post.id,
+    const { error } = await db.from('blog_comments').insert({
+      blog_post_id: postAny.id,
       user_id: user.id,
       content: newComment.trim(),
       parent_id: null,
@@ -121,7 +124,7 @@ export default function BlogPost() {
     } else {
       toast.success('Comment added');
       setNewComment('');
-      queryClient.invalidateQueries({ queryKey: ['blog-comments', post.id] });
+      queryClient.invalidateQueries({ queryKey: ['blog-comments', postAny.id] });
     }
   };
 
@@ -132,8 +135,8 @@ export default function BlogPost() {
       return;
     }
     if (!replyContent.trim()) return;
-    const { error } = await supabase.from('blog_comments').insert({
-      blog_post_id: post.id,
+    const { error } = await db.from('blog_comments').insert({
+      blog_post_id: postAny.id,
       user_id: user.id,
       content: replyContent.trim(),
       parent_id: parentId,
@@ -144,24 +147,24 @@ export default function BlogPost() {
       toast.success('Reply added');
       setReplyContent('');
       setReplyingTo(null);
-      queryClient.invalidateQueries({ queryKey: ['blog-comments', post.id] });
+      queryClient.invalidateQueries({ queryKey: ['blog-comments', postAny.id] });
     }
   };
 
   const deleteComment = async (commentId: number) => {
     if (!confirm('Delete this comment?')) return;
-    const { error } = await supabase.from('blog_comments').delete().eq('id', commentId);
+    const { error } = await db.from('blog_comments').delete().eq('id', commentId);
     if (error) {
       toast.error(error.message);
     } else {
       toast.success('Comment deleted');
-      queryClient.invalidateQueries({ queryKey: ['blog-comments', post.id] });
+      queryClient.invalidateQueries({ queryKey: ['blog-comments', postAny.id] });
     }
   };
 
   const topLevelComments = comments?.filter(c => !c.parent_id) || [];
   const getReplies = (parentId: number) => comments?.filter(c => c.parent_id === parentId) || [];
-  const isAdmin = profile?.role === 'admin';
+  const isAdmin = (profile as any)?.role === 'admin';
 
   if (isLoading) {
     return <div className="min-h-screen flex items-center justify-center"><NimartSpinner size="lg" /></div>;
@@ -179,14 +182,14 @@ export default function BlogPost() {
   const articleSchema = {
     "@context": "https://schema.org",
     "@type": "Article",
-    "headline": post.title,
-    "description": post.excerpt || post.title,
-    "image": post.featured_image || "https://nimart.ng/og-image.png",
-    "datePublished": post.created_at,
-    "dateModified": post.updated_at || post.created_at,
+    "headline": postAny.title,
+    "description": postAny.excerpt || postAny.title,
+    "image": postAny.featured_image || "https://nimart.ng/og-image.png",
+    "datePublished": postAny.created_at,
+    "dateModified": postAny.updated_at || postAny.created_at,
     "author": {
       "@type": "Person",
-      "name": post.author || "Nimart Team"
+      "name": postAny.author || "Nimart Team"
     },
     "publisher": {
       "@type": "Organization",
@@ -209,16 +212,16 @@ export default function BlogPost() {
     "itemListElement": [
       { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://nimart.ng" },
       { "@type": "ListItem", "position": 2, "name": "Blog", "item": "https://nimart.ng/blog" },
-      { "@type": "ListItem", "position": 3, "name": post.title }
+      { "@type": "ListItem", "position": 3, "name": postAny.title }
     ]
   };
 
   return (
     <>
       <SEO
-        title={`${post.title} | Nimart Blog`}
-        description={post.excerpt || `Read ${post.title} on the Nimart blog – tips for hiring trusted services in Nigeria.`}
-        image={post.featured_image || '/og-image.png'}
+        title={`${postAny.title} | Nimart Blog`}
+        description={postAny.excerpt || `Read ${postAny.title} on the Nimart blog – tips for hiring trusted services in Nigeria.`}
+        image={postAny.featured_image || '/og-image.png'}
         url={shareUrl}
         type="article"
         schema={[articleSchema, breadcrumbSchema]}
@@ -229,7 +232,7 @@ export default function BlogPost() {
           items={[
             { label: 'Home', to: '/' },
             { label: 'Blog', to: '/blog' },
-            { label: post.title },
+            { label: postAny.title },
           ]}
         />
         <button onClick={() => router.push('/blog')} className="mb-4 flex items-center text-sm text-gray-600 hover:text-primary-600 font-medium">
@@ -239,31 +242,31 @@ export default function BlogPost() {
         <article>
           <header className="mb-8">
             <h1 className="text-3xl sm:text-4xl font-extrabold text-gray-900 mb-4 leading-tight">
-              {post.title}
+              {postAny.title}
             </h1>
             <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600 mb-4">
               <div className="flex items-center gap-1.5">
                 <User className="h-4 w-4 text-primary-500" />
-                <span>{post.author || 'Nimart Team'}</span>
+                <span>{postAny.author || 'Nimart Team'}</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <Calendar className="h-4 w-4 text-primary-500" />
-                <time dateTime={post.created_at}>
-                  {new Date(post.created_at).toLocaleDateString('en-NG', { year: 'numeric', month: 'long', day: 'numeric' })}
+                <time dateTime={postAny.created_at}>
+                  {new Date(postAny.created_at).toLocaleDateString('en-NG', { year: 'numeric', month: 'long', day: 'numeric' })}
                 </time>
               </div>
-              {post.category && (
+              {postAny.category && (
                 <span className="inline-flex items-center gap-1 px-3 py-1 bg-primary-50 text-primary-700 rounded-full text-xs font-medium">
                   <Tag className="h-3 w-3" />
-                  {post.category}
+                  {postAny.category}
                 </span>
               )}
             </div>
 
-            {post.featured_image && (
+            {postAny.featured_image && (
               <img
-                src={post.featured_image}
-                alt={post.title}
+                src={postAny.featured_image}
+                alt={postAny.title}
                 className="w-full h-auto max-h-96 object-cover rounded-2xl mb-6 shadow-md"
               />
             )}
@@ -273,7 +276,7 @@ export default function BlogPost() {
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               components={{
-                code({ node, inline, className, children, ...props }) {
+                code({ node, inline, className, children, ...props }: any) {
                   const match = /language-(\w+)/.exec(className || '');
                   return !inline && match ? (
                     <SyntaxHighlighter style={oneDark} language={match[1]} PreTag="div" {...props}>
@@ -285,13 +288,13 @@ export default function BlogPost() {
                 },
               }}
             >
-              {post.content}
+              {postAny.content}
             </ReactMarkdown>
           </div>
 
-          {post.tags && post.tags.length > 0 && (
+          {postAny.tags && postAny.tags.length > 0 && (
             <div className="flex flex-wrap gap-2 mt-8 pt-6 border-t border-gray-200">
-              {post.tags.map((tag: string) => (
+              {postAny.tags.map((tag: string) => (
                 <span key={tag} className="px-3 py-1 bg-gray-100 text-gray-600 rounded-full text-xs font-medium">
                   #{tag}
                 </span>
@@ -305,7 +308,7 @@ export default function BlogPost() {
               <Share2 className="h-5 w-5" />
             </button>
             <a
-              href={`https://wa.me/?text=${encodeURIComponent(`${post.title} ${shareUrl}`)}`}
+              href={`https://wa.me/?text=${encodeURIComponent(`${postAny.title} ${shareUrl}`)}`}
               target="_blank"
               rel="noopener noreferrer"
               className="p-2 rounded-full bg-green-50 hover:bg-green-100 text-green-600"

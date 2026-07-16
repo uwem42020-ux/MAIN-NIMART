@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/supabase-any';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -68,7 +69,7 @@ export default function CustomerDashboard() {
   async function fetchDashboardData() {
     setLoading(true);
     try {
-      const { data: bookings, error } = await supabase
+      const { data: bookings, error } = await db
         .from('bookings')
         .select('*')
         .eq('customer_id', user!.id)
@@ -83,39 +84,39 @@ export default function CustomerDashboard() {
         return;
       }
 
-      const providerIds = [...new Set(bookings.map(b => b.provider_id))];
+      const providerIds = [...new Set((bookings as any[]).map((b: any) => b.provider_id))];
 
-      const { data: providers } = await supabase
+      const { data: providers } = await db
         .from('providers')
         .select('id, business_name')
         .in('id', providerIds);
 
-      const { data: profiles } = await supabase
+      const { data: profiles } = await db
         .from('profiles')
         .select('id, full_name')
         .in('id', providerIds);
 
       const providerMap = new Map();
-      providers?.forEach(p => {
-        const prof = profiles?.find(pr => pr.id === p.id);
+      providers?.forEach((p: any) => {
+        const prof = profiles?.find((pr: any) => pr.id === p.id);
         providerMap.set(p.id, {
           business_name: p.business_name,
           profile: { full_name: prof?.full_name || null },
         });
       });
 
-      const bookingsWithProviders = bookings.map(booking => ({
+      const bookingsWithProviders = (bookings as any[]).map((booking: any) => ({
         ...booking,
         provider: providerMap.get(booking.provider_id) || null,
       }));
 
       const today = new Date().toISOString().split('T')[0];
-      const pending = bookings.filter(b => b.status === 'pending').length;
-      const completed = bookings.filter(b => b.status === 'completed').length;
-      const upcoming = bookings.filter(b => b.booking_date >= today && ['pending', 'confirmed'].includes(b.status)).length;
+      const pending = (bookings as any[]).filter((b: any) => b.status === 'pending').length;
+      const completed = (bookings as any[]).filter((b: any) => b.status === 'completed').length;
+      const upcoming = (bookings as any[]).filter((b: any) => b.booking_date >= today && ['pending', 'confirmed'].includes(b.status)).length;
 
       setStats({
-        totalBookings: bookings.length,
+        totalBookings: (bookings as any[]).length,
         pendingBookings: pending,
         completedBookings: completed,
         upcomingBookings: upcoming,
@@ -130,7 +131,7 @@ export default function CustomerDashboard() {
   }
 
   async function fetchFavorites() {
-    const { data } = await supabase
+    const { data } = await db
       .from('favorite_providers')
       .select('provider_id')
       .eq('customer_id', user!.id);
@@ -140,20 +141,20 @@ export default function CustomerDashboard() {
       return;
     }
 
-    const providerIds = data.map(f => f.provider_id);
-    const { data: providers } = await supabase
+    const providerIds = (data as any[]).map((f: any) => f.provider_id);
+    const { data: providers } = await db
       .from('providers')
       .select('id, business_name, selected_category_slug')
       .in('id', providerIds);
 
-    const { data: profiles } = await supabase
+    const { data: profiles } = await db
       .from('profiles')
       .select('id, full_name, avatar_url, lga_name, state_name')
       .in('id', providerIds);
 
-    const profileMap = new Map(profiles?.map(p => [p.id, p]) || []);
+    const profileMap = new Map(profiles?.map((p: any) => [p.id, p]) || []);
     setFavorites(
-      (providers || []).map(p => ({
+      (providers || []).map((p: any) => ({
         ...p,
         profile: profileMap.get(p.id) || {},
       }))
@@ -167,7 +168,7 @@ export default function CustomerDashboard() {
 
     setSwitching(true);
     try {
-      const { error } = await supabase
+      const { error } = await db
         .from('profiles')
         .update({ role: 'provider', is_complete: false })
         .eq('id', user!.id);
@@ -198,7 +199,6 @@ export default function CustomerDashboard() {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <LocationPrompt />
 
-      {/* Welcome Section */}
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-900">
           Welcome back, {firstName}!
@@ -206,7 +206,6 @@ export default function CustomerDashboard() {
         <p className="text-gray-600 mt-1">Here's an overview of your activity.</p>
       </div>
 
-      {/* Switch to Provider Card */}
       <div className="bg-gradient-to-r from-primary-600 to-green-600 rounded-xl shadow-md p-6 mb-8 text-white">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
@@ -232,7 +231,6 @@ export default function CustomerDashboard() {
         </div>
       </div>
 
-      {/* Stats Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <div className="bg-white rounded-2xl shadow-sm border p-4">
           <Calendar className="h-6 w-6 text-primary-600 mb-2" />
@@ -256,7 +254,6 @@ export default function CustomerDashboard() {
         </div>
       </div>
 
-      {/* Quick Actions */}
       <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
         <Link
@@ -282,7 +279,6 @@ export default function CustomerDashboard() {
         </Link>
       </div>
 
-      {/* Saved Providers */}
       {favorites.length > 0 && (
         <div className="mb-8">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Saved Providers</h2>
@@ -317,7 +313,6 @@ export default function CustomerDashboard() {
         </div>
       )}
 
-      {/* Recent Bookings */}
       <div className="bg-white rounded-2xl shadow-sm border p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-gray-900">Recent Bookings</h2>

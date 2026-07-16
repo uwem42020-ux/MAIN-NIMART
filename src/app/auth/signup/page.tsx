@@ -5,6 +5,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/supabase-any';
 import { useAuth } from '@/contexts/AuthContext';
 import toast from 'react-hot-toast';
 import { User, Briefcase, Mail, CheckCircle, ArrowLeft } from 'lucide-react';
@@ -118,7 +119,7 @@ export default function SignUp() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      const { data: existingProfile } = await supabase
+      const { data: existingProfile } = await db
         .from('profiles').select('role').eq('id', user.id).single();
       if (existingProfile?.role) {
         await supabase.auth.signOut();
@@ -129,7 +130,7 @@ export default function SignUp() {
       }
 
       if (role === 'provider' && referralCode.trim()) {
-        const { data: referrer } = await supabase
+        const { data: referrer } = await db
           .from('providers').select('id').eq('referral_code', referralCode.trim().toUpperCase()).single();
         if (!referrer) {
           scrollToTop();
@@ -143,12 +144,12 @@ export default function SignUp() {
           setLoading(false);
           return;
         }
-        await supabase.from('providers').update({ referred_by: referrer.id }).eq('id', user.id);
-        await supabase.from('referrals').insert({ referrer_id: referrer.id, referred_provider_id: user.id });
+        await db.from('providers').update({ referred_by: referrer.id }).eq('id', user.id);
+        await db.from('referrals').insert({ referrer_id: referrer.id, referred_provider_id: user.id });
       }
 
       if (role === 'customer') {
-        await supabase.from('profiles').update({ full_name: fullName, role, is_complete: true }).eq('id', user.id);
+        await db.from('profiles').update({ full_name: fullName, role, is_complete: true }).eq('id', user.id);
         await refreshProfile();
         toast.success('Welcome to Nimart!');
         scrollToTop();
@@ -157,7 +158,7 @@ export default function SignUp() {
         return;
       }
 
-      await supabase.from('profiles').update({ full_name: fullName, role, is_complete: false }).eq('id', user.id);
+      await db.from('profiles').update({ full_name: fullName, role, is_complete: false }).eq('id', user.id);
       await refreshProfile();
       toast.success('Account created! Please complete your business profile.');
       scrollToTop();
@@ -219,7 +220,6 @@ export default function SignUp() {
                 <h2 className="text-2xl font-bold text-gray-900 text-center mb-2">Create your account</h2>
                 <p className="text-sm text-gray-500 text-center mb-6">Join Nigeria's trusted service marketplace</p>
 
-                {/* Google sign-in – recommended */}
                 <div className="relative mb-4">
                   <button
                     onClick={handleGoogleSignIn}
@@ -236,7 +236,6 @@ export default function SignUp() {
                   <span className="absolute -top-2 right-4 bg-primary-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">RECOMMENDED</span>
                 </div>
 
-                {/* Facebook sign-in */}
                 <button
                   onClick={handleFacebookSignIn}
                   className="w-full flex items-center justify-center gap-3 bg-[#1877F2] text-white py-3 rounded-xl hover:bg-[#166fe5] transition font-medium shadow-sm mb-4"
@@ -258,7 +257,6 @@ export default function SignUp() {
                     <div className="relative"><Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" /><input ref={emailInputRef} type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:bg-white transition" placeholder="you@example.com" /></div>
                   </div>
 
-                  {/* Honeypot field (invisible to humans) */}
                   <input
                     type="text"
                     value={honeypot}
@@ -269,7 +267,6 @@ export default function SignUp() {
                     aria-hidden="true"
                   />
 
-                  {/* Turnstile widget */}
                   <div className="flex justify-center">
                     <Turnstile
                       sitekey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY!}

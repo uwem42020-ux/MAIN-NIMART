@@ -4,6 +4,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/supabase-any';
 import Link from 'next/link';
 import { MessageCircle, Search, MoreVertical, Trash2, Pin, EyeOff } from 'lucide-react';
 import { format, isToday, isYesterday, parseISO } from 'date-fns';
@@ -21,7 +22,7 @@ export default function CustomerMessages() {
     queryKey: ['customer-threads', user?.id],
     queryFn: async () => {
       if (!user) return [];
-      const { data: threadData } = await supabase
+      const { data: threadData } = await db
         .from('threads')
         .select('id, provider_id, customer_id, last_message, last_message_at')
         .eq('customer_id', user.id)
@@ -29,15 +30,15 @@ export default function CustomerMessages() {
 
       if (!threadData?.length) return [];
 
-      const providerIds = threadData.map(t => t.provider_id);
-      const { data: profilesData } = await supabase
+      const providerIds = (threadData as any[]).map((t: any) => t.provider_id);
+      const { data: profilesData } = await db
         .from('profiles')
         .select('id, full_name, avatar_url')
         .in('id', providerIds);
 
-      const profileMap = new Map(profilesData?.map(p => [p.id, p]) || []);
+      const profileMap = new Map((profilesData as any[])?.map((p: any) => [p.id, p]) || []);
 
-      return threadData.map(t => ({
+      return (threadData as any[]).map((t: any) => ({
         id: t.id,
         last_message: t.last_message,
         last_message_at: t.last_message_at,
@@ -69,14 +70,14 @@ export default function CustomerMessages() {
     return format(date, 'MMM d');
   };
 
-  const filteredThreads = threads?.filter(t =>
+  const filteredThreads = threads?.filter((t: any) =>
     t.other_participant.full_name.toLowerCase().includes(search.toLowerCase())
   );
 
   const handleDeleteThread = async (threadId: string) => {
     if (!confirm('Delete this entire conversation?')) return;
-    await supabase.from('messages').delete().eq('thread_id', threadId);
-    await supabase.from('threads').delete().eq('id', threadId);
+    await db.from('messages').delete().eq('thread_id', threadId);
+    await db.from('threads').delete().eq('id', threadId);
     queryClient.invalidateQueries({ queryKey: ['customer-threads', user?.id] });
     setOpenMenuId(null);
     toast.success('Conversation deleted');
@@ -117,7 +118,7 @@ export default function CustomerMessages() {
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto space-y-2">
-          {filteredThreads.map((t) => (
+          {filteredThreads.map((t: any) => (
             <div key={t.id} className="bg-white rounded-xl shadow-sm border border-gray-100 relative group">
               <Link href={`/customer/messages/${t.id}`} className="flex items-center gap-4 px-4 py-3 pr-10 hover:bg-gray-50 transition rounded-xl">
                 {t.other_participant.avatar_url ? (
