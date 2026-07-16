@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/supabase-any';
 import { useAuth } from '@/contexts/AuthContext';
 import { calculateDistance } from '@/lib/distance';
 import { ProviderCardPortrait } from '@/components/provider/ProviderCardPortrait';
@@ -147,8 +148,8 @@ export function ProviderProfileClient({
         supabase.from('portfolio_images').select('*').eq('provider_id', id).order('created_at', { ascending: false }),
         supabase.from('reviews').select(`id, rating, content, created_at, reviewer:reviewer_id(full_name, avatar_url)`).eq('provider_id', id).order('created_at', { ascending: false }),
         supabase.from('provider_services').select('*').eq('provider_id', id).order('created_at', { ascending: true }),
-        supabase.rpc('get_provider_completed_bookings', { provider_id: id }),
-        supabase.rpc('get_user_last_sign_in', { user_id: id }),
+        db.rpc('get_provider_completed_bookings', { provider_id: id }),
+        db.rpc('get_user_last_sign_in', { user_id: id }),
       ]);
 
       return {
