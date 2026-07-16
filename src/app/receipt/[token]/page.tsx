@@ -68,11 +68,11 @@ export default function BookingReceiptPage() {
     const options = {
       margin: 0.5,
       filename: `Nimart-Receipt-${booking?.booking_number || 'booking'}.pdf`,
-      image: { type: 'jpeg', quality: 0.98 },
+      image: { type: 'jpeg' as const, quality: 0.98 },
       html2canvas: { scale: 2 },
-      jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' },
+      jsPDF: { unit: 'in' as const, format: 'a4' as const, orientation: 'portrait' as const },
     };
-    html2pdf().set(options).from(element).save();
+    html2pdf().set(options as any).from(element).save();
   };
 
   const handleDownloadImage = async () => {
