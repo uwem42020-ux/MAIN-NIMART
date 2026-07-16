@@ -47,7 +47,6 @@ export function HomeClient({ initialProviders }: HomeClientProps) {
   const isOffline = useOffline();
   const [mounted, setMounted] = useState(false);
 
-  // Hydration guard – render server data until client mounts
   const [isClient, setIsClient] = useState(false);
   useEffect(() => { setIsClient(true); }, []);
 
@@ -65,14 +64,13 @@ export function HomeClient({ initialProviders }: HomeClientProps) {
     20
   );
 
-  // Preload states & LGAs for location dropdown
   useEffect(() => {
     async function preloadLocations() {
       const { data: allStates } = await supabase
         .from('lga_centers')
         .select('state_id, state_name')
         .order('state_name');
-      const uniqueStates = allStates?.filter((v, i, a) => a.findIndex(t => t.state_id === v.state_id) === i) || [];
+      const uniqueStates = (allStates as any[])?.filter((v: any, i: number, a: any[]) => a.findIndex((t: any) => t.state_id === v.state_id) === i) || [];
       setStates(uniqueStates);
 
       const { data: allLgas } = await supabase
@@ -81,7 +79,7 @@ export function HomeClient({ initialProviders }: HomeClientProps) {
         .order('lga_name');
       if (allLgas) {
         const grouped: Record<string, any[]> = {};
-        allLgas.forEach((lga) => {
+        (allLgas as any[]).forEach((lga) => {
           const key = lga.state_id.toString();
           if (!grouped[key]) grouped[key] = [];
           grouped[key].push(lga);
@@ -92,16 +90,14 @@ export function HomeClient({ initialProviders }: HomeClientProps) {
     preloadLocations();
   }, []);
 
-  // Main query – uses the fast RPC and initialData from the server
   const { data: featuredProviders, isLoading } = useQuery({
     queryKey: ['featured-providers', userLat, userLng, stateFilter, lgaFilter],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc('get_featured_providers', { limit_count: 50 });
+      const { data, error } = await (supabase.rpc as any)('get_featured_providers', { limit_count: 50 });
       if (error || !data) return [] as ProviderWithProfile[];
 
       const providers: any[] = Array.isArray(data) ? data : [];
 
-      // Apply client‑side location filter (state/LGA) – not done by the RPC
       let filtered = providers;
       if (lgaFilter) {
         filtered = providers.filter((p: any) => p.profile?.lga_id?.toString() === lgaFilter);
@@ -110,7 +106,7 @@ export function HomeClient({ initialProviders }: HomeClientProps) {
       }
       if (filtered.length === 0) return [] as ProviderWithProfile[];
 
-      let result = filtered.map((item: any) => ({
+      let result = (filtered.map((item: any) => ({
         id: item.id,
         business_name: item.business_name,
         description: item.description,
@@ -128,12 +124,11 @@ export function HomeClient({ initialProviders }: HomeClientProps) {
         review_count: item.review_stats?.review_count ?? 0,
         distance: undefined as number | undefined,
         lastSignInAt: null as string | null,
-      })) as ProviderWithProfile[];
+      })) as any) as ProviderWithProfile[];
 
-      // Add distances if user location available
       const providerIds = result.map(p => p.id);
       if (userLat && userLng && providerIds.length > 0) {
-        const { data: distances } = await supabase.rpc('get_provider_distances', {
+        const { data: distances } = await (supabase.rpc as any)('get_provider_distances', {
           user_lat: userLat,
           user_lng: userLng,
           provider_ids: providerIds,
@@ -142,24 +137,22 @@ export function HomeClient({ initialProviders }: HomeClientProps) {
           const distMap = new Map(distances.map((d: any) => [d.provider_id, d.distance_meters]));
           result = result.map(p => ({
             ...p,
-            distance: distMap.has(p.id) ? distMap.get(p.id)! / 1000 : undefined,
+            distance: distMap.has(p.id) ? Number(distMap.get(p.id)) / 1000 : undefined,
           }));
         }
       }
 
-      // Add last sign‑in times
       if (providerIds.length > 0) {
-        const { data: signIns } = await supabase.rpc('get_users_last_sign_in', { user_ids: providerIds });
+        const { data: signIns } = await (supabase.rpc as any)('get_users_last_sign_in', { user_ids: providerIds });
         if (signIns) {
           const signInMap = new Map(signIns.map((s: any) => [s.user_id, s.last_sign_in_at]));
           result = result.map(p => ({
             ...p,
-            lastSignInAt: signInMap.get(p.id) ?? null,
+            lastSignInAt: (signInMap.get(p.id) as string) ?? null,
           }));
         }
       }
 
-      // Apply smart sort
       if (smartSortData?.length) {
         const scoreMap = new Map(smartSortData.map(s => [s.provider_id, s.score]));
         result.sort((a, b) => (scoreMap.get(b.id) || 0) - (scoreMap.get(a.id) || 0));
@@ -171,7 +164,6 @@ export function HomeClient({ initialProviders }: HomeClientProps) {
     staleTime: 1000 * 60 * 5,
   });
 
-  // Derive provider counts – use initial data during hydration, live data after
   const providerCounts = useMemo(() => {
     const providers = isClient ? featuredProviders : initialProviders;
     const counts: Record<string, number> = {};
@@ -194,7 +186,6 @@ export function HomeClient({ initialProviders }: HomeClientProps) {
     return counts;
   }, [isClient, featuredProviders, initialProviders]);
 
-  // Prefetch provider profiles for top 5 cards
   useEffect(() => {
     if (!featuredProviders?.length) return;
     featuredProviders.slice(0, 5).forEach(provider => {
@@ -206,7 +197,6 @@ export function HomeClient({ initialProviders }: HomeClientProps) {
     });
   }, [featuredProviders, queryClient]);
 
-  // Real‑time updates
   useEffect(() => {
     const channel = supabase
       .channel('providers-status')
@@ -219,7 +209,6 @@ export function HomeClient({ initialProviders }: HomeClientProps) {
     return () => { supabase.removeChannel(channel); };
   }, [queryClient]);
 
-  // Handlers (unchanged logic)
   const handleLocationSelect = (type: 'state' | 'lga', id: string, label: string) => {
     const params = new URLSearchParams(searchParams.toString());
     if (type === 'state') {
@@ -297,7 +286,6 @@ export function HomeClient({ initialProviders }: HomeClientProps) {
     </div>
   );
 
-  // Render content – matches server HTML during hydration
   const renderContent = () => {
     const show = isClient ? featuredProviders : initialProviders;
 

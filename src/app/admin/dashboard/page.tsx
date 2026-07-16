@@ -10,6 +10,8 @@ import {
 } from 'lucide-react';
 import { NimartSpinner } from '@/components/common/NimartSpinner';
 
+const db = supabase as any;
+
 interface Stats {
   totalUsers: number;
   totalProviders: number;
