@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/supabase-any';
 import toast from 'react-hot-toast';
 import { MapPin, Store, Save, AlertCircle, Home, Landmark, Phone, Loader2, Info, ChevronDown } from 'lucide-react';
 import { TIERS, getCategoriesByTier, getSubcategoriesByCategory } from '@/data/categories';
@@ -103,9 +104,9 @@ export default function ProviderSetup() {
   // ---- Fetch states ----
   useEffect(() => {
     async function fetchStates() {
-      const { data } = await supabase.from('lga_centers').select('state_id, state_name').order('state_name');
+      const { data } = await db.from('lga_centers').select('state_id, state_name').order('state_name');
       if (data) {
-        const unique = data.filter((v,i,a)=>a.findIndex(t=>t.state_id===v.state_id)===i);
+        const unique = (data as any[]).filter((v: any, i: number, a: any[]) => a.findIndex((t: any) => t.state_id === v.state_id) === i);
         setStates(unique);
       }
     }
@@ -116,8 +117,8 @@ export default function ProviderSetup() {
   useEffect(() => {
     if (!selectedStateId) { setLgas([]); return; }
     async function fetchLgas() {
-      const { data } = await supabase.from('lga_centers').select('lga_id, lga_name, lat, lng').eq('state_id', parseInt(selectedStateId)).order('lga_name');
-      setLgas(data || []);
+      const { data } = await db.from('lga_centers').select('lga_id, lga_name, lat, lng').eq('state_id', parseInt(selectedStateId)).order('lga_name');
+      setLgas((data as any[]) || []);
     }
     fetchLgas();
   }, [selectedStateId]);
@@ -130,28 +131,30 @@ export default function ProviderSetup() {
   useEffect(() => {
     if (!user) return;
     async function fetchExisting() {
-      const { data: provider } = await supabase.from('providers').select('business_name, description, selected_tier_slug, selected_category_slug, selected_subcategory_id').eq('id', user.id).single();
+      const { data: provider } = await db.from('providers').select('business_name, description, selected_tier_slug, selected_category_slug, selected_subcategory_id').eq('id', user.id).single();
       if (provider) {
-        setBusinessName(provider.business_name || '');
-        setDescription(provider.description || '');
-        if (provider.selected_tier_slug) setSelectedTier(provider.selected_tier_slug);
-        if (provider.selected_category_slug) setSelectedCategory(provider.selected_category_slug);
-        if (provider.selected_subcategory_id) setSelectedSubcategoryId(provider.selected_subcategory_id.toString());
+        const p = provider as any;
+        setBusinessName(p.business_name || '');
+        setDescription(p.description || '');
+        if (p.selected_tier_slug) setSelectedTier(p.selected_tier_slug);
+        if (p.selected_category_slug) setSelectedCategory(p.selected_category_slug);
+        if (p.selected_subcategory_id) setSelectedSubcategoryId(p.selected_subcategory_id.toString());
       }
-      const { data: profileData } = await supabase.from('profiles').select('lga_id, lga_name, street_address, landmark, phone, address_area, lat, lng').eq('id', user.id).single();
+      const { data: profileData } = await db.from('profiles').select('lga_id, lga_name, street_address, landmark, phone, address_area, lat, lng').eq('id', user.id).single();
       if (profileData) {
-        if (profileData.lga_id) {
-          setSelectedLgaId(profileData.lga_id.toString());
-          setSelectedLgaName(profileData.lga_name || '');
-          const { data: lgaInfo } = await supabase.from('lga_centers').select('state_name').eq('lga_id', profileData.lga_id).single();
-          if (lgaInfo) setSelectedStateName(lgaInfo.state_name);
+        const pr = profileData as any;
+        if (pr.lga_id) {
+          setSelectedLgaId(pr.lga_id.toString());
+          setSelectedLgaName(pr.lga_name || '');
+          const { data: lgaInfo } = await db.from('lga_centers').select('state_name').eq('lga_id', pr.lga_id).single();
+          if (lgaInfo) setSelectedStateName((lgaInfo as any).state_name);
         }
-        setStreetAddress(profileData.street_address || '');
-        setLandmark(profileData.landmark || '');
-        if (profileData.phone) setPhoneNumber(profileData.phone);
-        setDetectedArea(profileData.address_area || '');
-        if (profileData.lat && profileData.lng) {
-          setMapLat(profileData.lat); setMapLng(profileData.lng); setHasLocation(true);
+        setStreetAddress(pr.street_address || '');
+        setLandmark(pr.landmark || '');
+        if (pr.phone) setPhoneNumber(pr.phone);
+        setDetectedArea(pr.address_area || '');
+        if (pr.lat && pr.lng) {
+          setMapLat(pr.lat); setMapLng(pr.lng); setHasLocation(true);
         }
       }
       setInitialLoading(false);
@@ -202,7 +205,7 @@ export default function ProviderSetup() {
 
     setLoading(true);
     try {
-      const { data, error } = await supabase.rpc('complete_provider_setup', {
+      const params = {
         p_user_id: user!.id,
         p_business_name: businessName, p_phone: phoneNumber,
         p_street_address: streetAddress, p_address_area: detectedArea,
@@ -210,9 +213,10 @@ export default function ProviderSetup() {
         p_lat: mapLat, p_lng: mapLng, p_description: description || null,
         p_selected_tier_slug: selectedTier, p_selected_category_slug: selectedCategory,
         p_selected_subcategory_id: parseInt(selectedSubcategoryId),
-      });
+      };
+      const { data, error } = await db.rpc('complete_provider_setup', params as any);
       if (error) throw error;
-      if (!data.success) throw new Error(data.error);
+      if (!(data as any).success) throw new Error((data as any).error);
 
       // Try to refresh the profile – if it fails, still navigate
       try { await refreshProfile(); } catch {}
