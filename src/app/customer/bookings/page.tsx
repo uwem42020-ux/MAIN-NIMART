@@ -101,9 +101,9 @@ export default function CustomerBookings() {
 
       return (bookingsData as any[]).map((booking: any) => ({
         ...booking,
-        provider_name: profileMap.get(booking.provider_id)?.full_name || null,
-        provider_avatar: profileMap.get(booking.provider_id)?.avatar_url || null,
-        provider_business: providerMap.get(booking.provider_id)?.business_name || null,
+        provider_name: (profileMap.get(booking.provider_id) as any)?.full_name || null,
+        provider_avatar: (profileMap.get(booking.provider_id) as any)?.avatar_url || null,
+        provider_business: (providerMap.get(booking.provider_id) as any)?.business_name || null,
       })) as Booking[];
     },
     enabled: !!user,
