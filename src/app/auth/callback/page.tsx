@@ -54,7 +54,7 @@ export default function AuthCallback() {
         }
 
         // If profile already has a role, redirect immediately
-        if (profile?.role) {
+        if ((profile as any)?.role) {
           await refreshProfile();
           if (profile.role === 'provider' && !profile.is_complete) {
             router.push('/provider/setup');
