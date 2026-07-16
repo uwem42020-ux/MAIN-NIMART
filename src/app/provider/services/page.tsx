@@ -4,6 +4,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/supabase-any';
 import { Plus, Edit2, Trash2, X, Save } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { cn } from '@/lib/utils';
@@ -44,12 +45,12 @@ export default function ProviderServices() {
 
   async function fetchServices() {
     setLoading(true);
-    const { data } = await supabase
+    const { data } = await db
       .from('provider_services')
       .select('*')
       .eq('provider_id', user!.id)
       .order('created_at', { ascending: true });
-    setServices(data || []);
+    setServices((data as any[]) || []);
     setLoading(false);
   }
 
@@ -93,14 +94,16 @@ export default function ProviderServices() {
       };
 
       if (editingService) {
-        const { error } = await supabase
+        const { error } = await db
           .from('provider_services')
-          .update(payload)
+          .update(payload as any)
           .eq('id', editingService.id);
         if (error) throw error;
         toast.success('Service updated');
       } else {
-        const { error } = await supabase.from('provider_services').insert(payload);
+        const { error } = await db
+          .from('provider_services')
+          .insert(payload as any);
         if (error) throw error;
         toast.success('Service added');
       }
@@ -116,7 +119,10 @@ export default function ProviderServices() {
   async function deleteService(id: string) {
     if (!confirm('Are you sure you want to delete this service?')) return;
     try {
-      const { error } = await supabase.from('provider_services').delete().eq('id', id);
+      const { error } = await db
+        .from('provider_services')
+        .delete()
+        .eq('id', id);
       if (error) throw error;
       toast.success('Service deleted');
       fetchServices();
