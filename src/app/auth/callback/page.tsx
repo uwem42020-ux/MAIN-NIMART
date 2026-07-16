@@ -26,7 +26,6 @@ export default function AuthCallback() {
   useEffect(() => {
     let mounted = true;
 
-    // Extract referral code from URL if present
     const refParam = searchParams.get('ref');
     if (refParam) {
       setReferralCode(refParam.trim().toUpperCase());
@@ -42,7 +41,6 @@ export default function AuthCallback() {
         if (!mounted) return;
         setUser(currentUser);
 
-        // Check if profile already exists
         const { data: profile, error: profileError } = await supabase
           .from('profiles')
           .select('role, full_name, is_complete')
@@ -53,18 +51,17 @@ export default function AuthCallback() {
           throw profileError;
         }
 
-        // If profile already has a role, redirect immediately
         if ((profile as any)?.role) {
           await refreshProfile();
-          if (profile.role === 'provider' && !profile.is_complete) {
+          const p = profile as any;
+          if (p.role === 'provider' && !p.is_complete) {
             router.push('/provider/setup');
           } else {
-            router.push(profile.role === 'provider' ? '/provider/dashboard' : '/customer/dashboard');
+            router.push(p.role === 'provider' ? '/provider/dashboard' : '/customer/dashboard');
           }
           return;
         }
 
-        // No role yet – show role selection
         setFullName(profile?.full_name || currentUser.user_metadata?.full_name || '');
         setNeedsRole(true);
       } catch (err: any) {
@@ -87,7 +84,6 @@ export default function AuthCallback() {
     e.preventDefault();
     if (!user) return;
 
-    // --- Duplicate account check ---
     const { data: existingProfile } = await supabase
       .from('profiles')
       .select('role')
@@ -104,7 +100,6 @@ export default function AuthCallback() {
     setSubmitting(true);
     try {
       if (role === 'customer') {
-        // Simple customer profile update
         const { error: profileError } = await supabase
           .from('profiles')
           .update({ full_name: fullName, role, is_complete: true })
@@ -116,7 +111,6 @@ export default function AuthCallback() {
         toast.success('Welcome to Nimart!');
         router.push('/customer/dashboard');
       } else {
-        // Provider – handle referral code if present
         if (referralCode.trim()) {
           const { data: referrer } = await supabase
             .from('providers')
@@ -125,13 +119,11 @@ export default function AuthCallback() {
             .single();
 
           if (referrer && referrer.id !== user.id) {
-            // Mark the new provider as referred
             await supabase
               .from('providers')
               .update({ referred_by: referrer.id })
               .eq('id', user.id);
 
-            // Create the referral record
             await supabase.from('referrals').insert({
               referrer_id: referrer.id,
               referred_provider_id: user.id,
@@ -139,7 +131,6 @@ export default function AuthCallback() {
           }
         }
 
-        // Update profile as incomplete (setup later)
         const { error: profileError } = await supabase
           .from('profiles')
           .update({ full_name: fullName, role, is_complete: false })
@@ -218,7 +209,6 @@ export default function AuthCallback() {
               </div>
             </div>
 
-            {/* Referral code display (pre‑filled from URL, read‑only) */}
             {referralCode && role === 'provider' && (
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">
                 🎁 Referral code <strong>{referralCode}</strong> applied – you'll both earn {REFERRAL_BONUS} Nicoin after your first completed booking.
