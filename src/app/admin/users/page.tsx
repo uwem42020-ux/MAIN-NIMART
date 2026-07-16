@@ -3,6 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/supabase-any';
 import { Search, Ban, Trash2, CheckCircle, XCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
@@ -33,8 +34,7 @@ export default function AdminUsers() {
   async function fetchUsers() {
     setLoading(true);
 
-    // 1. Fetch all profiles
-    const { data: profiles, error: profilesError } = await supabase
+    const { data: profiles, error: profilesError } = await db
       .from('profiles')
       .select('id, full_name, phone, role, is_banned, created_at, email')
       .order('created_at', { ascending: false });
@@ -47,26 +47,22 @@ export default function AdminUsers() {
       return;
     }
 
-    // 2. Fetch all providers (only need id and business_name)
-    const { data: providers, error: providersError } = await supabase
+    const { data: providers, error: providersError } = await db
       .from('providers')
       .select('id, business_name');
 
     if (providersError) {
       console.error('Error fetching providers:', providersError);
-      // Continue anyway – providers are optional
     }
 
-    // 3. Merge business_name into profiles
     const providerMap = new Map();
-    (providers || []).forEach(p => providerMap.set(p.id, p.business_name));
+    (providers || []).forEach((p: any) => providerMap.set(p.id, p.business_name));
 
-    let usersList = (profiles || []).map(profile => ({
+    let usersList = (profiles || []).map((profile: any) => ({
       ...profile,
       business_name: providerMap.get(profile.id) || null,
     }));
 
-    // 4. Apply client-side filter
     if (filter === 'customer') {
       usersList = usersList.filter(u => u.role === 'customer');
     } else if (filter === 'provider') {
@@ -84,7 +80,7 @@ export default function AdminUsers() {
     if (reason === null) return;
 
     try {
-      const { error } = await supabase
+      const { error } = await db
         .from('profiles')
         .update({
           is_banned: !currentStatus,

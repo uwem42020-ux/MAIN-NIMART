@@ -3,6 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/supabase-any';
 import { CheckCircle, XCircle, Eye } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
@@ -19,8 +20,7 @@ export default function AdminPayments() {
   async function fetchSubmissions() {
     setLoading(true);
 
-    // 1. Fetch payment submissions (NO embedded joins)
-    let query = supabase
+    let query = db
       .from('payment_submissions')
       .select('*')
       .order('created_at', { ascending: false });
@@ -34,22 +34,18 @@ export default function AdminPayments() {
       return;
     }
 
-    // 2. Get unique provider IDs
     const providerIds = [...new Set(submissionsData.map((s: any) => s.provider_id))];
 
-    // 3. Fetch profiles directly (no join — profiles.id = provider_id)
-    const { data: profiles } = await supabase
+    const { data: profiles } = await db
       .from('profiles')
       .select('id, full_name, email')
       .in('id', providerIds);
 
-    // 4. Fetch business names from providers table
-    const { data: providers } = await supabase
+    const { data: providers } = await db
       .from('providers')
       .select('id, business_name')
       .in('id', providerIds);
 
-    // 5. Create lookup maps
     const profileMap = new Map<string, { name: string; email: string }>();
     profiles?.forEach((p: any) => {
       profileMap.set(p.id, { name: p.full_name || '', email: p.email || '' });
@@ -60,7 +56,6 @@ export default function AdminPayments() {
       businessMap.set(p.id, p.business_name || '');
     });
 
-    // 6. Merge data
     const enriched = submissionsData.map((sub: any) => {
       const prof = profileMap.get(sub.provider_id);
       const bizName = businessMap.get(sub.provider_id);
@@ -82,23 +77,21 @@ export default function AdminPayments() {
 
       const { data: { user } } = await supabase.auth.getUser();
 
-      // Update submission status
-      const { error } = await supabase
+      const { error } = await db
         .from('payment_submissions')
         .update({ status, admin_id: user!.id, updated_at: new Date().toISOString() })
         .eq('id', submissionId);
 
       if (error) throw error;
 
-      // If approved, credit coins (1 Naira = 1 Nicoin)
       if (status === 'approved') {
         const amountNicoin = submission.amount_naira;
-        await supabase.rpc('adjust_coin_balance', {
+        await db.rpc('adjust_coin_balance', {
           p_provider_id: submission.provider_id,
           p_amount: amountNicoin,
         });
 
-        await supabase.from('coin_transactions').insert({
+        await db.from('coin_transactions').insert({
           provider_id: submission.provider_id,
           amount: amountNicoin,
           type: 'admin_credit',
@@ -118,7 +111,6 @@ export default function AdminPayments() {
     <div className="max-w-7xl mx-auto px-4 py-8">
       <h1 className="text-3xl font-bold text-gray-900 mb-6">Payment Submissions</h1>
 
-      {/* Filter tabs */}
       <div className="flex gap-2 mb-6 border-b">
         {(['pending', 'approved', 'rejected', 'all'] as const).map(f => (
           <button

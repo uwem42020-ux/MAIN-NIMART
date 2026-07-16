@@ -3,7 +3,7 @@
 
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/supabase-any';
 import { format } from 'date-fns';
 import { Users, CheckCircle, Clock, XCircle, Eye } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -23,7 +23,7 @@ export default function AdminReferrals() {
   const { data: referrals, isLoading } = useQuery({
     queryKey: ['admin-referrals', filterStatus],
     queryFn: async () => {
-      let query = supabase
+      let query = db
         .from('referrals')
         .select(`
           id,
@@ -57,10 +57,9 @@ export default function AdminReferrals() {
 
   const handleAward = async (referralId: string, referrerId: string, referredProviderId: string) => {
     try {
-      // Award both parties
-      await supabase.rpc('adjust_coin_balance', { p_provider_id: referrerId, p_amount: REFERRAL_BONUS });
-      await supabase.rpc('adjust_coin_balance', { p_provider_id: referredProviderId, p_amount: REFERRAL_BONUS });
-      await supabase.from('referrals').update({ status: 'awarded', awarded_at: new Date().toISOString() }).eq('id', referralId);
+      await db.rpc('adjust_coin_balance', { p_provider_id: referrerId, p_amount: REFERRAL_BONUS });
+      await db.rpc('adjust_coin_balance', { p_provider_id: referredProviderId, p_amount: REFERRAL_BONUS });
+      await db.from('referrals').update({ status: 'awarded', awarded_at: new Date().toISOString() }).eq('id', referralId);
       toast.success(`Referral awarded (+${REFERRAL_BONUS} Nicoin each)`);
       queryClient.invalidateQueries({ queryKey: ['admin-referrals'] });
     } catch (error: any) {
@@ -70,7 +69,7 @@ export default function AdminReferrals() {
 
   const handleCancel = async (referralId: string) => {
     if (!confirm('Cancel this referral? This cannot be undone.')) return;
-    const { error } = await supabase.from('referrals').delete().eq('id', referralId);
+    const { error } = await db.from('referrals').delete().eq('id', referralId);
     if (error) {
       toast.error(error.message);
       return;
@@ -83,7 +82,6 @@ export default function AdminReferrals() {
     <div className="max-w-7xl mx-auto px-4 py-8">
       <h1 className="text-2xl font-bold text-gray-900 mb-6">Referral Monitor</h1>
 
-      {/* Stats */}
       <div className="grid grid-cols-3 gap-4 mb-6">
         <div className="bg-white rounded-xl shadow-sm border p-4">
           <Users className="h-6 w-6 text-primary-600 mb-2" />
@@ -102,7 +100,6 @@ export default function AdminReferrals() {
         </div>
       </div>
 
-      {/* Filter tabs */}
       <div className="flex gap-2 mb-6">
         {['all', 'pending', 'awarded'].map(status => (
           <button
@@ -120,7 +117,6 @@ export default function AdminReferrals() {
         ))}
       </div>
 
-      {/* Referrals list */}
       {isLoading ? (
         <div className="flex justify-center py-12"><NimartSpinner size="lg" /></div>
       ) : !referrals?.length ? (

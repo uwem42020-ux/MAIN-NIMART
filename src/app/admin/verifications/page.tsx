@@ -3,6 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/supabase-any';
 import { CheckCircle, XCircle, Eye, ChevronDown, ChevronRight, FileText, Shield } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
@@ -49,7 +50,6 @@ export default function AdminVerifications() {
     fetchDocuments();
   }, [filter]);
 
-  // Realtime subscription
   useEffect(() => {
     const channel = supabase
       .channel('verification-changes')
@@ -70,7 +70,7 @@ export default function AdminVerifications() {
   async function fetchDocuments() {
     setLoading(true);
 
-    let query = supabase
+    let query = db
       .from('verification_documents')
       .select('*')
       .order('created_at', { ascending: false });
@@ -95,29 +95,24 @@ export default function AdminVerifications() {
       return;
     }
 
-    // Get unique provider IDs
     const providerIds = [...new Set(docs.map((d: any) => d.provider_id))];
 
-    // Fetch profiles
-    const { data: profiles } = await supabase
+    const { data: profiles } = await db
       .from('profiles')
       .select('id, full_name, email, is_verified')
       .in('id', providerIds);
 
-    // Fetch providers
-    const { data: providers } = await supabase
+    const { data: providers } = await db
       .from('providers')
       .select('id, business_name')
       .in('id', providerIds);
 
-    // Create lookup maps
     const profileMap = new Map();
     profiles?.forEach((p: any) => profileMap.set(p.id, p));
 
     const providerMap = new Map();
     providers?.forEach((p: any) => providerMap.set(p.id, p));
 
-    // Group documents by provider
     const groupsMap = new Map<string, ProviderGroup>();
     
     docs.forEach((doc: any) => {
@@ -140,11 +135,9 @@ export default function AdminVerifications() {
       groupsMap.get(providerId)!.documents.push(doc);
     });
 
-    // Convert map to array
     const groups = Array.from(groupsMap.values());
     setProviderGroups(groups);
     
-    // Auto-expand the first provider
     if (groups.length > 0 && expandedProviders.size === 0) {
       setExpandedProviders(new Set([groups[0].provider_id]));
     }
@@ -183,7 +176,7 @@ export default function AdminVerifications() {
 
       console.log('Update payload:', updateData);
 
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from('verification_documents')
         .update(updateData)
         .eq('id', selectedDoc.id)
@@ -197,10 +190,8 @@ export default function AdminVerifications() {
       console.log('Update successful, returned:', data);
       toast.success(`Document ${status}`);
       
-      // Refresh the list
       await fetchDocuments();
       
-      // Close modal and reset
       setShowModal(false);
       setSelectedDoc(null);
       setAdminNotes('');
@@ -215,7 +206,7 @@ export default function AdminVerifications() {
   async function toggleProviderVerification(providerId: string, currentStatus: boolean) {
     try {
       const newStatus = !currentStatus;
-      const { error } = await supabase
+      const { error } = await db
         .from('profiles')
         .update({ is_verified: newStatus })
         .eq('id', providerId);
@@ -235,7 +226,6 @@ export default function AdminVerifications() {
     <div className="max-w-5xl mx-auto px-4 py-8">
       <h1 className="text-3xl font-bold text-gray-900 mb-6">Verification Requests</h1>
 
-      {/* Filter Tabs */}
       <div className="flex gap-2 mb-6 border-b">
         {(['pending', 'approved', 'rejected', 'all'] as const).map((f) => (
           <button
@@ -275,7 +265,6 @@ export default function AdminVerifications() {
             
             return (
               <div key={group.provider_id} className="bg-white rounded-lg shadow-sm border overflow-hidden">
-                {/* Provider Header */}
                 <button
                   onClick={() => toggleProvider(group.provider_id)}
                   className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition"
@@ -309,7 +298,6 @@ export default function AdminVerifications() {
                   </div>
                 </button>
 
-                {/* Documents List */}
                 {isExpanded && (
                   <div className="border-t bg-gray-50/50">
                     {group.documents.map((doc) => (
@@ -359,7 +347,6 @@ export default function AdminVerifications() {
                       </div>
                     ))}
                     
-                    {/* Manual Verification Toggle */}
                     <div className="p-3 pl-12 border-t bg-white">
                       <button
                         onClick={() => toggleProviderVerification(group.provider_id, group.is_verified)}
@@ -387,7 +374,6 @@ export default function AdminVerifications() {
         </div>
       )}
 
-      {/* Modal */}
       {showModal && selectedDoc && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md">

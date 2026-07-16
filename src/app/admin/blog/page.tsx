@@ -4,6 +4,7 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/supabase-any';
 import { SEO } from '@/components/common/SEO';
 import { NimartSpinner } from '@/components/common/NimartSpinner';
 import { Plus, Edit, Trash2, Save, X, Eye, EyeOff } from 'lucide-react';
@@ -44,7 +45,7 @@ export default function AdminBlog() {
   const { data: posts, isLoading } = useQuery({
     queryKey: ['admin-blog-posts'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from('blog_posts')
         .select('*')
         .order('created_at', { ascending: false });
@@ -65,7 +66,7 @@ export default function AdminBlog() {
 
   const handleDelete = async (id: number) => {
     if (!confirm('Delete this post permanently?')) return;
-    const { error } = await supabase.from('blog_posts').delete().eq('id', id);
+    const { error } = await db.from('blog_posts').delete().eq('id', id);
     if (error) {
       toast.error(error.message);
     } else {
@@ -89,19 +90,14 @@ export default function AdminBlog() {
     };
 
     if (editingPost.id) {
-      // Update
-      const { error } = await supabase
-        .from('blog_posts')
-        .update(payload)
-        .eq('id', editingPost.id);
+      const { error } = await db.from('blog_posts').update(payload).eq('id', editingPost.id);
       if (error) {
         toast.error(error.message);
         return;
       }
       toast.success('Post updated');
     } else {
-      // Insert
-      const { error } = await supabase.from('blog_posts').insert(payload);
+      const { error } = await db.from('blog_posts').insert(payload);
       if (error) {
         toast.error(error.message);
         return;
@@ -114,10 +110,7 @@ export default function AdminBlog() {
   };
 
   const handleTogglePublished = async (post: BlogPost) => {
-    const { error } = await supabase
-      .from('blog_posts')
-      .update({ published: !post.published })
-      .eq('id', post.id);
+    const { error } = await db.from('blog_posts').update({ published: !post.published }).eq('id', post.id);
     if (error) {
       toast.error(error.message);
     } else {

@@ -1,9 +1,9 @@
 // src/app/admin/flags/page.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/supabase-any';
 import { format } from 'date-fns';
 import { Flag, CheckCircle, XCircle, Clock, Eye } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -24,7 +24,7 @@ export default function AdminFlags() {
   const { data: flags, isLoading } = useQuery({
     queryKey: ['admin-flags', filterStatus],
     queryFn: async () => {
-      let query = supabase
+      let query = db
         .from('booking_flags')
         .select(`
           *,
@@ -52,7 +52,7 @@ export default function AdminFlags() {
   });
 
   const updateFlagStatus = async (flagId: number, status: string) => {
-    const { error } = await supabase
+    const { error } = await db
       .from('booking_flags')
       .update({ status, resolved_at: new Date().toISOString() })
       .eq('id', flagId);

@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/supabase-any';
 import {
   Users, UserCheck, UserX, MessageCircle, Mail, Shield, Calendar,
   AlertTriangle, Flag, CheckCircle, XCircle
@@ -54,15 +54,15 @@ export default function AdminDashboard() {
       verificationsRes,
       flagsRes,
     ] = await Promise.all([
-      supabase.from('profiles').select('id', { count: 'exact', head: true }),
-      supabase.from('providers').select('id', { count: 'exact', head: true }),
-      supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('is_banned', true),
-      supabase.from('support_chats').select('id', { count: 'exact', head: true }).eq('status', 'open'),
-      supabase.from('bookings').select('id', { count: 'exact', head: true }),
-      supabase.from('bookings').select('id', { count: 'exact', head: true }).eq('customer_confirmation_status', 'disputed'),
-      supabase.from('provider_strikes').select('id', { count: 'exact', head: true }).gt('expires_at', new Date().toISOString()),
-      supabase.from('verification_documents').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
-      supabase.from('booking_flags').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+      db.from('profiles').select('id', { count: 'exact', head: true }),
+      db.from('providers').select('id', { count: 'exact', head: true }),
+      db.from('profiles').select('id', { count: 'exact', head: true }).eq('is_banned', true),
+      db.from('support_chats').select('id', { count: 'exact', head: true }).eq('status', 'open'),
+      db.from('bookings').select('id', { count: 'exact', head: true }),
+      db.from('bookings').select('id', { count: 'exact', head: true }).eq('customer_confirmation_status', 'disputed'),
+      db.from('provider_strikes').select('id', { count: 'exact', head: true }).gt('expires_at', new Date().toISOString()),
+      db.from('verification_documents').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+      db.from('booking_flags').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
     ]);
 
     setStats({

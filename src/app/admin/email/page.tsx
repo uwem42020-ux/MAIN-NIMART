@@ -3,6 +3,7 @@
 
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/supabase-any';
 import { useAuth } from '@/contexts/AuthContext';
 import { Mail, Send, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -18,7 +19,7 @@ export default function AdminBulkEmail() {
 
   async function previewRecipients() {
     setLoading(true);
-    let query = supabase.from('profiles').select('id', { count: 'exact', head: true });
+    let query = db.from('profiles').select('id', { count: 'exact', head: true });
 
     if (recipientType === 'customers') {
       query = query.eq('role', 'customer');
@@ -43,8 +44,7 @@ export default function AdminBulkEmail() {
 
     setLoading(true);
     try {
-      // Step 1 – Get profile IDs of the chosen role
-      let profileQuery = supabase.from('profiles').select('id');
+      let profileQuery = db.from('profiles').select('id');
       if (recipientType === 'customers') {
         profileQuery = profileQuery.eq('role', 'customer');
       } else if (recipientType === 'providers') {
@@ -58,11 +58,9 @@ export default function AdminBulkEmail() {
         return;
       }
 
-      const userIds = profiles.map((p) => p.id);
+      const userIds = profiles.map((p: any) => p.id);
 
-      // Step 2 – Fetch emails via the secure RPC
-      const { data: emailsData, error: rpcError } = await supabase
-        .rpc('get_user_emails', { user_ids: userIds });
+      const { data: emailsData, error: rpcError } = await db.rpc('get_user_emails', { user_ids: userIds });
 
       if (rpcError) throw rpcError;
 
@@ -73,15 +71,13 @@ export default function AdminBulkEmail() {
         return;
       }
 
-      // Step 3 – Send via the Edge Function
       const { error: sendError } = await supabase.functions.invoke('send-email', {
         body: { emails, subject, content, admin_id: user!.id },
       });
 
       if (sendError) throw sendError;
 
-      // Log the bulk email
-      await supabase.from('bulk_email_logs').insert({
+      await db.from('bulk_email_logs').insert({
         admin_id: user!.id,
         subject,
         content,

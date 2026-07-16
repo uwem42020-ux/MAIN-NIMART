@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/supabase-any';
 import { format } from 'date-fns';
 import { CheckCircle, XCircle, Eye } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -31,7 +31,7 @@ export default function AdminReports() {
 
   async function fetchReports() {
     setLoading(true);
-    let query = supabase
+    let query = db
       .from('reports')
       .select(`
         *,
@@ -50,7 +50,7 @@ export default function AdminReports() {
   }
 
   async function updateStatus(id: string, status: string) {
-    const { error } = await supabase.from('reports').update({ status }).eq('id', id);
+    const { error } = await db.from('reports').update({ status }).eq('id', id);
     if (error) toast.error('Failed to update');
     else {
       toast.success('Status updated');

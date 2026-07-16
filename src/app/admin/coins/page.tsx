@@ -3,6 +3,7 @@
 
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/supabase-any';
 import { Search, Plus, Minus } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { sendEmail, sendPushNotification } from '@/lib/email';
@@ -17,7 +18,7 @@ export default function AdminCoins() {
 
   const handleSearch = async () => {
     if (!searchTerm.trim()) return;
-    const { data: profiles, error } = await supabase
+    const { data: profiles, error } = await db
       .from('profiles')
       .select('id, full_name, email')
       .or(`full_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`)
@@ -30,7 +31,7 @@ export default function AdminCoins() {
     }
 
     const profileIds = profiles.map((p: any) => p.id);
-    const { data: providers } = await supabase
+    const { data: providers } = await db
       .from('providers')
       .select('id, coin_balance, business_name')
       .in('id', profileIds);
@@ -61,8 +62,7 @@ export default function AdminCoins() {
       const finalAmount = type === 'add' ? amount : -amount;
       const { data: { user } } = await supabase.auth.getUser();
 
-      // Insert transaction
-      await supabase.from('coin_transactions').insert({
+      await db.from('coin_transactions').insert({
         provider_id: selectedProvider.id,
         amount: finalAmount,
         type: type === 'add' ? 'admin_credit' : 'admin_deduction',
@@ -70,15 +70,13 @@ export default function AdminCoins() {
         reference_id: null,
       });
 
-      // Update balance (RPC sends notification automatically)
-      await supabase.rpc('adjust_coin_balance', {
+      await db.rpc('adjust_coin_balance', {
         p_provider_id: selectedProvider.id,
         p_amount: finalAmount,
       });
 
       toast.success(`${type === 'add' ? 'Added' : 'Removed'} ${Math.abs(finalAmount)} Nicoin`);
 
-      // Send email notification
       if (selectedProvider.email) {
         await sendEmail(
           selectedProvider.email,
@@ -87,8 +85,7 @@ export default function AdminCoins() {
         );
       }
 
-      // Send push notification (fetch FCM token)
-      const { data: providerProfile } = await supabase
+      const { data: providerProfile } = await db
         .from('profiles')
         .select('fcm_token')
         .eq('id', selectedProvider.id)
@@ -105,8 +102,7 @@ export default function AdminCoins() {
       setCoinAmount('');
       setReason('');
 
-      // Refresh the selected provider balance
-      const { data: refreshed } = await supabase
+      const { data: refreshed } = await db
         .from('providers')
         .select('coin_balance')
         .eq('id', selectedProvider.id)

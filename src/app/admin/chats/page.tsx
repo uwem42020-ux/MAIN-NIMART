@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/supabase-any';
 import { useAuth } from '@/contexts/AuthContext';
 import { MessageCircle, Send, ChevronRight, ArrowLeft } from 'lucide-react';
 import { format } from 'date-fns';
@@ -67,7 +68,7 @@ export default function AdminChats() {
   }, [selectedChat]);
 
   async function fetchChats() {
-    const { data } = await supabase
+    const { data } = await db
       .from('support_chats')
       .select(`
         *,
@@ -90,7 +91,7 @@ export default function AdminChats() {
   }
 
   async function fetchMessages(chatId: string) {
-    const { data } = await supabase
+    const { data } = await db
       .from('support_messages')
       .select('*')
       .eq('chat_id', chatId)
@@ -99,8 +100,7 @@ export default function AdminChats() {
     setMessages(data || []);
     scrollToBottom();
 
-    // Mark as read
-    await supabase
+    await db
       .from('support_messages')
       .update({ is_read: true })
       .eq('chat_id', chatId)
@@ -113,7 +113,7 @@ export default function AdminChats() {
     if (!newMessage.trim() || !selectedChat || !user) return;
 
     setSending(true);
-    const { error } = await supabase.from('support_messages').insert({
+    const { error } = await db.from('support_messages').insert({
       chat_id: selectedChat.id,
       sender_id: user.id,
       sender_type: 'admin',
@@ -122,7 +122,7 @@ export default function AdminChats() {
 
     if (!error) {
       setNewMessage('');
-      await supabase
+      await db
         .from('support_chats')
         .update({ updated_at: new Date().toISOString() })
         .eq('id', selectedChat.id);
@@ -133,7 +133,7 @@ export default function AdminChats() {
   }
 
   async function updateChatStatus(chatId: string, status: string) {
-    await supabase
+    await db
       .from('support_chats')
       .update({ status })
       .eq('id', chatId);
