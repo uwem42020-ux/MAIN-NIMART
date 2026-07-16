@@ -62,7 +62,7 @@ export default function AuthCallback() {
           return;
         }
 
-        setFullName(profile?.full_name || currentUser.user_metadata?.full_name || '');
+        setFullName((profile as any)?.full_name || currentUser.user_metadata?.full_name || '');
         setNeedsRole(true);
       } catch (err: any) {
         console.error('Auth callback error:', err);
