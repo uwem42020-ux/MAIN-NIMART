@@ -4,6 +4,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/supabase-any';
 import Link from 'next/link';
 import { MessageCircle, RefreshCw, Search, MoreVertical, Trash2, Pin, EyeOff } from 'lucide-react';
 import { format, isToday, isYesterday, parseISO } from 'date-fns';
@@ -22,7 +23,7 @@ export default function ProviderMessages() {
     queryKey: ['provider-threads', user?.id],
     queryFn: async () => {
       if (!user) return [];
-      const { data: threadData } = await supabase
+      const { data: threadData } = await db
         .from('threads')
         .select('id, provider_id, customer_id, last_message, last_message_at')
         .or(`provider_id.eq.${user.id},customer_id.eq.${user.id}`)
@@ -30,17 +31,20 @@ export default function ProviderMessages() {
 
       if (!threadData?.length) return [];
 
-      const otherIds = threadData.map(t =>
+      const threadArray = threadData as any[];
+
+      const otherIds = threadArray.map(t =>
         t.provider_id === user.id ? t.customer_id : t.provider_id
       );
-      const { data: profilesData } = await supabase
+
+      const { data: profilesData } = await db
         .from('profiles')
         .select('id, full_name, avatar_url')
         .in('id', otherIds);
 
-      const profileMap = new Map(profilesData?.map(p => [p.id, p]) || []);
+      const profileMap = new Map((profilesData as any[])?.map(p => [p.id, p]) || []);
 
-      return threadData.map(t => ({
+      return threadArray.map(t => ({
         id: t.id,
         last_message: t.last_message,
         last_message_at: t.last_message_at,
@@ -53,7 +57,7 @@ export default function ProviderMessages() {
     staleTime: 0,
   });
 
-  // Realtime subscriptions
+  // Realtime subscriptions (supabase can stay – no type errors)
   useEffect(() => {
     if (!user) return;
     const channelProvider = supabase
@@ -93,11 +97,10 @@ export default function ProviderMessages() {
 
   const closeMenu = () => setMenuState(null);
 
-  // FIXED: Delete thread (messages cascade automatically due to ON DELETE CASCADE)
   const handleDeleteThread = async (threadId: string) => {
     if (!confirm('Delete this entire conversation? This cannot be undone.')) return;
     try {
-      const { error } = await supabase.from('threads').delete().eq('id', threadId);
+      const { error } = await db.from('threads').delete().eq('id', threadId);
       if (error) {
         console.error('Delete error:', error);
         toast.error('Could not delete conversation: ' + error.message);
