@@ -51,8 +51,8 @@ export default function AdminReferrals() {
 
   const counts = {
     total: referrals?.length || 0,
-    pending: referrals?.filter(r => r.status === 'pending').length || 0,
-    awarded: referrals?.filter(r => r.status === 'awarded').length || 0,
+    pending: referrals?.filter((r: any) => r.status === 'pending').length || 0,
+    awarded: referrals?.filter((r: any) => r.status === 'awarded').length || 0,
   };
 
   const handleAward = async (referralId: string, referrerId: string, referredProviderId: string) => {
