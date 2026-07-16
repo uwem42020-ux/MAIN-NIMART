@@ -84,14 +84,19 @@ export default function AuthCallback() {
     e.preventDefault();
     if (!user) return;
 
-    const { data: existingProfile } = await supabase
+    const { data: existingProfile, error: existingError } = await supabase
       .from('profiles')
       .select('role')
       .eq('id', user.id)
       .single();
 
-    if (existingProfile?.role) {
-      toast.error(`This account is already registered as a ${existingProfile.role}. Please sign in.`);
+    if (existingError && existingError.code !== 'PGRST116') {
+      toast.error('Failed to check existing profile. Please try again.');
+      return;
+    }
+
+    if ((existingProfile as any)?.role) {
+      toast.error(`This account is already registered as a ${(existingProfile as any).role}. Please sign in.`);
       await supabase.auth.signOut();
       router.push('/auth/signin');
       return;
