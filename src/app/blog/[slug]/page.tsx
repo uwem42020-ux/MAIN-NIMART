@@ -164,7 +164,7 @@ export default function BlogPost() {
 
   const topLevelComments = comments?.filter(c => !c.parent_id) || [];
   const getReplies = (parentId: number) => comments?.filter(c => c.parent_id === parentId) || [];
-  const isAdmin = profile?.role === 'admin';
+  const isAdmin = (profile as any)?.role === 'admin';
 
   if (isLoading) {
     return <div className="min-h-screen flex items-center justify-center"><NimartSpinner size="lg" /></div>;
