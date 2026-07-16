@@ -41,7 +41,7 @@ export default function ProviderPayment() {
   // ---- Coin explanation expand ----
   const [coinInfoExpanded, setCoinInfoExpanded] = useState(false);
 
-  const publicKey = process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY;
+  const publicKey = (process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY || '') as string;
 
   // ---- Wallet data fetch ----
   useEffect(() => {
