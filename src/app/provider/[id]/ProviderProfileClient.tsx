@@ -443,7 +443,7 @@ export function ProviderProfileClient({
     : 'Recently';
 
   const locationString = provider?.profile?.lga_name
-    ? `${provider.profile.lga_name}, ${provider.profile?.state_name || ''}`
+? `${provider.profile.lga_name}, ${(provider.profile as any)?.state_name || ''}`
     : 'Location not set';
 
   const joinedYear = provider?.created_at
