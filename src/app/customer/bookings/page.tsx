@@ -259,9 +259,9 @@ export default function CustomerBookings() {
             )}
           >
             {tab.label}
-            {counts?.[tab.key as keyof typeof counts] > 0 && (
+            {(counts as any)?.[tab.key] > 0 && (
               <span className="ml-2 px-2 py-0.5 text-xs bg-white/20 text-white rounded-full">
-                {counts[tab.key as keyof typeof counts]}
+                {(counts as any)[tab.key]}
               </span>
             )}
           </button>
