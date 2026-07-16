@@ -157,7 +157,7 @@ export default function ProviderPayment() {
     email: user?.email || '',
     amount: amount ? parseInt(amount) * 100 : 0,
     publicKey,
-    metadata: { provider_id: user?.id },
+    metadata: { provider_id: user?.id, custom_fields: [] as any[] },
     onSuccess: () => {
       toast.success('Payment successful! Nicoin will be credited shortly.');
       setAmount('');
