@@ -456,7 +456,7 @@ export function ProviderProfileClient({
     .join(' ') || 'Provider';
 
   const lgaName = provider?.profile?.lga_name || 'your area';
-  const stateName = provider?.profile?.state_name || 'Nigeria';
+  const stateName = (provider?.profile as any)?.state_name || 'Nigeria';
   const providerName = provider?.business_name || provider?.profile?.full_name || 'Provider';
 
   const shortDescription = provider?.description
