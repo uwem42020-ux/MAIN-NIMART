@@ -4,7 +4,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/supabase-any';
 import { ProviderCardPortrait } from '@/components/provider/ProviderCardPortrait';
 import { ProviderCardHorizontal } from '@/components/provider/ProviderCardHorizontal';
 import { useAuth } from '@/contexts/AuthContext';
@@ -92,13 +92,13 @@ export function SearchClient({ initialProviders, searchParams: initialSearchPara
       const term = debouncedSearchTerm.trim();
       const pattern = `%${term}%`;
 
-      const providerPromise = supabase
+      const providerPromise = db
         .from('providers')
         .select('id, business_name')
         .ilike('business_name', pattern)
         .limit(3);
 
-      const servicePromise = supabase
+      const servicePromise = db
         .from('provider_services')
         .select('id, name, provider:providers!inner(business_name)')
         .ilike('name', pattern)
@@ -108,7 +108,7 @@ export function SearchClient({ initialProviders, searchParams: initialSearchPara
 
       const newSuggestions: Suggestion[] = [];
 
-      providerRes.data?.forEach(p => {
+      (providerRes.data as any[])?.forEach((p: any) => {
         if (p.business_name) {
           newSuggestions.push({
             type: 'provider',
@@ -119,8 +119,8 @@ export function SearchClient({ initialProviders, searchParams: initialSearchPara
         }
       });
 
-      serviceRes.data?.forEach(s => {
-        const providerName = (s.provider as any)?.business_name;
+      (serviceRes.data as any[])?.forEach((s: any) => {
+        const providerName = s.provider?.business_name;
         newSuggestions.push({
           type: 'service',
           text: s.name,
@@ -181,7 +181,7 @@ export function SearchClient({ initialProviders, searchParams: initialSearchPara
   const { data: providers, isLoading } = useQuery({
     queryKey: ['search-providers', keyword, tier, category, subcategory, state, lga, userLat, userLng, sortBy, smartSortData],
     queryFn: async () => {
-      let query = supabase
+      let query = db
         .from('providers')
         .select(`
           id,
@@ -199,12 +199,12 @@ export function SearchClient({ initialProviders, searchParams: initialSearchPara
 
       if (keyword) {
         const pattern = `%${keyword}%`;
-        const { data: profilesByName } = await supabase
+        const { data: profilesByName } = await db
           .from('profiles')
           .select('id')
           .ilike('full_name', pattern);
 
-        const providerIdsFromName = profilesByName?.map(p => p.id) || [];
+        const providerIdsFromName = (profilesByName as any[])?.map((p: any) => p.id) || [];
         if (providerIdsFromName.length > 0) {
           query = query.or(`business_name.ilike.${pattern},description.ilike.${pattern},id.in.(${providerIdsFromName.join(',')})`);
         } else {
@@ -216,19 +216,19 @@ export function SearchClient({ initialProviders, searchParams: initialSearchPara
       if (subcategory) query = query.eq('selected_subcategory_id', parseInt(subcategory));
 
       if (lga) {
-        const { data: profilesInLga } = await supabase.from('profiles').select('id').eq('lga_id', parseInt(lga));
-        if (profilesInLga?.length) {
-          query = query.in('id', profilesInLga.map(p => p.id));
+        const { data: profilesInLga } = await db.from('profiles').select('id').eq('lga_id', parseInt(lga));
+        if ((profilesInLga as any[])?.length) {
+          query = query.in('id', (profilesInLga as any[]).map((p: any) => p.id));
         } else {
           return [] as ProviderWithProfile[];
         }
       } else if (state) {
-        const { data: lgasInState } = await supabase.from('lga_centers').select('lga_id').eq('state_id', parseInt(state));
-        if (lgasInState?.length) {
-          const lgaIds = lgasInState.map(l => l.lga_id);
-          const { data: profilesInState } = await supabase.from('profiles').select('id').in('lga_id', lgaIds);
-          if (profilesInState?.length) {
-            query = query.in('id', profilesInState.map(p => p.id));
+        const { data: lgasInState } = await db.from('lga_centers').select('lga_id').eq('state_id', parseInt(state));
+        if ((lgasInState as any[])?.length) {
+          const lgaIds = (lgasInState as any[]).map((l: any) => l.lga_id);
+          const { data: profilesInState } = await db.from('profiles').select('id').in('lga_id', lgaIds);
+          if ((profilesInState as any[])?.length) {
+            query = query.in('id', (profilesInState as any[]).map((p: any) => p.id));
           } else {
             return [] as ProviderWithProfile[];
           }
@@ -240,22 +240,22 @@ export function SearchClient({ initialProviders, searchParams: initialSearchPara
       query = query.limit(50);
       const { data: providersData, error } = await query;
       if (error) throw error;
-      if (!providersData?.length) return [] as ProviderWithProfile[];
+      if (!(providersData as any[])?.length) return [] as ProviderWithProfile[];
 
-      const providerIds = providersData.map(p => p.id);
+      const providerIds = (providersData as any[]).map((p: any) => p.id);
 
       const [profilesRes, portfolioRes, reviewsRes] = await Promise.all([
-        supabase.from('profiles').select('*').in('id', providerIds),
-        supabase.from('portfolio_images').select('*').in('provider_id', providerIds),
-        supabase.from('reviews').select('provider_id, rating').in('provider_id', providerIds),
+        db.from('profiles').select('*').in('id', providerIds),
+        db.from('portfolio_images').select('*').in('provider_id', providerIds),
+        db.from('reviews').select('provider_id, rating').in('provider_id', providerIds),
       ]);
 
-      const profiles = profilesRes.data ?? [];
-      const portfolioImages = portfolioRes.data ?? [];
-      const allReviews = reviewsRes.data ?? [];
+      const profiles = (profilesRes.data as any[]) ?? [];
+      const portfolioImages = (portfolioRes.data as any[]) ?? [];
+      const allReviews = (reviewsRes.data as any[]) ?? [];
 
       const reviewsMap = new Map<string, { sum: number; count: number }>();
-      allReviews.forEach(r => {
+      allReviews.forEach((r: any) => {
         const curr = reviewsMap.get(r.provider_id) || { sum: 0, count: 0 };
         curr.sum += r.rating;
         curr.count += 1;
@@ -264,13 +264,13 @@ export function SearchClient({ initialProviders, searchParams: initialSearchPara
 
       let distancesMap: Record<string, number> = {};
       if (userLat && userLng) {
-        const { data: distances } = await supabase.rpc('get_provider_distances', {
+        const { data: distances } = await db.rpc('get_provider_distances', {
           user_lat: userLat,
           user_lng: userLng,
           provider_ids: providerIds,
-        });
+        } as any);
         if (distances) {
-          distances.forEach((d: any) => {
+          (distances as any[]).forEach((d: any) => {
             distancesMap[d.provider_id] = d.distance_meters;
           });
         }
@@ -278,17 +278,17 @@ export function SearchClient({ initialProviders, searchParams: initialSearchPara
 
       let lastSignInMap: Record<string, string | null> = {};
       if (providerIds.length > 0) {
-        const { data: signInData } = await supabase.rpc('get_users_last_sign_in', { user_ids: providerIds });
+        const { data: signInData } = await db.rpc('get_users_last_sign_in', { user_ids: providerIds } as any);
         if (signInData) {
-          signInData.forEach((row: any) => {
+          (signInData as any[]).forEach((row: any) => {
             lastSignInMap[row.user_id] = row.last_sign_in_at;
           });
         }
       }
 
-      const providersWithDetails = providersData.map(provider => {
-        const providerProfile = profiles.find(p => p.id === provider.id) ?? ({} as any);
-        const images = portfolioImages.filter(img => img.provider_id === provider.id) ?? [];
+      const providersWithDetails = (providersData as any[]).map((provider: any) => {
+        const providerProfile = profiles.find((p: any) => p.id === provider.id) ?? ({} as any);
+        const images = portfolioImages.filter((img: any) => img.provider_id === provider.id) ?? [];
         const distanceMeters = distancesMap[provider.id];
         const distance = distanceMeters ? distanceMeters / 1000 : undefined;
         const reviewStats = reviewsMap.get(provider.id);
@@ -308,8 +308,8 @@ export function SearchClient({ initialProviders, searchParams: initialSearchPara
       });
 
       const now = new Date();
-      const boosted = providersWithDetails.filter(p => p.boost_until && new Date(p.boost_until) > now);
-      const notBoosted = providersWithDetails.filter(p => !p.boost_until || new Date(p.boost_until) <= now);
+      const boosted = providersWithDetails.filter((p: any) => p.boost_until && new Date(p.boost_until) > now);
+      const notBoosted = providersWithDetails.filter((p: any) => !p.boost_until || new Date(p.boost_until) <= now);
 
       const statusPriority = (s: string) => {
         if (s === 'available') return 0;
