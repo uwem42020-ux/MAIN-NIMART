@@ -131,7 +131,7 @@ export default function ProviderSetup() {
   useEffect(() => {
     if (!user) return;
     async function fetchExisting() {
-      const { data: provider } = await db.from('providers').select('business_name, description, selected_tier_slug, selected_category_slug, selected_subcategory_id').eq('id', user.id).single();
+      const { data: provider } = await db.from('providers').select('business_name, description, selected_tier_slug, selected_category_slug, selected_subcategory_id').eq('id', user!.id).single();
       if (provider) {
         const p = provider as any;
         setBusinessName(p.business_name || '');
@@ -140,7 +140,7 @@ export default function ProviderSetup() {
         if (p.selected_category_slug) setSelectedCategory(p.selected_category_slug);
         if (p.selected_subcategory_id) setSelectedSubcategoryId(p.selected_subcategory_id.toString());
       }
-      const { data: profileData } = await db.from('profiles').select('lga_id, lga_name, street_address, landmark, phone, address_area, lat, lng').eq('id', user.id).single();
+      const { data: profileData } = await db.from('profiles').select('lga_id, lga_name, street_address, landmark, phone, address_area, lat, lng').eq('id', user!.id).single();
       if (profileData) {
         const pr = profileData as any;
         if (pr.lga_id) {
