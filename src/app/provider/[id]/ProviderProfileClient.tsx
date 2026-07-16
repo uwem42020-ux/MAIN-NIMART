@@ -242,10 +242,10 @@ export function ProviderProfileClient({
 
       if (smartSortData && smartSortData.length > 0) {
         const scoreMap = new Map(smartSortData.map(s => [s.provider_id, s.score]));
-        enriched.sort((a, b) => (scoreMap.get(b.id) || 0) - (scoreMap.get(a.id) || 0));
+        enriched.sort((a: any, b: any) => (scoreMap.get(b.id) || 0) - (scoreMap.get(a.id) || 0));
       } else {
         const currentCategory = provider.selected_category_slug;
-        enriched.sort((a, b) => {
+        enriched.sort((a: any, b: any) => {
           if (a.selected_category_slug === currentCategory && b.selected_category_slug !== currentCategory) return -1;
           if (a.selected_category_slug !== currentCategory && b.selected_category_slug === currentCategory) return 1;
           return (a.distance ?? Infinity) - (b.distance ?? Infinity);
