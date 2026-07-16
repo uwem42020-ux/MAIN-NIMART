@@ -79,7 +79,7 @@ interface FullProvider extends ProviderRow {
   distance?: number;
   completedBookings?: number;
   lastSignInAt?: string | null;
-  created_at?: string;
+  // created_at is inherited from ProviderRow — do NOT override it
 }
 
 const statusIconMap: Record<string, string> = {
