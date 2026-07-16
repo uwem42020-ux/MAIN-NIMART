@@ -4,7 +4,7 @@
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/supabase-any';
 import { SEO } from '@/components/common/SEO';
 import { ProviderCardPortrait } from '@/components/provider/ProviderCardPortrait';
 import { ProviderCardHorizontal } from '@/components/provider/ProviderCardHorizontal';
@@ -55,26 +55,27 @@ export default function ServiceLocationPage() {
       if (!categorySlug || !lgaId) return null;
 
       // 1. Get LGA info
-      const { data: lgaData } = await supabase
+      const { data: lgaData } = await db
         .from('lga_centers')
         .select('lga_name, state_name')
         .eq('lga_id', parseInt(lgaId))
         .single();
 
       // 2. Find profiles in this LGA
-      const { data: profilesInLga } = await supabase
+      const { data: profilesInLga } = await db
         .from('profiles')
         .select('id')
         .eq('lga_id', parseInt(lgaId));
 
-      if (!profilesInLga?.length) {
-        return { lga: lgaData, providers: [], totalCount: 0 };
+      const profiles = (profilesInLga as any[]) || [];
+      if (!profiles.length) {
+        return { lga: lgaData as any, providers: [], totalCount: 0 };
       }
 
-      const profileIds = profilesInLga.map(p => p.id);
+      const profileIds = profiles.map((p: any) => p.id);
 
       // 3. Find providers in this LGA with the matching category
-      const { data: providers, count } = await supabase
+      const { data: providers, count } = await db
         .from('providers')
         .select('*', { count: 'exact' })
         .eq('is_available', true)
@@ -83,35 +84,40 @@ export default function ServiceLocationPage() {
         .order('boost_until', { ascending: false, nullsFirst: false })
         .limit(20);
 
-      if (!providers?.length) {
-        return { lga: lgaData, providers: [], totalCount: count || 0 };
+      const providersList = (providers as any[]) || [];
+      if (!providersList.length) {
+        return { lga: lgaData as any, providers: [], totalCount: (count as number) || 0 };
       }
 
       // 4. Fetch profiles, images, and reviews for these providers
-      const providerIds = providers.map(p => p.id);
+      const providerIds = providersList.map((p: any) => p.id);
 
       const [profilesRes, imagesRes, reviewsRes] = await Promise.all([
-        supabase.from('profiles').select('*').in('id', providerIds),
-        supabase.from('portfolio_images').select('id, provider_id, image_url').in('provider_id', providerIds),
-        supabase.from('reviews').select('provider_id, rating').in('provider_id', providerIds),
+        db.from('profiles').select('*').in('id', providerIds),
+        db.from('portfolio_images').select('id, provider_id, image_url').in('provider_id', providerIds),
+        db.from('reviews').select('provider_id, rating').in('provider_id', providerIds),
       ]);
 
-      const profilesMap = new Map((profilesRes.data || []).map(p => [p.id, p]));
-      const imagesMap = new Map<number, any[]>();
-      (imagesRes.data || []).forEach(img => {
+      const profilesData = (profilesRes.data as any[]) || [];
+      const imagesData = (imagesRes.data as any[]) || [];
+      const reviewsData = (reviewsRes.data as any[]) || [];
+
+      const profilesMap = new Map(profilesData.map((p: any) => [p.id, p]));
+      const imagesMap = new Map<string, any[]>();
+      imagesData.forEach((img: any) => {
         if (!imagesMap.has(img.provider_id)) imagesMap.set(img.provider_id, []);
         imagesMap.get(img.provider_id)!.push(img);
       });
 
       const reviewsMap = new Map<string, { sum: number; count: number }>();
-      (reviewsRes.data || []).forEach(r => {
+      reviewsData.forEach((r: any) => {
         if (!reviewsMap.has(r.provider_id)) reviewsMap.set(r.provider_id, { sum: 0, count: 0 });
         const cur = reviewsMap.get(r.provider_id)!;
         cur.sum += r.rating;
         cur.count += 1;
       });
 
-      const enriched = providers.map(provider => {
+      const enriched = providersList.map((provider: any) => {
         const profile = profilesMap.get(provider.id) || null;
         const images = imagesMap.get(provider.id) || [];
         const reviewStats = reviewsMap.get(provider.id);
@@ -130,9 +136,9 @@ export default function ServiceLocationPage() {
       });
 
       return {
-        lga: lgaData,
+        lga: lgaData as any,
         providers: enriched as ProviderWithDetails[],
-        totalCount: count || 0,
+        totalCount: (count as number) || 0,
       };
     },
     enabled: !!categorySlug && !!lgaId,
@@ -146,8 +152,8 @@ export default function ServiceLocationPage() {
       .join(' ');
   }, [categorySlug]);
 
-  const lgaName = data?.lga?.lga_name || '';
-  const stateName = data?.lga?.state_name || '';
+  const lgaName = (data as any)?.lga?.lga_name || '';
+  const stateName = (data as any)?.lga?.state_name || '';
   const locationString = `${lgaName}, ${stateName}`;
   const pageTitle = `${categoryName} in ${locationString} — Book Trusted Professionals | Nimart`;
   const pageDescription = `Find the best ${categoryName.toLowerCase()} in ${locationString}. Browse verified profiles, read reviews, and book trusted ${categoryName.toLowerCase()} near you on Nimart.`;
@@ -248,11 +254,11 @@ export default function ServiceLocationPage() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-xl font-bold text-gray-900">
-              {data.totalCount > 0
-                ? `${data.totalCount} ${categoryName}${data.totalCount > 1 ? 's' : ''} in ${lgaName}`
+              {(data as any).totalCount > 0
+                ? `${(data as any).totalCount} ${categoryName}${(data as any).totalCount > 1 ? 's' : ''} in ${lgaName}`
                 : `No ${categoryName} in ${lgaName} yet`}
             </h2>
-            {data.totalCount > 0 && (
+            {(data as any).totalCount > 0 && (
               <p className="text-sm text-gray-500 mt-1">
                 Read reviews, compare profiles, and book with confidence
               </p>
@@ -279,7 +285,7 @@ export default function ServiceLocationPage() {
         </div>
 
         {/* Empty State */}
-        {data.providers.length === 0 && (
+        {(data as any).providers.length === 0 && (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-10 text-center">
             <Shield className="mx-auto h-16 w-16 text-gray-300" />
             <h3 className="mt-4 text-lg font-semibold text-gray-700">
@@ -299,11 +305,11 @@ export default function ServiceLocationPage() {
         )}
 
         {/* Provider Grid / List */}
-        {data.providers.length > 0 && (
+        {(data as any).providers.length > 0 && (
           <>
             {viewMode === 'grid' ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-                {data.providers.map((provider: any) => (
+                {(data as any).providers.map((provider: any) => (
                   <ProviderCardPortrait
                     key={provider.id}
                     provider={{
@@ -320,7 +326,7 @@ export default function ServiceLocationPage() {
               </div>
             ) : (
               <div className="space-y-4">
-                {data.providers.map((provider: any) => (
+                {(data as any).providers.map((provider: any) => (
                   <ProviderCardHorizontal
                     key={provider.id}
                     provider={{
@@ -352,12 +358,12 @@ export default function ServiceLocationPage() {
                 >
                   Browse All Providers
                 </Link>
-                {data.lga?.state_name && (
+                {(data as any).lga?.state_name && (
                   <Link
                     href={`/search?state=${categorySlug}`}
                     className="inline-flex items-center gap-2 border border-gray-300 text-gray-700 px-5 py-2.5 rounded-xl font-medium hover:bg-gray-100 transition"
                   >
-                    View All in {data.lga.state_name}
+                    View All in {(data as any).lga.state_name}
                   </Link>
                 )}
               </div>
