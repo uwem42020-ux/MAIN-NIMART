@@ -4,6 +4,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/supabase-any';
 import { format, isToday, isTomorrow, isThisWeek, parseISO } from 'date-fns';
 import {
   Calendar, Clock, MapPin, CheckCircle, XCircle, MessageCircle, Phone,
@@ -22,6 +23,7 @@ interface Booking {
   id: string;
   booking_number: string;
   customer_id: string;
+  provider_id: string;
   service_name: string;
   booking_date: string;
   booking_time: string;
@@ -70,7 +72,7 @@ export default function ProviderBookings() {
     queryKey: ['provider-bookings', user?.id, activeTab],
     queryFn: async () => {
       if (!user) return [];
-      let query = supabase
+      let query = db
         .from('bookings')
         .select('*')
         .eq('provider_id', user.id)
@@ -86,14 +88,17 @@ export default function ProviderBookings() {
       const { data: bookingsData, error } = await query;
       if (error || !bookingsData?.length) return [];
 
-      const customerIds = [...new Set(bookingsData.map(b => b.customer_id))];
-      const { data: profiles } = await supabase
+      const bookingsArray = bookingsData as any[];
+      const customerIds = [...new Set(bookingsArray.map(b => b.customer_id))];
+
+      const { data: profiles } = await db
         .from('profiles')
         .select('id, full_name, phone, avatar_url')
         .in('id', customerIds);
-      const profileMap = new Map(profiles?.map(p => [p.id, p]) || []);
 
-      return bookingsData.map(booking => ({
+      const profileMap = new Map((profiles as any[])?.map(p => [p.id, p]) || []);
+
+      return bookingsArray.map(booking => ({
         ...booking,
         customer_name: profileMap.get(booking.customer_id)?.full_name || null,
         customer_phone: profileMap.get(booking.customer_id)?.phone || null,
@@ -104,7 +109,6 @@ export default function ProviderBookings() {
     staleTime: 1000 * 30,
   });
 
-  // Real-time
   useEffect(() => {
     if (!user) return;
     const channel = supabase
@@ -135,7 +139,7 @@ export default function ProviderBookings() {
     }
 
     setActionLoading(bookingId);
-    const { error } = await supabase.from('bookings').update(updates).eq('id', bookingId);
+    const { error } = await db.from('bookings').update(updates).eq('id', bookingId);
     setActionLoading(null);
     if (error) {
       toast.error(error.message);
@@ -145,9 +149,8 @@ export default function ProviderBookings() {
     toast.success(`Booking ${newStatus.replace(/_/g, ' ')}`);
     queryClient.invalidateQueries({ queryKey: ['provider-bookings', user?.id] });
 
-    // Send email + push when completed
     if (newStatus === 'completed') {
-      const { data: customerProfile } = await supabase
+      const { data: customerProfile } = await db
         .from('profiles')
         .select('email, fcm_token')
         .eq('id', booking.customer_id)
@@ -170,15 +173,14 @@ export default function ProviderBookings() {
         );
       }
 
-      // ---- REFERRAL BONUS LOGIC ----
-      const { count: completedCount } = await supabase
+      const { count: completedCount } = await db
         .from('bookings')
         .select('*', { count: 'exact', head: true })
         .eq('provider_id', booking.provider_id)
         .eq('status', 'completed');
 
       if (completedCount === 1) {
-        const { data: referral } = await supabase
+        const { data: referral } = await db
           .from('referrals')
           .select('id, referrer_id, status')
           .eq('referred_provider_id', booking.provider_id)
@@ -186,16 +188,16 @@ export default function ProviderBookings() {
           .single();
 
         if (referral) {
-          await supabase.rpc('adjust_coin_balance', {
+          await db.rpc('adjust_coin_balance', {
             p_provider_id: referral.referrer_id,
             p_amount: REFERRAL_BONUS,
           });
-          await supabase.rpc('adjust_coin_balance', {
+          await db.rpc('adjust_coin_balance', {
             p_provider_id: booking.provider_id,
             p_amount: REFERRAL_BONUS,
           });
 
-          await supabase
+          await db
             .from('referrals')
             .update({ status: 'awarded', awarded_at: new Date().toISOString() })
             .eq('id', referral.id);
@@ -260,9 +262,9 @@ export default function ProviderBookings() {
             )}
           >
             {tab.label}
-            {counts?.[tab.key as keyof typeof counts] > 0 && (
+            {(counts as any)?.[tab.key] > 0 && (
               <span className="ml-2 px-2 py-0.5 text-xs bg-white/20 text-white rounded-full">
-                {counts[tab.key as keyof typeof counts]}
+                {(counts as any)[tab.key]}
               </span>
             )}
           </button>
