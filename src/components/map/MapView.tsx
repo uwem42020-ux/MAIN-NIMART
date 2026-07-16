@@ -4,7 +4,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { GoogleMap, Marker, InfoWindow, OverlayView, useJsApiLoader } from '@react-google-maps/api';
-import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/supabase-any';
 import { useAuth } from '@/contexts/AuthContext';
 import { calculateDistance } from '@/lib/distance';
 import { Search, X, LocateFixed, Maximize2, Minimize2, Map as MapIcon, List, Satellite } from 'lucide-react';
@@ -56,7 +56,7 @@ function UserLocationOverlay({ position }: { position: google.maps.LatLngLiteral
   );
 }
 
-// ── Provider marker overlay: clickable, coloured circle + tiny robot ──
+// ── Provider marker overlay ──
 function ProviderMarkerOverlay({
   position,
   status,
@@ -147,23 +147,23 @@ export function MapView() {
 
   // Fetch all LGA centers
   useEffect(() => {
-    supabase
+    db
       .from('lga_centers')
       .select('state_id, state_name, lga_id, lga_name, lat, lng')
-      .then(({ data }) => {
+      .then(({ data }: { data: any }) => {
         if (data) setAllLgaCenters(data);
       });
   }, []);
 
   // Fetch states
   useEffect(() => {
-    supabase
+    db
       .from('lga_centers')
       .select('state_id, state_name')
       .order('state_name')
-      .then(({ data }) => {
+      .then(({ data }: { data: any }) => {
         if (data) {
-          const unique = data.filter((v, i, a) => a.findIndex(t => t.state_id === v.state_id) === i);
+          const unique = data.filter((v: any, i: number, a: any[]) => a.findIndex((t: any) => t.state_id === v.state_id) === i);
           setStates(unique);
         }
       });
@@ -177,7 +177,7 @@ export function MapView() {
         const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         setUserLocation(loc);
         if (allLgaCenters.length > 0) {
-          let nearest = null;
+          let nearest: any = null;
           let minDist = Infinity;
           allLgaCenters.forEach((lga) => {
             const dist = calculateDistance(loc.lat, loc.lng, lga.lat, lga.lng);
@@ -207,17 +207,17 @@ export function MapView() {
       if (mapRef.current) flyTo(defaultCenter.lat, defaultCenter.lng, 7);
       return;
     }
-    supabase
+    db
       .from('lga_centers')
       .select('lga_id, lga_name, lat, lng')
       .eq('state_id', parseInt(selectedState))
       .order('lga_name')
-      .then(({ data }) => {
+      .then(({ data }: { data: any }) => {
         const fetched = data || [];
         setLgas(fetched);
 
-        if (pendingLgaRef.current && fetched.some(l => l.lga_id.toString() === pendingLgaRef.current)) {
-          const targetLga = fetched.find(l => l.lga_id.toString() === pendingLgaRef.current);
+        if (pendingLgaRef.current && fetched.some((l: any) => l.lga_id.toString() === pendingLgaRef.current)) {
+          const targetLga = fetched.find((l: any) => l.lga_id.toString() === pendingLgaRef.current);
           setSelectedLga(pendingLgaRef.current);
           if (targetLga?.lat != null && targetLga?.lng != null) flyTo(targetLga.lat, targetLga.lng, 14);
           pendingLgaRef.current = null;
@@ -231,7 +231,7 @@ export function MapView() {
 
   const handleLgaSelect = useCallback((lgaId: number) => {
     setSelectedLga(lgaId.toString());
-    const lga = lgas.find(l => l.lga_id === lgaId);
+    const lga = lgas.find((l: any) => l.lga_id === lgaId);
     if (lga?.lat != null && lga?.lng != null) flyTo(lga.lat, lga.lng, 14);
   }, [lgas, flyTo]);
 
@@ -239,19 +239,21 @@ export function MapView() {
   const { data: allProviders, isLoading } = useQuery({
     queryKey: ['map-providers', userLocation?.lat, userLocation?.lng],
     queryFn: async () => {
-      const { data: providers, error } = await supabase
+      const { data: providers, error } = await db
         .from('providers')
         .select('*')
         .eq('is_available', true)
         .limit(200);
       if (error) throw error;
-      if (!providers?.length) return [];
+      const provs = (providers || []) as any[];
+      if (!provs.length) return [];
 
-      const ids = providers.map(p => p.id);
-      const { data: profiles } = await supabase.from('profiles').select('*').in('id', ids);
-      const profileMap = new Map(profiles?.map(p => [p.id, p]));
+      const ids = provs.map((p: any) => p.id);
+      const { data: profiles } = await db.from('profiles').select('*').in('id', ids);
+      const profs = (profiles || []) as any[];
+      const profileMap = new Map(profs.map((p: any) => [p.id, p]));
 
-      return providers.map(provider => {
+      return provs.map((provider: any) => {
         const p = profileMap.get(provider.id) || null;
         const distance = userLocation && p?.lat != null && p?.lng != null
           ? calculateDistance(userLocation.lat, userLocation.lng, p.lat, p.lng)
@@ -264,7 +266,7 @@ export function MapView() {
 
   // Filter + spread coordinates
   const providersWithCoords = useMemo(() => {
-    let filtered = (allProviders || []).filter(p => {
+    let filtered = (allProviders || []).filter((p: any) => {
       if (searchTerm) {
         const term = searchTerm.toLowerCase();
         return (
@@ -278,7 +280,7 @@ export function MapView() {
     });
 
     const groups = new Map<string, MapProvider[]>();
-    filtered.forEach(p => {
+    filtered.forEach((p: any) => {
       const key = `${p.profile!.lat},${p.profile!.lng}`;
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key)!.push(p);
@@ -305,7 +307,7 @@ export function MapView() {
 
   const selectedLgaName = useMemo(() => {
     if (!selectedLga) return null;
-    const lga = lgas.find(l => l.lga_id.toString() === selectedLga);
+    const lga = lgas.find((l: any) => l.lga_id.toString() === selectedLga);
     return lga?.lga_name || null;
   }, [selectedLga, lgas]);
 
@@ -473,7 +475,6 @@ export function MapView() {
                   {selectedProvider.distance !== undefined && (
                     <p className="font-medium text-gray-700 mt-1">{selectedProvider.distance.toFixed(1)} km away</p>
                   )}
-                  {/* Booking button – disabled if not available */}
                   <div className="mt-2 flex gap-2">
                     <a
                       href={`/provider/${selectedProvider.id}`}

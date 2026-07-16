@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/supabase-any';
 import { cn } from '@/lib/utils';
 import { OptimizedImage } from '@/components/common/OptimizedImage';
 import toast from 'react-hot-toast';
@@ -61,12 +62,11 @@ export function Header() {
 
   // Auth listener + initial session fetch
   useEffect(() => {
-    // Initial session check
     const fetchSession = async () => {
       const { data: { user: currentUser } } = await supabase.auth.getUser();
       setUser(currentUser);
       if (currentUser) {
-        const { data: prof } = await supabase
+        const { data: prof }: { data: any } = await db
           .from('profiles')
           .select('role, is_verified, avatar_url, full_name')
           .eq('id', currentUser.id)
@@ -78,10 +78,10 @@ export function Header() {
           { count: msgCount },
           { count: notifCount },
         ] = await Promise.all([
-          supabase.from('bookings').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
-          supabase.from('threads').select('id', { count: 'exact', head: true })
+          db.from('bookings').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+          db.from('threads').select('id', { count: 'exact', head: true })
             .or(`provider_id.eq.${currentUser.id},customer_id.eq.${currentUser.id}`),
-          supabase.from('notifications').select('id', { count: 'exact', head: true })
+          db.from('notifications').select('id', { count: 'exact', head: true })
             .eq('user_id', currentUser.id).eq('is_read', false),
         ]);
         setCounts({ bookings: bookingCount || 0, messages: msgCount || 0, system: notifCount || 0 });
@@ -92,23 +92,22 @@ export function Header() {
     };
     fetchSession();
 
-    // Real-time auth listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       const currentUser = session?.user ?? null;
       setUser(currentUser);
       if (currentUser) {
-        supabase
+        db
           .from('profiles')
           .select('role, is_verified, avatar_url, full_name')
           .eq('id', currentUser.id)
           .single()
-          .then(({ data: prof }) => setProfile(prof));
+          .then(({ data: prof }: { data: any }) => setProfile(prof));
 
         Promise.all([
-          supabase.from('bookings').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
-          supabase.from('threads').select('id', { count: 'exact', head: true })
+          db.from('bookings').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+          db.from('threads').select('id', { count: 'exact', head: true })
             .or(`provider_id.eq.${currentUser.id},customer_id.eq.${currentUser.id}`),
-          supabase.from('notifications').select('id', { count: 'exact', head: true })
+          db.from('notifications').select('id', { count: 'exact', head: true })
             .eq('user_id', currentUser.id).eq('is_read', false),
         ]).then(([b, m, n]) => {
           setCounts({
@@ -133,7 +132,6 @@ export function Header() {
     setSigningOut(true);
     try {
       await supabase.auth.signOut();
-      // State cleared by the onAuthStateChange listener above, no need to manually set here
       toast.success('Signed out');
       router.push('/');
     } catch (error) {
@@ -149,7 +147,6 @@ export function Header() {
   const getDashboardLink = () => (role === 'provider' ? '/provider/dashboard' : '/customer/dashboard');
   const getBookingsLink = () => (role === 'provider' ? '/provider/bookings' : '/customer/bookings');
   const getMessagesLink = () => (role === 'provider' ? '/provider/messages' : '/customer/messages');
-  // ✅ FIXED: Notifications now point to global /notifications
   const getNotificationsLink = () => '/notifications';
   const getProfileLink = () => (role === 'provider' ? '/provider/profile' : '/customer/profile');
   const getPortfolioLink = () => (role === 'provider' ? '/provider/portfolio' : null);
@@ -242,7 +239,6 @@ export function Header() {
         style={{
           transform: 'translateZ(0)',
           willChange: 'transform',
-          WebkitPosition: 'sticky',
           position: 'sticky',
         }}
       >

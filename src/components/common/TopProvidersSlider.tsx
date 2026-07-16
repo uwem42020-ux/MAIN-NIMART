@@ -2,7 +2,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/supabase-any';
 import Link from 'next/link';
 import { MapPin } from 'lucide-react';
 import { OptimizedImage } from '@/components/common/OptimizedImage';
@@ -36,7 +36,7 @@ const getLgaMap = async () => {
 
   lgaMapPromise = (async () => {
     const map = new Map<number, { lga_name: string; state_name: string }>();
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('lga_centers')
       .select('lga_id, lga_name, state_name');
 
@@ -45,7 +45,7 @@ const getLgaMap = async () => {
       return map;
     }
 
-    data.forEach(lga => {
+    (data as any[]).forEach((lga: any) => {
       if (lga.lga_id != null) {
         map.set(lga.lga_id, {
           lga_name: lga.lga_name,
@@ -89,7 +89,7 @@ export function TopProvidersSlider() {
     queryKey: ['top-providers', 'with-state'],
     queryFn: async () => {
       try {
-        const { data: providers, error: providerError } = await supabase
+        const { data: providers, error: providerError } = await db
           .from('providers')
           .select('id, business_name, top_placement_until, boost_until')
           .gte('top_placement_until', new Date().toISOString())
@@ -98,21 +98,23 @@ export function TopProvidersSlider() {
           .limit(5);
 
         if (providerError) throw providerError;
-        if (!providers || providers.length === 0) return [];
+        const providersList = (providers || []) as any[];
+        if (providersList.length === 0) return [];
 
-        const ids = providers.map(p => p.id);
+        const ids = providersList.map((p: any) => p.id);
 
-        const { data: profiles, error: profileError } = await supabase
+        const { data: profiles, error: profileError } = await db
           .from('profiles')
           .select('id, avatar_url, full_name, lga_id, is_verified')
           .in('id', ids);
 
         if (profileError) throw profileError;
-        const profileMap = new Map((profiles || []).map(p => [p.id, p]));
+        const profilesList = (profiles || []) as any[];
+        const profileMap = new Map(profilesList.map((p: any) => [p.id, p]));
 
         const lgaMap = await getLgaMap();
 
-        const merged = providers.map(provider => {
+        const merged = providersList.map((provider: any) => {
           const prof = profileMap.get(provider.id);
           const lgaInfo = prof?.lga_id != null ? lgaMap.get(prof.lga_id) : undefined;
 
@@ -160,7 +162,7 @@ export function TopProvidersSlider() {
     );
   }
 
-  const displayData = topProviders || [];
+  const displayData = (topProviders || []) as any[];
   if (displayData.length === 0) return null;
 
   return (
@@ -170,7 +172,7 @@ export function TopProvidersSlider() {
         {isOffline && <span className="ml-2 text-xs text-white/80">(Offline mode)</span>}
       </div>
       <div className="flex gap-3 overflow-x-auto no-scrollbar snap-x snap-mandatory pb-2">
-        {displayData.map((provider, index) => {
+        {displayData.map((provider: any, index: number) => {
           const prof = provider.profile || {};
           const isVerified = prof.is_verified;
           const isBoosted = provider.isBoosted;

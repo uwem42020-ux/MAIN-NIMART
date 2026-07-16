@@ -261,7 +261,7 @@ export function MobileCategoryPanel({
 
   useEffect(() => {
     window.dispatchEvent(new Event('tierPanelOpened'));
-    return () => window.dispatchEvent(new Event('tierPanelClosed'));
+    return () => { window.dispatchEvent(new Event('tierPanelClosed')); };
   }, []);
 
   useEffect(() => {

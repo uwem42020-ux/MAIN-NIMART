@@ -2,7 +2,7 @@
 'use client';
 
 import { useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/supabase-any';
 import { useAuth } from '@/contexts/AuthContext';
 import toast from 'react-hot-toast';
 import { X, Flag, Loader2 } from 'lucide-react';
@@ -44,12 +44,12 @@ export function FlagBookingModal({ isOpen, onClose, bookingId }: FlagBookingModa
     }
 
     setLoading(true);
-    const { error } = await supabase.from('booking_flags').insert({
+    const { error } = await db.from('booking_flags').insert({
       booking_id: bookingId,
       flagged_by: user.id,
       flag_type: flagType,
       description: description.trim() || null,
-    });
+    } as any);
 
     if (error) {
       toast.error(error.message);

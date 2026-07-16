@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/supabase-any';
 import {
   ArrowLeft,
   Send,
@@ -73,22 +74,23 @@ export function MessageThread({ threadId }: MessageThreadProps) {
     queryKey: ['thread', threadId],
     queryFn: async () => {
       if (!threadId || !user) return null;
-      const { data: threadData } = await supabase
+      const { data: threadData } = await db
         .from('threads')
         .select('*')
         .eq('id', threadId)
         .single();
       if (!threadData) return null;
 
-      const otherId = threadData.provider_id === user.id ? threadData.customer_id : threadData.provider_id;
+      const thread = threadData as any;
+      const otherId = thread.provider_id === user.id ? thread.customer_id : thread.provider_id;
       const [{ data: messagesData }, { data: profileData }] = await Promise.all([
-        supabase.from('messages').select('*').eq('thread_id', threadId).order('created_at', { ascending: true }),
-        supabase.from('profiles').select('full_name, avatar_url, role').eq('id', otherId).single(),
+        db.from('messages').select('*').eq('thread_id', threadId).order('created_at', { ascending: true }),
+        db.from('profiles').select('full_name, avatar_url, role').eq('id', otherId).single(),
       ]);
 
       return {
-        thread: threadData,
-        otherParticipant: profileData ?? { full_name: 'Unknown', avatar_url: null, role: null },
+        thread,
+        otherParticipant: (profileData as any) ?? { full_name: 'Unknown', avatar_url: null, role: null },
         messages: (messagesData || []) as Message[],
       };
     },
@@ -180,6 +182,7 @@ export function MessageThread({ threadId }: MessageThreadProps) {
     e.preventDefault();
     if ((!newMessage.trim() && !attachment) || !user || !data?.thread) return;
 
+    const thread = data.thread as any;
     const content = newMessage.trim() || (attachment ? attachment.name : '');
     let attachmentUrl: string | null = null;
     let attachmentType: string | null = null;
@@ -192,23 +195,23 @@ export function MessageThread({ threadId }: MessageThreadProps) {
       }
     }
 
-    const recipient = data.thread.provider_id === user.id ? data.thread.customer_id : data.thread.provider_id;
+    const recipient = thread.provider_id === user.id ? thread.customer_id : thread.provider_id;
     setNewMessage('');
     setAttachment(null);
     setSending(true);
 
     try {
-      await supabase.from('messages').insert({
-        thread_id: data.thread.id,
+      await db.from('messages').insert({
+        thread_id: thread.id,
         sender_id: user.id,
         recipient_id: recipient,
         content: content || null,
         attachment_url: attachmentUrl,
         attachment_type: attachmentType,
       } as any);
-      await supabase.from('threads').update({ last_message: content, last_message_at: new Date().toISOString() } as any).eq('id', data.thread.id);
-      queryClient.invalidateQueries({ queryKey: ['provider-threads', data.thread.provider_id] });
-      queryClient.invalidateQueries({ queryKey: ['customer-threads', data.thread.customer_id] });
+      await db.from('threads').update({ last_message: content, last_message_at: new Date().toISOString() } as any).eq('id', thread.id);
+      queryClient.invalidateQueries({ queryKey: ['provider-threads', thread.provider_id] });
+      queryClient.invalidateQueries({ queryKey: ['customer-threads', thread.customer_id] });
       await refetch();
       scrollToBottom();
     } catch (err) {
@@ -219,7 +222,7 @@ export function MessageThread({ threadId }: MessageThreadProps) {
   };
 
   const deleteMessage = async (msgId: string) => {
-    await supabase.from('messages').update({ deleted_at: new Date().toISOString() }).eq('id', msgId);
+    await db.from('messages').update({ deleted_at: new Date().toISOString() } as any).eq('id', msgId);
     setContextMenu(null);
   };
 
@@ -227,7 +230,7 @@ export function MessageThread({ threadId }: MessageThreadProps) {
     if (!msg.content) return;
     const newContent = prompt('Edit message:', msg.content);
     if (newContent !== null && newContent !== msg.content) {
-      await supabase.from('messages').update({ content: newContent, edited_at: new Date().toISOString() }).eq('id', msg.id);
+      await db.from('messages').update({ content: newContent, edited_at: new Date().toISOString() } as any).eq('id', msg.id);
     }
     setContextMenu(null);
   };
@@ -253,10 +256,11 @@ export function MessageThread({ threadId }: MessageThreadProps) {
   };
 
   // Safely extract other participant details
-  const otherRole = data?.otherParticipant?.role;
-  const otherId = data?.thread?.provider_id === user?.id
-    ? data?.thread?.customer_id
-    : data?.thread?.provider_id;
+  const thread = (data as any)?.thread;
+  const otherRole = (data as any)?.otherParticipant?.role;
+  const otherId = thread?.provider_id === user?.id
+    ? thread?.customer_id
+    : thread?.provider_id;
 
   const bookAction = () => {
     if (otherRole === 'provider' && otherId) window.open(`/provider/${otherId}?book=true`, '_blank');
@@ -279,7 +283,7 @@ export function MessageThread({ threadId }: MessageThreadProps) {
     );
   }
 
-  if (!data || !data.thread) {
+  if (!data || !(data as any).thread) {
     return (
       <div className="text-center py-8 text-gray-500">
         Conversation not found.
@@ -287,7 +291,7 @@ export function MessageThread({ threadId }: MessageThreadProps) {
     );
   }
 
-  const { otherParticipant, messages } = data;
+  const { otherParticipant, messages } = data as any;
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-4 h-[calc(100vh-64px)] flex flex-col">
@@ -340,7 +344,7 @@ export function MessageThread({ threadId }: MessageThreadProps) {
         {messages.length === 0 ? (
           <p className="text-center text-gray-500 mt-8">No messages yet. Say hello!</p>
         ) : (
-          messages.map((msg) => (
+          messages.map((msg: Message) => (
             <div
               key={msg.id}
               className={cn('flex group items-start', msg.sender_id === user?.id ? 'justify-end' : 'justify-start')}
@@ -484,4 +488,4 @@ export function MessageThread({ threadId }: MessageThreadProps) {
       )}
     </div>
   );
-}
+};

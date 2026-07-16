@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/supabase-any';
 import { useAuth } from '@/contexts/AuthContext';
 import toast from 'react-hot-toast';
 import { X, Calendar, Clock, MapPin, FileText, Loader2, Shield, Navigation } from 'lucide-react';
@@ -66,7 +66,7 @@ export function BookingFormModal({ isOpen, onClose, providerId, providerName, pr
 
       const receiptToken = crypto.randomUUID();
 
-      const { error } = await supabase.from('bookings').insert({
+      const { error } = await db.from('bookings').insert({
         customer_id: user.id,
         provider_id: providerId,
         service_name: formData.serviceName,
@@ -80,22 +80,24 @@ export function BookingFormModal({ isOpen, onClose, providerId, providerName, pr
         customer_gps_lng: gpsCoords?.lng || null,
         vpn_detected: vpnDetected,
         receipt_token: receiptToken,
-      });
+      } as any);
 
       if (error) throw error;
 
       toast.success('Booking request sent!');
 
       // ---- Send styled email + push to provider ----
-      const { data: providerProfile } = await supabase
+      const { data: providerProfile } = await db
         .from('profiles')
         .select('email, fcm_token')
         .eq('id', providerId)
         .single();
 
-      if (providerProfile?.email) {
+      const prov = providerProfile as any;
+
+      if (prov?.email) {
         await sendEmail(
-          providerProfile.email,
+          prov.email,
           `New Booking Request – ${formData.serviceName}`,
           providerNewBookingEmail({
             serviceName: formData.serviceName,
@@ -106,9 +108,9 @@ export function BookingFormModal({ isOpen, onClose, providerId, providerName, pr
         );
       }
 
-      if (providerProfile?.fcm_token) {
+      if (prov?.fcm_token) {
         await sendPushNotification(
-          providerProfile.fcm_token,
+          prov.fcm_token,
           'New Booking Request',
           `${formData.serviceName} — ${formData.bookingDate} at ${formData.bookingTime}`
         );
@@ -129,15 +131,17 @@ export function BookingFormModal({ isOpen, onClose, providerId, providerName, pr
         );
       }
 
-      const { data: customerProfile } = await supabase
+      const { data: customerProfile } = await db
         .from('profiles')
         .select('fcm_token')
         .eq('id', user.id)
         .single();
 
-      if (customerProfile?.fcm_token) {
+      const cust = customerProfile as any;
+
+      if (cust?.fcm_token) {
         await sendPushNotification(
-          customerProfile.fcm_token,
+          cust.fcm_token,
           'Booking Submitted',
           `Your booking for ${formData.serviceName} has been sent to ${providerName}.`
         );
@@ -300,4 +304,4 @@ export function BookingFormModal({ isOpen, onClose, providerId, providerName, pr
       </div>
     </div>
   );
-}
+};

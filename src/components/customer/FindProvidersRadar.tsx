@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/supabase-any';
 import { X, Search, Loader2, Navigation, ChevronDown, AlertTriangle, RefreshCw, RotateCcw } from 'lucide-react';
 import { getAllCategories, SUBCATEGORIES } from '@/data/categories';
 import { LocationDropdown } from '@/components/common/LocationDropdown';
@@ -146,24 +146,26 @@ export function FindProvidersRadar({
     setLocationLoading(true);
     setLocationLoadError(false);
     try {
-      const { data: allStates, error: stateError } = await supabase
+      const { data: allStates, error: stateError } = await db
         .from('lga_centers')
         .select('state_id, state_name')
         .order('state_name');
       if (stateError) throw stateError;
-      const uniqueStates = allStates?.filter((v, i, a) =>
+      const dataArr = (allStates || []) as any[];
+      const uniqueStates = dataArr.filter((v, i, a) =>
         a.findIndex(t => t.state_id === v.state_id) === i
-      ) || [];
+      );
       setStates(uniqueStates);
 
-      const { data: allLgas, error: lgaError } = await supabase
+      const { data: allLgas, error: lgaError } = await db
         .from('lga_centers')
         .select('lga_id, lga_name, state_id, lat, lng')
         .order('lga_name');
       if (lgaError) throw lgaError;
       if (allLgas) {
+        const lgasArr = allLgas as any[];
         const grouped: Record<string, any[]> = {};
-        allLgas.forEach((lga) => {
+        lgasArr.forEach((lga) => {
           const key = lga.state_id.toString();
           if (!grouped[key]) grouped[key] = [];
           grouped[key].push(lga);
@@ -293,7 +295,7 @@ export function FindProvidersRadar({
     animationRef.current = requestAnimationFrame(animate);
 
     try {
-      const { data: providersData, error: providersError } = await supabase
+      const { data: providersData, error: providersError } = await db
         .from('providers')
         .select('id, business_name, selected_category_slug, boost_until')
         .eq('selected_category_slug', slug)
@@ -301,7 +303,8 @@ export function FindProvidersRadar({
         .limit(200);
 
       if (providersError) throw providersError;
-      if (!providersData || providersData.length === 0) {
+      const provs = (providersData || []) as any[];
+      if (provs.length === 0) {
         setErrorMsg(`No providers found for "${category}". Try a different category.`);
         setScanning(false);
         if (animationRef.current) cancelAnimationFrame(animationRef.current);
@@ -309,20 +312,19 @@ export function FindProvidersRadar({
         return;
       }
 
-      const providerIds = providersData.map(p => p.id);
-      const { data: profilesData, error: profilesError } = await supabase
+      const providerIds = provs.map((p: any) => p.id);
+      const { data: profilesData, error: profilesError } = await db
         .from('profiles')
         .select('id, lat, lng, avatar_url')
         .in('id', providerIds);
 
       if (profilesError) throw profilesError;
-      if (!profilesData) throw new Error('No profile data');
-
-      const profileMap = new Map(profilesData.map(p => [p.id, p]));
+      const profs = (profilesData || []) as any[];
+      const profileMap = new Map(profs.map((p: any) => [p.id, p]));
       const nearby: Provider[] = [];
 
       if (currentCoords === null) {
-        for (const prov of providersData) {
+        for (const prov of provs) {
           const profile = profileMap.get(prov.id);
           if (!profile?.lat || !profile?.lng) continue;
           nearby.push({
@@ -338,7 +340,7 @@ export function FindProvidersRadar({
         }
         nearby.sort((a, b) => a.business_name.localeCompare(b.business_name));
       } else {
-        for (const prov of providersData) {
+        for (const prov of provs) {
           const profile = profileMap.get(prov.id);
           if (!profile?.lat || !profile?.lng) continue;
           const { distance, bearing } = getDistanceAndBearing(
@@ -362,8 +364,8 @@ export function FindProvidersRadar({
         }
         // Sort: boosted first, then by distance
         nearby.sort((a, b) => {
-          const aBoosted = providersData.find(p => p.id === a.id)?.boost_until && new Date(providersData.find(p => p.id === a.id)!.boost_until!) > new Date() ? 1 : 0;
-          const bBoosted = providersData.find(p => p.id === b.id)?.boost_until && new Date(providersData.find(p => p.id === b.id)!.boost_until!) > new Date() ? 1 : 0;
+          const aBoosted = provs.find((p: any) => p.id === a.id)?.boost_until && new Date(provs.find((p: any) => p.id === a.id)!.boost_until!) > new Date() ? 1 : 0;
+          const bBoosted = provs.find((p: any) => p.id === b.id)?.boost_until && new Date(provs.find((p: any) => p.id === b.id)!.boost_until!) > new Date() ? 1 : 0;
           if (aBoosted !== bBoosted) return bBoosted - aBoosted;
           return a.distance - b.distance;
         });

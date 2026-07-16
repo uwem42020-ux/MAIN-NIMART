@@ -1,6 +1,6 @@
 // src/components/common/MobileCategoryList.tsx
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import Link from 'next/link';
 import { ChevronDown, ChevronUp, ChevronRight } from 'lucide-react';
 import { TIERS, CATEGORIES, SUBCATEGORIES } from '../../data/categories';
 import { cn } from '../../lib/utils';
@@ -80,7 +80,7 @@ export function MobileCategoryList({ providerCounts, subcategoryCounts }: Mobile
                       {/* Category row – link to search, also toggles subs */}
                       <div className="flex items-stretch">
                         <Link
-                          to={`/search?category=${cat.slug}`}
+                          href={`/search?category=${cat.slug}`}
                           className="flex-1 flex items-center justify-between px-6 py-2.5 text-sm text-gray-700 hover:bg-white"
                         >
                           <span>{cat.name}</span>
@@ -106,7 +106,7 @@ export function MobileCategoryList({ providerCounts, subcategoryCounts }: Mobile
                           {subs.map(sub => (
                             <Link
                               key={sub.id}
-                              to={`/search?subcategory=${sub.id}`}
+                              href={`/search?subcategory=${sub.id}`}
                               className="flex items-center justify-between px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-50"
                             >
                               <span>{sub.name}</span>

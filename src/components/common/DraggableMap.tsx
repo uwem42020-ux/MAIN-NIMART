@@ -1,19 +1,8 @@
 // src/components/common/DraggableMap.tsx
-import { useEffect, useState, useCallback } from 'react';
-import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
-import L from 'leaflet';
+'use client';
 
-// Fix for default marker icon paths in Leaflet with bundlers
-import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
-import markerIcon from 'leaflet/dist/images/marker-icon.png';
-import markerShadow from 'leaflet/dist/images/marker-shadow.png';
-
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: markerIcon2x,
-  iconUrl: markerIcon,
-  shadowUrl: markerShadow,
-});
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { GoogleMap, LoadScript, MarkerF } from '@react-google-maps/api';
 
 interface DraggableMapProps {
   centerLat: number;
@@ -24,23 +13,12 @@ interface DraggableMapProps {
   height?: string;
 }
 
-// Component to handle map events and marker dragging
-function MapEventHandler({ onClick }: { onClick: (lat: number, lng: number) => void }) {
-  useMapEvents({
-    click(e) {
-      onClick(e.latlng.lat, e.latlng.lng);
-    },
-  });
-  return null;
-}
+const containerStyle = {
+  width: '100%',
+  height: '100%',
+};
 
-function ChangeView({ center, zoom }: { center: [number, number]; zoom: number }) {
-  const map = useMap();
-  useEffect(() => {
-    map.setView(center, zoom);
-  }, [center, zoom, map]);
-  return null;
-}
+const defaultCenter = { lat: 9.0556, lng: 7.4914 };
 
 export function DraggableMap({
   centerLat,
@@ -50,51 +28,73 @@ export function DraggableMap({
   onMarkerDrag,
   height = '300px',
 }: DraggableMapProps) {
-  const [position, setPosition] = useState<[number, number]>([markerLat, markerLng]);
+  const [position, setPosition] = useState<google.maps.LatLngLiteral>({
+    lat: markerLat || defaultCenter.lat,
+    lng: markerLng || defaultCenter.lng,
+  });
+  const mapRef = useRef<google.maps.Map | null>(null);
 
   useEffect(() => {
-    setPosition([markerLat, markerLng]);
+    if (markerLat && markerLng) {
+      setPosition({ lat: markerLat, lng: markerLng });
+    }
   }, [markerLat, markerLng]);
 
   const handleDragEnd = useCallback(
-    (e: L.LeafletEvent) => {
-      const marker = e.target as L.Marker;
-      const latlng = marker.getLatLng();
-      const lat = parseFloat(latlng.lat.toFixed(6));
-      const lng = parseFloat(latlng.lng.toFixed(6));
-      setPosition([lat, lng]);
-      onMarkerDrag(lat, lng);
+    (e: google.maps.MapMouseEvent) => {
+      const newLat = e.latLng!.lat();
+      const newLng = e.latLng!.lng();
+      setPosition({ lat: newLat, lng: newLng });
+      onMarkerDrag(newLat, newLng);
     },
     [onMarkerDrag]
   );
 
   const handleMapClick = useCallback(
-    (lat: number, lng: number) => {
-      setPosition([lat, lng]);
-      onMarkerDrag(lat, lng);
+    (e: google.maps.MapMouseEvent) => {
+      const newLat = e.latLng!.lat();
+      const newLng = e.latLng!.lng();
+      setPosition({ lat: newLat, lng: newLng });
+      onMarkerDrag(newLat, newLng);
     },
     [onMarkerDrag]
   );
 
+  const onLoad = useCallback((map: google.maps.Map) => {
+    mapRef.current = map;
+  }, []);
+
+  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY!;
+
+  if (!apiKey) {
+    return (
+      <div style={{ height, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f3f4f6', borderRadius: '0.5rem' }}>
+        <p className="text-gray-500 text-sm">Google Maps API key missing</p>
+      </div>
+    );
+  }
+
   return (
     <div style={{ height, width: '100%', borderRadius: '0.5rem', overflow: 'hidden' }}>
-      <MapContainer
-        center={[markerLat || centerLat, markerLng || centerLng]}
-        zoom={15}
-        style={{ height: '100%', width: '100%' }}
-      >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
-        <ChangeView center={[markerLat || centerLat, markerLng || centerLng]} zoom={15} />
-        <Marker
-          position={position}
-          draggable={true}
-          eventHandlers={{ dragend: handleDragEnd }}
-        />
-        <MapEventHandler onClick={handleMapClick} />
-      </MapContainer>
+      <LoadScript googleMapsApiKey={apiKey}>
+        <GoogleMap
+          mapContainerStyle={containerStyle}
+          center={position}
+          zoom={15}
+          onLoad={onLoad}
+          onClick={handleMapClick}
+          options={{
+            streetViewControl: false,
+            mapTypeControl: false,
+          }}
+        >
+          <MarkerF
+            position={position}
+            draggable={true}
+            onDragEnd={handleDragEnd}
+          />
+        </GoogleMap>
+      </LoadScript>
     </div>
   );
-}
+};

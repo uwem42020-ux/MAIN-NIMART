@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
 import { TIERS, CATEGORIES, SUBCATEGORIES } from '../../data/categories';
 import { cn } from '../../lib/utils';
@@ -95,7 +95,7 @@ export function CategoryTree() {
             subcategories.map(sub => (
               <Link
                 key={sub.id}
-                to={`/search?subcategory=${sub.id}`}
+                href={`/search?subcategory=${sub.id}`}
                 className="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-primary-600 transition-colors"
               >
                 {sub.name}

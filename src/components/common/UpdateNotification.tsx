@@ -11,14 +11,12 @@ export function UpdateNotification() {
 
   useEffect(() => {
     if ('serviceWorker' in navigator) {
-      // Listen for a new service worker being installed
+      // Handler for a registration update
       const handler = (registration: ServiceWorkerRegistration) => {
         if (registration.waiting) {
-          // Already waiting, show update
           setNeedRefresh(true);
           swRef.current = registration.waiting;
         } else {
-          // Listen for the waiting state
           registration.addEventListener('updatefound', () => {
             const newWorker = registration.installing;
             if (newWorker) {
@@ -33,14 +31,14 @@ export function UpdateNotification() {
         }
       };
 
-      // If there's already a waiting worker when the page first loads
+      // Check for a waiting worker on first load
       navigator.serviceWorker.getRegistration().then((reg) => {
         if (reg) {
           if (reg.waiting) {
             setNeedRefresh(true);
             swRef.current = reg.waiting;
           }
-          // Also listen for future updates
+          // Listen for controller change to reload automatically
           navigator.serviceWorker.addEventListener('controllerchange', () => {
             window.location.reload();
           });
@@ -49,7 +47,8 @@ export function UpdateNotification() {
 
       // Listen for new registration updates
       navigator.serviceWorker.addEventListener('updatefound', () => {
-        const registration = navigator.serviceWorker.controller?.registration;
+        // Access the registration through the controller (cast to any for TypeScript)
+        const registration = (navigator.serviceWorker.controller as any)?.registration;
         if (registration) handler(registration);
       });
     }

@@ -1,10 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '../../lib/supabase';
+import { db } from '../../lib/supabase-any';
 import { ProviderCard } from '../../components/provider/ProviderCard';
 import { CategorySidebar } from '../../components/common/CategorySidebar';
 import { useAuth } from '../../contexts/AuthContext';
 import { calculateDistance } from '../../lib/distance';
-import type { ProviderWithProfile } from '../../types/database';
 
 export default function Home() {
   const { profile } = useAuth();
@@ -12,7 +11,7 @@ export default function Home() {
   const { data: featuredProviders, isLoading } = useQuery({
     queryKey: ['featured-providers', profile?.lat, profile?.lng],
     queryFn: async () => {
-      let query = supabase
+      let query = db
         .from('providers')
         .select(`
           *,
@@ -27,9 +26,11 @@ export default function Home() {
 
       if (!data) return [];
 
+      const providers = data as any[];
+
       // Calculate distance if user location available
       if (profile?.lat && profile?.lng) {
-        return data.map((provider: any) => ({
+        return providers.map((provider: any) => ({
           ...provider,
           distance: calculateDistance(
             profile.lat!,
@@ -40,7 +41,7 @@ export default function Home() {
         })).sort((a, b) => (a.distance || Infinity) - (b.distance || Infinity));
       }
 
-      return data;
+      return providers;
     },
     enabled: true,
   });
@@ -50,7 +51,7 @@ export default function Home() {
       <div className="flex flex-col lg:flex-row gap-8">
         {/* Sidebar */}
         <aside className="lg:w-64 flex-shrink-0">
-          <CategorySidebar />
+          <CategorySidebar providerCounts={{}} subcategoryCounts={{}} />
         </aside>
 
         {/* Main content */}
@@ -94,7 +95,7 @@ export default function Home() {
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {featuredProviders?.map((provider: ProviderWithProfile) => (
+                {featuredProviders?.map((provider: any) => (
                   <ProviderCard key={provider.id} provider={provider} />
                 ))}
               </div>

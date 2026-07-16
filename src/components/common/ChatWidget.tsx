@@ -1,7 +1,7 @@
 // src/components/common/ChatWidget.tsx
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { useAuth } from '../../contexts/AuthContext';
-import { supabase } from '../../lib/supabase';
+import { useAuth } from '@/contexts/AuthContext';
+import { db } from '@/lib/supabase-any';
 import { X, Send } from 'lucide-react';
 
 /* ---------- OpenAI function definitions ---------- */
@@ -123,48 +123,48 @@ async function executeFunction(
   try {
     switch (name) {
       case 'get_coin_balance': {
-        const { data, error } = await supabase
+        const { data, error } = await db
           .from('providers')
           .select('coin_balance')
           .eq('id', userId)
           .single();
         if (error) return 'Error fetching coin balance.';
-        return `Your current Nicoin balance is ${data.coin_balance ?? 0}.`;
+        return `Your current Nicoin balance is ${(data as any).coin_balance ?? 0}.`;
       }
       case 'get_profile': {
-        const { data: provider, error: providerError } = await supabase
+        const { data: provider, error: providerError } = await db
           .from('providers')
           .select('business_name, description, selected_category_slug')
           .eq('id', userId)
           .single();
         if (providerError) return 'Error fetching profile.';
-        const { data: profile } = await supabase
+        const { data: profile } = await db
           .from('profiles')
           .select('lga_name, state_name')
           .eq('id', userId)
           .single();
-        const loc = profile ? `${profile.lga_name}, ${profile.state_name}` : 'Location not set';
+        const loc = profile ? `${(profile as any).lga_name}, ${(profile as any).state_name}` : 'Location not set';
         return JSON.stringify({
-          business_name: provider.business_name,
-          description: provider.description,
-          category: provider.selected_category_slug,
+          business_name: (provider as any).business_name,
+          description: (provider as any).description,
+          category: (provider as any).selected_category_slug,
           location: loc,
         });
       }
       case 'update_description': {
         const newDesc = args.new_description as string;
         if (!newDesc) return 'Missing description.';
-        const { error } = await supabase
+        const { error } = await db
           .from('providers')
-          .update({ description: newDesc })
+          .update({ description: newDesc } as any)
           .eq('id', userId);
         if (error) return 'Failed to update description.';
         return 'Description updated successfully.';
       }
       case 'get_location_change_status': {
-        const { data, error } = await supabase.rpc('get_location_change_status', {
+        const { data, error } = await db.rpc('get_location_change_status', {
           p_provider_id: userId,
-        });
+        } as any);
         if (error) return 'Error checking location change status.';
         return JSON.stringify(data);
       }
@@ -172,9 +172,9 @@ async function executeFunction(
         if (!args.confirmed) {
           return 'Please confirm you want to switch to a provider account. You will need to complete your business profile afterwards.';
         }
-        const { error } = await supabase
+        const { error } = await db
           .from('profiles')
-          .update({ role: 'provider', is_complete: false })
+          .update({ role: 'provider', is_complete: false } as any)
           .eq('id', userId);
         if (error) return 'Failed to switch account.';
         return 'You have been switched to a provider account. Please complete your business profile on the Setup page to appear in search results.';
@@ -204,8 +204,8 @@ export function ChatWidget() {
   const [responseId, setResponseId] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // ALL hooks must be called before any return
-  const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
+  // Use environment variable (Next.js style)
+  const apiKey = process.env.NEXT_PUBLIC_OPENAI_API_KEY || process.env.VITE_OPENAI_API_KEY;
 
   // Lock background scroll when open
   useEffect(() => {
@@ -227,32 +227,31 @@ export function ChatWidget() {
     if (!user || !open) return;
     const loadHistory = async () => {
       setLoadingHistory(true);
-      const { data } = await supabase
+      const { data } = await db
         .from('chat_messages')
         .select('id, role, content, created_at')
         .eq('user_id', user.id)
         .order('created_at', { ascending: true })
         .limit(50);
       if (data) {
-        setMessages(data.map(m => ({ id: m.id, role: m.role as 'user' | 'assistant', text: m.content, created_at: m.created_at })));
+        setMessages((data as any[]).map((m: any) => ({ id: m.id, role: m.role as 'user' | 'assistant', text: m.content, created_at: m.created_at })));
       }
       setLoadingHistory(false);
     };
     loadHistory();
   }, [user, open]);
 
-  // Save a single message to Supabase – placed BEFORE the early return
+  // Save a single message to Supabase
   const saveMessage = useCallback(async (role: 'user' | 'assistant', text: string) => {
     if (!user) return;
-    const { data } = await supabase
+    const { data } = await db
       .from('chat_messages')
-      .insert({ user_id: user.id, role, content: text })
+      .insert({ user_id: user.id, role, content: text } as any)
       .select('id, created_at')
       .single();
-    return data;
+    return data as any;
   }, [user]);
 
-  // Early return AFTER all hooks
   if (!user) return null;
 
   async function callOpenAI(inputItems: any[]) {
@@ -312,7 +311,7 @@ export function ChatWidget() {
               setMessages(prev => [...prev, { id: asstMeta?.id, role: 'assistant', text, created_at: asstMeta?.created_at }]);
             }
           } else if (item.type === 'function_call') {
-            const result = await executeFunction(item.name, JSON.parse(item.arguments || '{}'), user.id);
+            const result = await executeFunction(item.name, JSON.parse(item.arguments || '{}'), user!.id);
             resp = await callOpenAI([{ type: 'function_call_output', call_id: item.call_id, output: result }]);
             setResponseId(resp.id);
             break;
@@ -349,7 +348,7 @@ export function ChatWidget() {
         </button>
       )}
 
-      {/* Chat panel – glass blur, locks background scroll */}
+      {/* Chat panel */}
       {open && (
         <div
           className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/20 backdrop-blur-sm"

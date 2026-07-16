@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/supabase-any';
 import {
   MessageCircle,
   X,
@@ -53,7 +54,7 @@ const formatMessageTime = (dateStr: string) => {
 };
 
 export const ChatWidget = ({ recipientId, recipientName, bookingId, className }: ChatWidgetProps) => {
-  const router = useRouter(); // ⭐ Next.js router
+  const router = useRouter();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [isOpen, setIsOpen] = useState(false);
@@ -112,16 +113,17 @@ export const ChatWidget = ({ recipientId, recipientName, bookingId, className }:
     const providerId = user.id === recipientId ? recipientId : user.id;
     const customerId = user.id === recipientId ? user.id : recipientId;
 
-    supabase
+    db
       .from('threads')
       .select('id')
       .or(`and(provider_id.eq.${providerId},customer_id.eq.${customerId})`)
       .maybeSingle()
-      .then(async ({ data: thread }) => {
+      .then(async ({ data }: { data: any }) => {
+        const thread = data;
         if (thread) {
           setThreadId(thread.id);
         } else {
-          const { data: newThread } = await supabase
+          const { data: newThread } = await db
             .from('threads')
             .insert({
               provider_id: providerId,
@@ -131,17 +133,17 @@ export const ChatWidget = ({ recipientId, recipientName, bookingId, className }:
             } as any)
             .select('id')
             .single();
-          if (newThread) setThreadId(newThread.id);
+          if (newThread) setThreadId((newThread as any).id);
         }
       });
 
     // Fetch recipient profile (role)
-    supabase
+    db
       .from('profiles')
       .select('role, id')
       .eq('id', recipientId)
       .single()
-      .then(({ data }) => {
+      .then(({ data }: { data: any }) => {
         if (data) setOtherProfile(data);
       });
   }, [user, isOpen, recipientId, bookingId]);
@@ -149,12 +151,12 @@ export const ChatWidget = ({ recipientId, recipientName, bookingId, className }:
   // Fetch messages & realtime
   useEffect(() => {
     if (!threadId) return;
-    supabase
+    db
       .from('messages')
       .select('*')
       .eq('thread_id', threadId)
       .order('created_at', { ascending: true })
-      .then(({ data }) => {
+      .then(({ data }: { data: any }) => {
         if (data) {
           updateMessages(data as Message[]);
           setTimeout(scrollToBottom, 100);
@@ -243,7 +245,7 @@ export const ChatWidget = ({ recipientId, recipientName, bookingId, className }:
     const recipient = recipientId;
 
     try {
-      await supabase.from('messages').insert({
+      await db.from('messages').insert({
         thread_id: threadId,
         sender_id: user.id,
         recipient_id: recipient,
@@ -263,7 +265,7 @@ export const ChatWidget = ({ recipientId, recipientName, bookingId, className }:
 
   // Soft delete
   const deleteMessage = async (msgId: string) => {
-    await supabase.from('messages').update({ deleted_at: new Date().toISOString() }).eq('id', msgId);
+    await db.from('messages').update({ deleted_at: new Date().toISOString() } as any).eq('id', msgId);
     setContextMenu(null);
   };
 
@@ -272,10 +274,10 @@ export const ChatWidget = ({ recipientId, recipientName, bookingId, className }:
     if (!msg.content) return;
     const newContent = prompt('Edit message:', msg.content);
     if (newContent !== null && newContent !== msg.content) {
-      await supabase.from('messages').update({
+      await db.from('messages').update({
         content: newContent,
         edited_at: new Date().toISOString(),
-      }).eq('id', msg.id);
+      } as any).eq('id', msg.id);
     }
     setContextMenu(null);
   };
@@ -310,7 +312,7 @@ export const ChatWidget = ({ recipientId, recipientName, bookingId, className }:
   };
 
   const reportAction = () => {
-    router.push(`/report?target=${recipientId}`); // ⭐ Next.js navigation
+    router.push(`/report?target=${recipientId}`);
     setHeaderMenuOpen(false);
   };
 

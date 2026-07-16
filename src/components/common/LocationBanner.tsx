@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import Link from 'next/link';
 import { useLocationStore } from '../../stores/locationStore';
 import { useAuth } from '../../contexts/AuthContext';
 import { MapPin, X } from 'lucide-react';
@@ -19,8 +19,8 @@ export function LocationBanner() {
           <div className="flex items-center gap-2 text-sm text-blue-800">
             <MapPin className="h-4 w-4" />
             <span>
-              <Link to="/auth/signin" className="font-medium underline">Sign in</Link> or{' '}
-              <Link to="/auth/signup" className="font-medium underline">create an account</Link> to see providers near you!
+              <Link href="/auth/signin" className="font-medium underline">Sign in</Link> or{' '}
+              <Link href="/auth/signup" className="font-medium underline">create an account</Link> to see providers near you!
             </span>
           </div>
           <button onClick={() => setDismissed(true)} className="text-blue-600 hover:text-blue-800">
@@ -30,4 +30,4 @@ export function LocationBanner() {
       </div>
     </div>
   );
-}
+};

@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react';
 import { Heart } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/supabase-any';
 import { useAuth } from '@/contexts/AuthContext';
 import toast from 'react-hot-toast';
 import { useRouter } from 'next/navigation';
@@ -27,7 +27,7 @@ export function FavoriteButton({ providerId, className, size = 'md' }: FavoriteB
   }, [user, providerId]);
 
   async function checkFavoriteStatus() {
-    const { count } = await supabase
+    const { count } = await db
       .from('favorite_providers')
       .select('*', { count: 'exact', head: true })
       .eq('customer_id', user!.id)
@@ -47,17 +47,17 @@ export function FavoriteButton({ providerId, className, size = 'md' }: FavoriteB
     setLoading(true);
     try {
       if (isFavorite) {
-        await supabase
+        await db
           .from('favorite_providers')
           .delete()
           .eq('customer_id', user.id)
           .eq('provider_id', providerId);
         setIsFavorite(false);
       } else {
-        await supabase.from('favorite_providers').insert({
+        await db.from('favorite_providers').insert({
           customer_id: user.id,
           provider_id: providerId,
-        });
+        } as any);
         setIsFavorite(true);
         toast.success('Provider saved!');
       }
@@ -97,7 +97,7 @@ export function FavoriteButton({ providerId, className, size = 'md' }: FavoriteB
       <Heart
         className={cn(
           iconSizeClasses[size],
-          'fill-current', // always filled
+          'fill-current',
           loading && 'animate-pulse'
         )}
       />

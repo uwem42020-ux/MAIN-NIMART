@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/supabase-any';
 import { useAuth } from '@/contexts/AuthContext';
 import { MapPin, X } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -25,15 +25,16 @@ export function LocationPrompt() {
   }, [profile]);
 
   async function fetchStates() {
-    const { data } = await supabase.from('lga_centers').select('state_id, state_name').order('state_name');
-    const unique = data?.filter((v, i, a) => a.findIndex(t => t.state_id === v.state_id) === i) || [];
+    const { data } = await db.from('lga_centers').select('state_id, state_name').order('state_name');
+    const raw = (data || []) as any[];
+    const unique = raw.filter((v, i, a) => a.findIndex(t => t.state_id === v.state_id) === i);
     setStates(unique);
   }
 
   async function handleStateChange(stateId: string) {
     setSelectedState(stateId);
-    const { data } = await supabase.from('lga_centers').select('lga_id, lga_name').eq('state_id', parseInt(stateId)).order('lga_name');
-    setLgas(data || []);
+    const { data } = await db.from('lga_centers').select('lga_id, lga_name').eq('state_id', parseInt(stateId)).order('lga_name');
+    setLgas((data || []) as any[]);
     setSelectedLga('');
   }
 
@@ -44,13 +45,13 @@ export function LocationPrompt() {
     }
     setLoading(true);
     const lga = lgas.find(l => l.lga_id.toString() === selectedLga);
-    const { data: coords } = await supabase.from('lga_centers').select('lat, lng').eq('lga_id', parseInt(selectedLga)).single();
-    const { error } = await supabase.from('profiles').update({
+    const { data: coords } = await db.from('lga_centers').select('lat, lng').eq('lga_id', parseInt(selectedLga)).single();
+    const { error } = await db.from('profiles').update({
       lga_id: parseInt(selectedLga),
       lga_name: lga?.lga_name,
-      lat: coords?.lat,
-      lng: coords?.lng,
-    }).eq('id', user!.id);
+      lat: (coords as any)?.lat,
+      lng: (coords as any)?.lng,
+    } as any).eq('id', user!.id);
     if (error) toast.error(error.message);
     else {
       toast.success('Location saved!');
@@ -68,10 +69,10 @@ export function LocationPrompt() {
     setLoading(true);
     navigator.geolocation.getCurrentPosition(async (pos) => {
       const { latitude, longitude } = pos.coords;
-      const { error } = await supabase.from('profiles').update({
+      const { error } = await db.from('profiles').update({
         lat: latitude,
         lng: longitude,
-      }).eq('id', user!.id);
+      } as any).eq('id', user!.id);
       if (error) toast.error(error.message);
       else {
         toast.success('Location set via GPS');
@@ -129,4 +130,4 @@ export function LocationPrompt() {
       </div>
     </div>
   );
-}
+};
