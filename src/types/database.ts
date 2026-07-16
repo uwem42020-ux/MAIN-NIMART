@@ -394,6 +394,46 @@ export interface Database {
           created_at?: string
         }
       }
+      provider_services: {
+        Row: {
+          id: string
+          provider_id: string
+          name: string
+          description: string | null
+          price: number
+          price_type: string
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          provider_id: string
+          name: string
+          description?: string | null
+          price: number
+          price_type: string
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          provider_id?: string
+          name?: string
+          description?: string | null
+          price?: number
+          price_type?: string
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "provider_services_provider_id_fkey"
+            columns: ["provider_id"]
+            referencedRelation: "providers"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
     }
     Views: {}
     Functions: {}
@@ -416,5 +456,4 @@ export type PortfolioImage = Tables<'portfolio_images'>
 export type LGACenter = Tables<'lga_centers'>
 export type Subcategory = Tables<'subcategories'>
 export type Category = Tables<'categories'>
-
-export type TablesUpdate<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Update']
+export type ProviderService = Tables<'provider_services'>
