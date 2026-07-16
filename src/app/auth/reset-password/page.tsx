@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/supabase-any';
 import toast from 'react-hot-toast';
 import { Mail, Lock, ArrowLeft, Eye, EyeOff, CheckCircle, Send, Loader2 } from 'lucide-react';
 
@@ -42,7 +43,6 @@ export default function ResetPassword() {
     setLoading(true);
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        // Uses the current origin (localhost or nimart.ng) automatically
         redirectTo: `${window.location.origin}/auth/reset-password`,
       });
       if (error) throw error;
@@ -73,7 +73,7 @@ export default function ResetPassword() {
       // Mark profile as having a password
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        await supabase.from('profiles').update({ has_password: true }).eq('id', user.id);
+        await db.from('profiles').update({ has_password: true }).eq('id', user.id);
       }
 
       toast.success('Password updated! Please sign in.');
