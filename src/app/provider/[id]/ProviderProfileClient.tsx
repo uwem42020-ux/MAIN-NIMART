@@ -674,7 +674,7 @@ export function ProviderProfileClient({
         <div className="px-4 mb-8">
           <Card>
             <h2 className="text-base font-bold text-gray-900 mb-3 flex items-center gap-2">Reviews</h2>
-            <ReviewsList reviews={provider?.reviews || []} />
+            <ReviewsList reviews={(provider?.reviews || []) as any} />
           </Card>
         </div>
 
@@ -844,7 +844,7 @@ export function ProviderProfileClient({
           </Card>
           <Card>
             <h2 className="text-lg font-bold text-gray-900 mb-4">Reviews</h2>
-            <ReviewsList reviews={provider?.reviews || []} />
+            <ReviewsList reviews={(provider?.reviews || []) as any} />
           </Card>
         </div>
 
