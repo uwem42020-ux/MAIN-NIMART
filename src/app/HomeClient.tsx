@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/supabase-any';
 import { ProviderCardPortrait, type ProviderWithProfile } from '@/components/provider/ProviderCardPortrait';
 import { ProviderCardHorizontal } from '@/components/provider/ProviderCardHorizontal';
 import { useAuth } from '@/contexts/AuthContext';
@@ -93,7 +94,7 @@ export function HomeClient({ initialProviders }: HomeClientProps) {
   const { data: featuredProviders, isLoading } = useQuery({
     queryKey: ['featured-providers', userLat, userLng, stateFilter, lgaFilter],
     queryFn: async () => {
-      const { data, error } = await (supabase.rpc as any)('get_featured_providers', { limit_count: 50 });
+      const { data, error } = await db.rpc('get_featured_providers', { limit_count: 50 });
       if (error || !data) return [] as ProviderWithProfile[];
 
       const providers: any[] = Array.isArray(data) ? data : [];
@@ -128,7 +129,7 @@ export function HomeClient({ initialProviders }: HomeClientProps) {
 
       const providerIds = result.map(p => p.id);
       if (userLat && userLng && providerIds.length > 0) {
-        const { data: distances } = await (supabase.rpc as any)('get_provider_distances', {
+        const { data: distances } = await db.rpc('get_provider_distances', {
           user_lat: userLat,
           user_lng: userLng,
           provider_ids: providerIds,
@@ -143,7 +144,7 @@ export function HomeClient({ initialProviders }: HomeClientProps) {
       }
 
       if (providerIds.length > 0) {
-        const { data: signIns } = await (supabase.rpc as any)('get_users_last_sign_in', { user_ids: providerIds });
+        const { data: signIns } = await db.rpc('get_users_last_sign_in', { user_ids: providerIds });
         if (signIns) {
           const signInMap = new Map(signIns.map((s: any) => [s.user_id, s.last_sign_in_at]));
           result = result.map(p => ({
