@@ -1,11 +1,12 @@
 import { useEffect } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { useLocationStore } from '../stores/locationStore';
-import { supabase } from '../lib/supabase';
-import { useSearchParams } from 'react-router-dom';
+import { db } from '@/lib/supabase-any';
 
 export function useAutoLocation() {
   const { lat, lng, permissionGranted } = useLocationStore();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const searchParams = useSearchParams();
+  const router = useRouter();
 
   useEffect(() => {
     if (!permissionGranted || !lat || !lng) return;
@@ -14,18 +15,18 @@ export function useAutoLocation() {
     if (searchParams.get('state') || searchParams.get('lga')) return;
 
     const fetchNearestLGA = async () => {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .rpc('find_nearest_lga', {
           user_lat: lat,
-          user_lng: lng
-        });
+          user_lng: lng,
+        } as any);
 
-      if (!error && data && data.length > 0) {
-        const nearest = data[0];
-        const params = new URLSearchParams(searchParams);
+      if (!error && data && (data as any[]).length > 0) {
+        const nearest = (data as any[])[0];
+        const params = new URLSearchParams(searchParams.toString());
         params.set('state', nearest.state_id.toString());
         params.set('lga', nearest.lga_id.toString());
-        setSearchParams(params, { replace: true });
+        router.replace(`/search?${params.toString()}`);
       }
     };
 

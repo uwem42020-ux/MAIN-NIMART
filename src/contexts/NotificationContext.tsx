@@ -1,8 +1,10 @@
+// src/contexts/NotificationContext.tsx
 'use client';
 
 import React, { createContext, useContext } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/supabase-any';
 import { useAuth } from '@/contexts/AuthContext';
 import toast from 'react-hot-toast';
 
@@ -25,17 +27,17 @@ const NotificationContext = createContext<NotificationContextType | undefined>(u
 
 async function fetchCounts(userId: string, role: string): Promise<NotificationCounts> {
   const [bookingsRes, messagesRes, systemRes] = await Promise.all([
-    supabase
+    db
       .from('bookings')
       .select('id', { count: 'exact', head: true })
       .eq(role === 'provider' ? 'provider_id' : 'customer_id', userId)
       .in('status', ['pending', 'confirmed']),
-    supabase
+    db
       .from('messages')
       .select('id', { count: 'exact', head: true })
       .eq('recipient_id', userId)
       .eq('is_read', false),
-    supabase
+    db
       .from('notifications')
       .select('id', { count: 'exact', head: true })
       .eq('user_id', userId)
@@ -115,7 +117,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
             queryClient.invalidateQueries({ queryKey: ['notification-counts', userId, role] });
             if (payload.eventType === 'INSERT') {
               const notif = payload.new;
-              toast(notif.title, { description: notif.body, icon: '🔔' });
+              toast(notif.title as string, { icon: '🔔' } as any);
             }
           }
         )
@@ -135,9 +137,9 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       messages: 0,
     }));
 
-    const { error } = await supabase
+    const { error } = await db
       .from('messages')
-      .update({ is_read: true, read_at: new Date().toISOString() })
+      .update({ is_read: true, read_at: new Date().toISOString() } as any)
       .eq('recipient_id', userId)
       .eq('is_read', false);
 
@@ -148,7 +150,6 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
   const markBookingsAsSeen = async () => {
     if (!userId) return;
-    // Bookings don't have a "seen" flag – only reset UI
     queryClient.setQueryData(['notification-counts', userId, role], (old: any) => ({
       ...old,
       bookings: 0,
@@ -161,9 +162,9 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       ...old,
       system: 0,
     }));
-    const { error } = await supabase
+    const { error } = await db
       .from('notifications')
-      .update({ is_read: true, read_at: new Date().toISOString() })
+      .update({ is_read: true, read_at: new Date().toISOString() } as any)
       .eq('user_id', userId)
       .eq('is_read', false);
     if (!error) {

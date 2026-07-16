@@ -4,7 +4,7 @@
 import { useRouter, useSearchParams } from 'next/navigation';
 import { TIERS, CATEGORIES, getSubcategoriesByCategory } from '../../data/categories';
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '../../lib/supabase';
+import { db } from '@/lib/supabase-any';
 import { MapPin } from 'lucide-react';
 
 interface State {
@@ -57,13 +57,14 @@ export function EnhancedFilterSidebar() {
   // Load states
   useEffect(() => {
     async function fetchStates() {
-      const { data } = await supabase
+      const { data } = await db
         .from('lga_centers')
         .select('state_id, state_name')
         .order('state_name');
-      const unique = data?.filter((v, i, a) =>
+      const raw = (data || []) as any[];
+      const unique = raw.filter((v, i, a) =>
         a.findIndex(t => t.state_id === v.state_id) === i
-      ) || [];
+      );
       setStates(unique);
     }
     fetchStates();
@@ -76,12 +77,12 @@ export function EnhancedFilterSidebar() {
       return;
     }
     async function fetchLgas() {
-      const { data } = await supabase
+      const { data } = await db
         .from('lga_centers')
         .select('lga_id, lga_name')
         .eq('state_id', parseInt(selectedState))
         .order('lga_name');
-      setLgas(data || []);
+      setLgas((data || []) as LGA[]);
     }
     fetchLgas();
   }, [selectedState]);

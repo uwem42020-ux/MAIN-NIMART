@@ -1,5 +1,6 @@
 import { memo } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { MapPin, Star, Briefcase, Clock } from 'lucide-react';
 import { OptimizedImage } from '../common/OptimizedImage';
 import { formatDistance } from '../../lib/distance';
@@ -50,7 +51,7 @@ const statusRingColor: Record<string, string> = {
 
 export const ProviderCard = memo(function ProviderCard({ provider, className }: ProviderCardProps) {
   const { user } = useAuth();
-  const navigate = useNavigate();
+  const router = useRouter();
   const { permissionGranted, setPermissionDenied } = useLocationStore();
   const queryClient = useQueryClient();
 
@@ -78,16 +79,16 @@ export const ProviderCard = memo(function ProviderCard({ provider, className }: 
     e.stopPropagation();
     if (!user) {
       toast.error('Please sign in to book');
-      navigate('/auth/signin');
+      router.push('/auth/signin');
       return;
     }
-    navigate(`/provider/${provider.id}?book=true`);
+    router.push(`/provider/${provider.id}?book=true`);
   };
 
   const handleEnableLocation = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setPermissionDenied(false);
+    setPermissionDenied();
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         () => {
@@ -119,7 +120,7 @@ export const ProviderCard = memo(function ProviderCard({ provider, className }: 
     return null;
   };
 
-  // Prefetch route + data + component chunk on hover
+  // Prefetch route + data on hover
   const handleMouseEnter = () => {
     // Prefetch the route HTML
     const preloadLink = document.createElement('link');
@@ -127,13 +128,10 @@ export const ProviderCard = memo(function ProviderCard({ provider, className }: 
     preloadLink.href = `/provider/${provider.id}`;
     document.head.appendChild(preloadLink);
 
-    // Prefetch the lazy component chunk
-    import('../../pages/customer/ProviderProfile');
-
-    // Prefetch profile data
+    // Prefetch profile data (cast to any if signature differs)
     queryClient.prefetchQuery({
       queryKey: ['provider', provider.id],
-      queryFn: () => fetchProviderProfile(provider.id),
+      queryFn: () => (fetchProviderProfile as any)(provider.id),
       staleTime: 1000 * 60 * 2,
     });
   };
@@ -147,7 +145,7 @@ export const ProviderCard = memo(function ProviderCard({ provider, className }: 
       )}
     >
       <Link
-        to={`/provider/${provider.id}`}
+        href={`/provider/${provider.id}`}
         onMouseEnter={handleMouseEnter}
         className="block relative w-full overflow-hidden bg-gray-100"
       >
@@ -207,7 +205,7 @@ export const ProviderCard = memo(function ProviderCard({ provider, className }: 
               title={statusLabel[provider.status] || provider.status}
             />
           </div>
-          <Link to={`/provider/${provider.id}`} className="block flex-1">
+          <Link href={`/provider/${provider.id}`} className="block flex-1">
             <h3 className="font-semibold text-primary-600 truncate hover:underline">
               {provider.business_name || provider.profile?.full_name || 'Unnamed Provider'}
             </h3>
@@ -220,7 +218,7 @@ export const ProviderCard = memo(function ProviderCard({ provider, className }: 
 
         <div className="mb-2">
           <Link
-            to={`/search?category=${provider.selected_category_slug}`}
+            href={`/search?category=${provider.selected_category_slug}`}
             className="inline-flex items-center gap-1 bg-primary-600 text-white text-xs px-2.5 py-0.5 rounded-full hover:bg-primary-700 transition"
             onClick={(e) => e.stopPropagation()}
           >

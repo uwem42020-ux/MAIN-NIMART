@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { db } from '@/lib/supabase-any';
 
 export type BadgeLevel = 
   | 'newcomer' 
@@ -44,7 +44,7 @@ export function getPointsToNextBadge(score: number): { badge: BadgeLevel; badgeL
   const currentBadge = getBadgeFromScore(score);
   const currentIndex = levels.indexOf(currentBadge);
   
-  if (currentIndex >= levels.length - 1) return null; // Already at max
+  if (currentIndex >= levels.length - 1) return null;
   
   const nextBadge = levels[currentIndex + 1];
   return {
@@ -55,66 +55,65 @@ export function getPointsToNextBadge(score: number): { badge: BadgeLevel; badgeL
 }
 
 export async function awardPoints(providerId: string, points: number, reason: string) {
-  // Ensure score row exists
-  const { data: existing } = await supabase
+  const { data: existing } = await db
     .from('provider_reputation_scores')
     .select('id, total_points')
     .eq('provider_id', providerId)
     .maybeSingle();
 
   if (!existing) {
-    await supabase
+    await db
       .from('provider_reputation_scores')
       .insert({
         provider_id: providerId,
         total_points: points,
         current_badge: getBadgeFromScore(points),
-      });
+      } as any);
   } else {
-    const newScore = existing.total_points + points;
+    const existingScore = (existing as any).total_points || 0;
+    const newScore = existingScore + points;
     const newBadge = getBadgeFromScore(newScore);
-    const oldBadge = getBadgeFromScore(existing.total_points);
+    const oldBadge = getBadgeFromScore(existingScore);
 
-    await supabase
+    await db
       .from('provider_reputation_scores')
       .update({
         total_points: newScore,
         current_badge: newBadge,
         updated_at: new Date().toISOString(),
-      })
+      } as any)
       .eq('provider_id', providerId);
 
-    // Notify if badge changed
     if (newBadge !== oldBadge) {
-      await supabase.from('notifications').insert({
+      await db.from('notifications').insert({
         user_id: providerId,
         type: 'system',
         title: `🏆 New Badge: ${BADGE_INFO[newBadge].label}!`,
         body: `Congratulations! You've earned the ${BADGE_INFO[newBadge].label} badge with ${newScore} points.`,
         data: { badge: newBadge, score: newScore },
-      });
+      } as any);
     }
   }
 }
 
 export async function incrementStat(providerId: string, stat: 'completed_jobs' | 'positive_reviews' | 'repeat_customers' | 'fast_responses') {
-  const { data: existing } = await supabase
+  const { data: existing } = await db
     .from('provider_reputation_scores')
     .select(stat)
     .eq('provider_id', providerId)
     .maybeSingle();
 
   if (existing) {
-    const currentValue = existing[stat] || 0;
-    await supabase
+    const currentValue = (existing as any)[stat] || 0;
+    await db
       .from('provider_reputation_scores')
-      .update({ [stat]: currentValue + 1, updated_at: new Date().toISOString() })
+      .update({ [stat]: currentValue + 1, updated_at: new Date().toISOString() } as any)
       .eq('provider_id', providerId);
   }
 }
 
 export async function getProviderScore(providerId: string) {
-  const { data } = await supabase
+  const { data } = await db
     .from('provider_reputation_scores')
     .select('*')
     .eq('provider_id', providerId)
@@ -122,11 +121,12 @@ export async function getProviderScore(providerId: string) {
 
   if (!data) return null;
 
+  const score = (data as any).total_points || 0;
   return {
     ...data,
-    badge: getBadgeFromScore(data.total_points),
-    badgeInfo: BADGE_INFO[getBadgeFromScore(data.total_points)],
-    nextBadge: getPointsToNextBadge(data.total_points),
+    badge: getBadgeFromScore(score),
+    badgeInfo: BADGE_INFO[getBadgeFromScore(score)],
+    nextBadge: getPointsToNextBadge(score),
   };
 }
 
@@ -136,15 +136,14 @@ export async function addStrike(
   reason: string,
   severity: 'minor' | 'moderate' | 'severe'
 ) {
-  await supabase.from('provider_strikes').insert({
+  await db.from('provider_strikes').insert({
     provider_id: providerId,
     booking_id: bookingId,
     reason,
     severity,
-  });
+  } as any);
 
-  // Check active strikes
-  const { count } = await supabase
+  const { count } = await db
     .from('provider_strikes')
     .select('*', { count: 'exact', head: true })
     .eq('provider_id', providerId)
@@ -153,54 +152,60 @@ export async function addStrike(
   const activeStrikes = count || 0;
 
   if (activeStrikes >= 7) {
-    // Permanent suspension
-    await supabase.from('profiles').update({
+    await db.from('profiles').update({
       is_banned: true,
       banned_reason: '7+ active strikes — permanently suspended',
       banned_at: new Date().toISOString(),
-    }).eq('id', providerId);
+    } as any).eq('id', providerId);
 
-    await supabase.from('notifications').insert({
+    await db.from('notifications').insert({
       user_id: providerId,
       type: 'alert',
       title: '🚫 Account Permanently Suspended',
       body: 'Your account has been permanently suspended due to multiple unresolved violations.',
-    });
+    } as any);
   } else if (activeStrikes >= 5) {
-    // 7-day suspension
-    await supabase.from('profiles').update({
+    await db.from('profiles').update({
       is_active: false,
       banned_reason: '5+ active strikes — 7-day suspension',
       banned_at: new Date().toISOString(),
-    }).eq('id', providerId);
+    } as any).eq('id', providerId);
 
-    await supabase.from('notifications').insert({
+    await db.from('notifications').insert({
       user_id: providerId,
       type: 'alert',
       title: '⛔ Account Suspended (7 Days)',
       body: `You have ${activeStrikes} active strikes. Your account is suspended for 7 days. Strikes expire after 90 days.`,
-    });
+    } as any);
   } else if (activeStrikes >= 3) {
-    // Warning
-    await supabase.from('notifications').insert({
+    await db.from('notifications').insert({
       user_id: providerId,
       type: 'alert',
       title: '⚠️ Warning: Account at Risk',
       body: `You have ${activeStrikes} active strikes. After 5 strikes, your account will be suspended. After 7, permanent ban.`,
-    });
+    } as any);
   }
 }
 
 export async function flagCustomer(customerId: string, bookingId: string, reason: string) {
-  await supabase
+  // Fetch current flag count
+  const { data: profile } = await db
     .from('profiles')
-    .update({ customer_flag_count: supabase.raw('COALESCE(customer_flag_count, 0) + 1') })
+    .select('customer_flag_count')
+    .eq('id', customerId)
+    .single();
+
+  const currentCount = (profile as any)?.customer_flag_count || 0;
+
+  await db
+    .from('profiles')
+    .update({ customer_flag_count: currentCount + 1 } as any)
     .eq('id', customerId);
 
-  await supabase.from('booking_flags').insert({
+  await db.from('booking_flags').insert({
     booking_id: bookingId,
     flagged_by: customerId,
     flag_type: 'customer_did_not_pay',
     description: reason,
-  });
+  } as any);
 }

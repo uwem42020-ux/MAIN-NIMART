@@ -83,7 +83,7 @@ export const ProviderCardPortrait = memo(function ProviderCardPortrait({
   const handleEnableLocation = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setPermissionDenied(false);
+    setPermissionDenied();
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         () => {

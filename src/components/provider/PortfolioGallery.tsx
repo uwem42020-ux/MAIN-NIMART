@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import Link from 'next/link';
 import { OptimizedImage } from '../common/OptimizedImage';
 import type { Database } from '../../types/database';
 
@@ -35,7 +35,7 @@ export function PortfolioGallery({ images, providerId }: PortfolioGalleryProps) 
           return (
             <Link
               key={image.id}
-              to={`/provider/${providerId}/portfolio`}
+              href={`/provider/${providerId}/portfolio`}
               className="overflow-hidden rounded-lg hover:opacity-90 transition-opacity"
             >
               {content}

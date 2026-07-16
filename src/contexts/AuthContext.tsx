@@ -4,6 +4,7 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
+import { db } from '@/lib/supabase-any';
 import type { Profile } from '../types/database';
 
 interface AuthContextType {
@@ -30,12 +31,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchProfile = async (userId: string) => {
-    const { data } = await supabase
+    const { data } = await db
       .from('profiles')
       .select('*')
       .eq('id', userId)
       .single();
-    setProfile(data);
+    setProfile(data as Profile);
     return data;
   };
 
@@ -114,9 +115,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const updateProfile = async (updates: Partial<Profile>) => {
     if (!user) throw new Error('No user logged in');
-    const { error } = await supabase
+    const { error } = await db
       .from('profiles')
-      .update(updates)
+      .update(updates as any)
       .eq('id', user.id);
     if (error) throw error;
     await refreshProfile();

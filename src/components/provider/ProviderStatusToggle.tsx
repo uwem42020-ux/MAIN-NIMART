@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { supabase } from '../../lib/supabase';
+import { db } from '@/lib/supabase-any';
 import { cn } from '../../lib/utils';
 import toast from 'react-hot-toast';
 
@@ -28,10 +28,9 @@ export function ProviderStatusToggle({ providerId, initialStatus, onStatusChange
 
     setIsUpdating(true);
     try {
-      // ✅ Only update status — is_available stays true (providers remain visible)
-      const { error } = await supabase
+      const { error } = await db
         .from('providers')
-        .update({ status: newStatus })
+        .update({ status: newStatus } as any)
         .eq('id', providerId);
 
       if (error) throw error;

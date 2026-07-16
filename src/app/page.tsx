@@ -1,9 +1,9 @@
 // app/page.tsx
+import { Suspense } from 'react';
 import { HomeClient } from './HomeClient';
 import { fetchInitialProviders } from '@/lib/serverQueries';
 import type { Metadata } from 'next';
 
-// Static server‑side metadata (perfect for sitelinks and rich results)
 export const metadata: Metadata = {
   title: "Nimart – Nigeria's Trusted Service Marketplace",
   description:
@@ -25,7 +25,6 @@ export const metadata: Metadata = {
   },
 };
 
-// JSON‑LD for rich results (Organization + WebSite) – inlined in the HTML
 const jsonLd = {
   '@context': 'https://schema.org',
   '@graph': [
@@ -62,12 +61,19 @@ export default async function HomePage() {
 
   return (
     <>
-      {/* Inject JSON‑LD – no client‑side component needed */}
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
-      <HomeClient initialProviders={initialProviders} />
+      <Suspense
+        fallback={
+          <div className="min-h-screen flex items-center justify-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600" />
+          </div>
+        }
+      >
+        <HomeClient initialProviders={initialProviders} />
+      </Suspense>
     </>
   );
 }

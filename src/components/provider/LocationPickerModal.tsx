@@ -1,7 +1,7 @@
 // src/components/provider/LocationPickerModal.tsx
 import { useState, useEffect, useRef } from 'react';
 import { GoogleMap, useJsApiLoader, Marker } from '@react-google-maps/api';
-import { supabase } from '../../lib/supabase';
+import { db } from '@/lib/supabase-any';
 import toast from 'react-hot-toast';
 import { MapPin, X, LocateFixed, Loader2, Search } from 'lucide-react';
 
@@ -30,7 +30,6 @@ export function LocationPickerModal({
   currentLat,
   currentLng,
 }: LocationPickerModalProps) {
-  // ✅ Fix: use NEXT_PUBLIC_GOOGLE_MAPS_API_KEY for Next.js
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
   const mapRef = useRef<google.maps.Map | null>(null);
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
@@ -79,16 +78,17 @@ export function LocationPickerModal({
     const fetchDetails = async () => {
       setLoading(true);
       try {
-        const { data, error } = await supabase.rpc('find_nearest_lga', {
+        const { data, error } = await db.rpc('find_nearest_lga', {
           user_lat: selectedLat,
           user_lng: selectedLng,
-        });
+        } as any);
         if (error) throw error;
-        if (data && data.length > 0) {
+        if (data && (data as any[]).length > 0) {
+          const d = (data as any[])[0];
           setLgaInfo({
-            lga_id: data[0].lga_id,
-            lga_name: data[0].lga_name,
-            state_name: data[0].state_name,
+            lga_id: d.lga_id,
+            lga_name: d.lga_name,
+            state_name: d.state_name,
           });
         } else {
           setLgaInfo(null);

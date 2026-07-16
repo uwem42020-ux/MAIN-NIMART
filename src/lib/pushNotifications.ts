@@ -1,10 +1,9 @@
 import { getToken, onMessage, deleteToken } from "firebase/messaging";
 import { getMessagingInstance } from "./firebase";
-import { supabase } from "./supabase";
+import { db } from '@/lib/supabase-any';
 
 const VAPID_KEY = "BDZ4uN_no-rSBlF-DOYvTlAnAGJ7wDzorZSiYomvSmzayJgcOqRQy1VmKlNpDK5EutkwqaHi_yGZTpbBcDkyIgc";
 
-// Helper to get messaging instance (returns null if not available)
 async function ensureMessaging() {
   const messaging = await getMessagingInstance();
   if (!messaging) {
@@ -29,7 +28,7 @@ export async function requestPushPermission(userId: string) {
     if (!token) return null;
 
     // Save the token to the user's profile
-    await supabase.from("profiles").update({ fcm_token: token }).eq("id", userId);
+    await db.from("profiles").update({ fcm_token: token } as any).eq("id", userId);
     return token;
   } catch (error) {
     console.error("Failed to get push permission:", error);
@@ -44,15 +43,13 @@ export async function removePushToken(userId: string) {
 
     const token = await getToken(messaging, { vapidKey: VAPID_KEY });
     if (token) await deleteToken(messaging);
-    await supabase.from("profiles").update({ fcm_token: null }).eq("id", userId);
+    await db.from("profiles").update({ fcm_token: null } as any).eq("id", userId);
   } catch (error) {
     console.error("Failed to remove push token:", error);
   }
 }
 
 export function onForegroundMessage(callback: (payload: any) => void) {
-  // This needs to be handled carefully because it's synchronous.
-  // We'll call ensureMessaging inside and attach listener once available.
   (async () => {
     const messaging = await ensureMessaging();
     if (messaging) {

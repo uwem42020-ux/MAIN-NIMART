@@ -3,11 +3,12 @@ import '@/styles/globals.css';
 import { Header } from '@/components/common/Header';
 import { Footer } from '@/components/common/Footer';
 import { Providers } from '@/components/Providers';
-import { MobileBottomNav } from '@/components/common/MobileBottomNav'; // ← import
+import { MobileBottomNav } from '@/components/common/MobileBottomNav';
 
 export const metadata = {
   title: "Nimart - Nigeria's Trusted Service Marketplace",
   description: 'Connect with verified professionals across Nigeria. Book trusted services for home, auto, beauty, and more.',
+  metadataBase: new URL('https://nimart.ng'), // ← resolves the warning
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -18,7 +19,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <Header />
           <main className="flex-1">{children}</main>
           <Footer />
-          <MobileBottomNav /> {/* ← add here */}
+          <MobileBottomNav />
         </Providers>
       </body>
     </html>

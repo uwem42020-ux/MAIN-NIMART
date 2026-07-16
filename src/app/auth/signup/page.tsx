@@ -1,7 +1,7 @@
 // src/app/auth/signup/page.tsx
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
@@ -16,7 +16,7 @@ import Turnstile from 'react-turnstile';
 
 type Step = 'email' | 'otp' | 'profile';
 
-export default function SignUp() {
+function SignUpContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { refreshProfile } = useAuth();
@@ -308,5 +308,17 @@ export default function SignUp() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function SignUp() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 via-white to-emerald-50">
+        <NimartSpinner size="lg" />
+      </div>
+    }>
+      <SignUpContent />
+    </Suspense>
   );
 }

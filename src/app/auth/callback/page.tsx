@@ -1,7 +1,7 @@
 // src/app/auth/callback/page.tsx
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { db } from '@/lib/supabase-any';
@@ -12,7 +12,7 @@ import { NimartSpinner } from '@/components/common/NimartSpinner';
 import { REFERRAL_BONUS } from '@/lib/nicoinConfig';
 import { requestPushPermission } from '@/lib/pushNotifications';
 
-export default function AuthCallback() {
+function CallbackContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { refreshProfile } = useAuth();
@@ -236,4 +236,16 @@ export default function AuthCallback() {
   }
 
   return null;
+}
+
+export default function AuthCallback() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <NimartSpinner size="lg" />
+      </div>
+    }>
+      <CallbackContent />
+    </Suspense>
+  );
 }
