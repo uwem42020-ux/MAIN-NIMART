@@ -64,11 +64,11 @@ export default function AdminUsers() {
     }));
 
     if (filter === 'customer') {
-      usersList = usersList.filter(u => u.role === 'customer');
+      usersList = usersList.filter((u: any) => u.role === 'customer');
     } else if (filter === 'provider') {
-      usersList = usersList.filter(u => u.role === 'provider');
+      usersList = usersList.filter((u: any) => u.role === 'provider');
     } else if (filter === 'banned') {
-      usersList = usersList.filter(u => u.is_banned);
+      usersList = usersList.filter((u: any) => u.is_banned);
     }
 
     setUsers(usersList);
@@ -111,7 +111,7 @@ export default function AdminUsers() {
     }
   }
 
-  const filteredUsers = users.filter(u => {
+  const filteredUsers = users.filter((u: any) => {
     const term = searchTerm.toLowerCase();
     return (
       u.full_name?.toLowerCase().includes(term) ||
@@ -164,7 +164,7 @@ export default function AdminUsers() {
               </tr>
             </thead>
             <tbody className="divide-y">
-              {filteredUsers.map((user) => (
+              {filteredUsers.map((user: any) => (
                 <tr key={user.id} className={cn(user.is_banned && 'bg-red-50')}>
                   <td className="px-4 py-3">
                     <div>
