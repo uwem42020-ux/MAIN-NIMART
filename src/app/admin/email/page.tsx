@@ -63,8 +63,7 @@ export default function AdminBulkEmail() {
       const userIds = profiles.map((p: any) => p.id);
 
       // Step 2 – Fetch emails via the secure RPC
-      const { data: emailsData, error: rpcError } = await supabase
-        .rpc('get_user_emails', { user_ids: userIds });
+      const { data: emailsData, error: rpcError } = await (supabase.rpc as any)('get_user_emails', { user_ids: userIds });
 
       if (rpcError) throw rpcError;
 
