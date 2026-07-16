@@ -4,6 +4,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/supabase-any';
 import { format, isToday, isTomorrow, isThisWeek, parseISO } from 'date-fns';
 import {
   Calendar, Clock, MapPin, Star, XCircle, MessageCircle,
@@ -73,7 +74,7 @@ export default function CustomerBookings() {
     queryKey: ['customer-bookings', user?.id, activeTab],
     queryFn: async () => {
       if (!user) return [];
-      let query = supabase
+      let query = db
         .from('bookings')
         .select('*')
         .eq('customer_id', user.id)
@@ -89,16 +90,16 @@ export default function CustomerBookings() {
       const { data: bookingsData, error } = await query;
       if (error || !bookingsData?.length) return [];
 
-      const providerIds = [...new Set(bookingsData.map(b => b.provider_id))];
+      const providerIds = [...new Set((bookingsData as any[]).map((b: any) => b.provider_id))];
       const [{ data: providers }, { data: profiles }] = await Promise.all([
-        supabase.from('providers').select('id, business_name').in('id', providerIds),
-        supabase.from('profiles').select('id, full_name, avatar_url').in('id', providerIds),
+        db.from('providers').select('id, business_name').in('id', providerIds),
+        db.from('profiles').select('id, full_name, avatar_url').in('id', providerIds),
       ]);
 
-      const profileMap = new Map(profiles?.map(p => [p.id, p]) || []);
-      const providerMap = new Map(providers?.map(p => [p.id, p]) || []);
+      const profileMap = new Map(profiles?.map((p: any) => [p.id, p]) || []);
+      const providerMap = new Map(providers?.map((p: any) => [p.id, p]) || []);
 
-      return bookingsData.map(booking => ({
+      return (bookingsData as any[]).map((booking: any) => ({
         ...booking,
         provider_name: profileMap.get(booking.provider_id)?.full_name || null,
         provider_avatar: profileMap.get(booking.provider_id)?.avatar_url || null,
@@ -134,7 +135,7 @@ export default function CustomerBookings() {
 
   const handleCancel = async (bookingId: string) => {
     if (!confirm('Cancel this booking?')) return;
-    const { error } = await supabase
+    const { error } = await db
       .from('bookings')
       .update({ status: 'cancelled_by_customer', cancelled_at: new Date().toISOString(), cancelled_by: user?.id })
       .eq('id', bookingId);
@@ -147,7 +148,7 @@ export default function CustomerBookings() {
 
   const handleConfirmCompletion = async (bookingId: string) => {
     setConfirmingId(bookingId);
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('bookings')
       .update({
         customer_confirmed_at: new Date().toISOString(),
@@ -170,7 +171,7 @@ export default function CustomerBookings() {
     }
 
     toast.success('Thank you for confirming!');
-    setShowPastBookings(true); // auto-expand past bookings
+    setShowPastBookings(true);
     queryClient.invalidateQueries({ queryKey: ['customer-bookings', user?.id] });
   };
 
@@ -180,7 +181,7 @@ export default function CustomerBookings() {
       return;
     }
     setDisputingId(bookingId);
-    const { error } = await supabase
+    const { error } = await db
       .from('bookings')
       .update({
         customer_confirmation_status: 'disputed',
@@ -215,7 +216,6 @@ export default function CustomerBookings() {
     return format(date, 'MMM d, yyyy');
   };
 
-  // Keep completed bookings visible in active list until confirmed
   const activeBookings = bookings?.filter(
     b => !['cancelled_by_customer', 'cancelled_by_provider', 'no_show'].includes(b.status) &&
          !(b.status === 'completed' && b.customer_confirmation_status === 'confirmed')
@@ -246,7 +246,6 @@ export default function CustomerBookings() {
     <div className="max-w-4xl mx-auto px-4 py-8">
       <h1 className="text-2xl font-bold text-gray-900 mb-6">My Bookings</h1>
 
-      {/* Pill‑shaped solid filter tabs */}
       <div className="flex gap-2 overflow-x-auto pb-4 mb-6">
         {tabs.map(tab => (
           <button
@@ -283,7 +282,6 @@ export default function CustomerBookings() {
         </div>
       ) : (
         <>
-          {/* ACTIVE BOOKINGS */}
           {activeBookings?.map(booking => (
             <div
               key={booking.id}
@@ -299,7 +297,6 @@ export default function CustomerBookings() {
               />
 
               <div className="mt-4 flex flex-col sm:flex-row gap-4">
-                {/* Provider info */}
                 <div className="flex items-center gap-3 sm:w-48 flex-shrink-0">
                   {booking.provider_avatar ? (
                     <img src={booking.provider_avatar} alt="" className="w-12 h-12 rounded-full object-cover" />
@@ -316,7 +313,6 @@ export default function CustomerBookings() {
                   </div>
                 </div>
 
-                {/* Details */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-2 flex-wrap">
                     <span className="text-sm font-bold text-gray-800 font-mono tracking-wide">{booking.booking_number}</span>
@@ -343,7 +339,6 @@ export default function CustomerBookings() {
                   )}
                 </div>
 
-                {/* Actions */}
                 <div className="flex sm:flex-col items-center sm:items-end gap-2 sm:w-40 flex-shrink-0">
                   {booking.status === 'pending' && (
                     <button onClick={() => handleCancel(booking.id)}
@@ -374,7 +369,6 @@ export default function CustomerBookings() {
                     </>
                   )}
 
-                  {/* Review button – always visible for completed bookings */}
                   {booking.status === 'completed' && (
                     <Link href={`/provider/${booking.provider_id}?review=true&bookingId=${booking.id}`}
                       className="w-full flex items-center justify-center gap-1 px-3 py-2.5 bg-yellow-500 text-white rounded-full hover:bg-yellow-600 text-sm font-medium transition active:scale-95">
@@ -400,7 +394,6 @@ export default function CustomerBookings() {
                 </div>
               </div>
 
-              {/* Dispute modal inline */}
               {disputingId === booking.id && (
                 <div className="mt-4 p-4 bg-orange-50 rounded-xl border border-orange-200">
                   <h4 className="font-semibold text-orange-800 mb-2">Why are you disputing?</h4>
@@ -431,7 +424,6 @@ export default function CustomerBookings() {
             </div>
           ))}
 
-          {/* PAST BOOKINGS TOGGLE */}
           {pastBookings && pastBookings.length > 0 && (
             <div className="mt-6">
               <button
@@ -525,7 +517,6 @@ export default function CustomerBookings() {
         </>
       )}
 
-      {/* Flag Booking Modal */}
       {flagBookingId && (
         <FlagBookingModal
           isOpen={true}
