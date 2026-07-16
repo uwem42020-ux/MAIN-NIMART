@@ -101,7 +101,7 @@ export default function AdminUsers() {
     if (!confirm('Are you sure? This will permanently delete the user and ALL associated data (bookings, messages, portfolio, etc.).')) return;
 
     try {
-      const { error } = await supabase.rpc('admin_delete_user', { user_id: userId });
+      const { error } = await db.rpc('admin_delete_user', { user_id: userId });
 
       if (error) throw error;
       toast.success('User permanently deleted');
