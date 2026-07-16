@@ -3,7 +3,7 @@
 
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/supabase-any';          // ← changed
 import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 import { NimartSpinner } from '@/components/common/NimartSpinner';
@@ -19,13 +19,13 @@ export default function ProviderPortfolio() {
     queryKey: ['provider-portfolio', id],
     queryFn: async () => {
       if (!id) return [];
-      const { data, error } = await supabase
+      const { data, error } = await db                // ← changed
         .from('portfolio_images')
         .select('*')
         .eq('provider_id', id)
         .order('created_at', { ascending: false });
       if (error) throw error;
-      return data;
+      return (data as any[]) || [];                    // ← cast to any[]
     },
     enabled: !!id,
   });
@@ -49,7 +49,7 @@ export default function ProviderPortfolio() {
     );
   }
 
-  const currentImage = portfolio[currentIndex];
+  const currentImage = portfolio[currentIndex] as any;   // ← cast to any
 
   const goToPrevious = () => {
     setCurrentIndex(prev => (prev > 0 ? prev - 1 : prev));
@@ -108,7 +108,7 @@ export default function ProviderPortfolio() {
       {/* Thumbnail strip */}
       <div className="py-3 px-4 bg-black/60 backdrop-blur-sm">
         <div className="flex gap-2 overflow-x-auto hide-scrollbar justify-center">
-          {portfolio.map((img, idx) => (
+          {portfolio.map((img: any, idx: number) => (
             <button
               key={img.id}
               onClick={() => setCurrentIndex(idx)}
