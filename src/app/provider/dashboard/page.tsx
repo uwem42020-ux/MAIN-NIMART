@@ -39,7 +39,7 @@ interface ReferralStats {
 
 export default function ProviderDashboard() {
   const router = useRouter();
-  const { user, loading } = useAuth(); // now using loading from context
+  const { user, profile } = useAuth();
 
   const [providerData, setProviderData] = useState<any>(null);
   const [stats, setStats] = useState<DashboardStats>({
