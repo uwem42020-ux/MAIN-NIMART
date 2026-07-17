@@ -8,12 +8,18 @@ import { MobileBottomNav } from '@/components/common/MobileBottomNav';
 export const metadata = {
   title: "Nimart - Nigeria's Trusted Service Marketplace",
   description: 'Connect with verified professionals across Nigeria. Book trusted services for home, auto, beauty, and more.',
-  metadataBase: new URL('https://nimart.ng'), // ← resolves the warning
+  metadataBase: new URL('https://nimart.ng'),
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
+      <head>
+        {/* Prevent mobile/desktop HTML caching */}
+        <meta httpEquiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+        <meta httpEquiv="Pragma" content="no-cache" />
+        <meta httpEquiv="Expires" content="0" />
+      </head>
       <body className="min-h-screen bg-gray-50 flex flex-col">
         <Providers>
           <Header />

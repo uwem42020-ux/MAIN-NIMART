@@ -5,5 +5,11 @@
 [build.environment]
   SECRETS_SCAN_OMIT_PATHS = "public/firebase-messaging-sw.js"
 
+# Force browsers to always revalidate the main HTML (everything else is hashed by Next.js)
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
 [[plugins]]
   package = "@netlify/plugin-nextjs"

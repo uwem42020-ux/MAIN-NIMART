@@ -1,4 +1,7 @@
 // Firebase service worker for background push notifications
+// Version bump to force refresh when you deploy
+const CACHE_VERSION = 'nimart-v2';
+
 importScripts("https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js");
 importScripts("https://www.gstatic.com/firebasejs/10.9.0/firebase-messaging-compat.js");
 
@@ -13,6 +16,7 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
+// Background push notification handler
 messaging.onBackgroundMessage((payload) => {
   const { title, body } = payload.notification || {};
   self.registration.showNotification(title || "Nimart", {
@@ -21,4 +25,13 @@ messaging.onBackgroundMessage((payload) => {
     badge: "/logo.png",
     tag: payload.data?.tag || "default",
   });
+});
+
+// Force the waiting service worker to activate immediately and take over all pages
+self.addEventListener('install', (event) => {
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(clients.claim());
 });
