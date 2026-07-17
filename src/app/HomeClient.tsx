@@ -10,12 +10,12 @@ import { ProviderCardPortrait, type ProviderWithProfile } from '@/components/pro
 import { ProviderCardHorizontal } from '@/components/provider/ProviderCardHorizontal';
 import { useAuth } from '@/contexts/AuthContext';
 import { LocationDropdown } from '@/components/common/LocationDropdown';
-import { QuickLinksBanner } from '@/components/common/QuickLinksBanner';
 import { TopProvidersSlider } from '@/components/common/TopProvidersSlider';
 import { CategoryButtons } from '@/components/common/CategoryButtons';
 import { CategorySidebar } from '@/components/common/CategorySidebar';
 import { FindProvidersRadar } from '@/components/customer/FindProvidersRadar';
-import { MapPin, ChevronDown, Search, WifiOff, LayoutGrid, List } from 'lucide-react';
+import { PopularServicesSlider } from '@/components/home/PopularServicesSlider';
+import { MapPin, ChevronDown, Search, WifiOff, LayoutGrid, List, Crosshair } from 'lucide-react';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useLocationStore } from '@/stores/locationStore';
 import { useGeolocation } from '@/hooks/useGeolocation';
@@ -47,6 +47,8 @@ export function HomeClient({ initialProviders }: HomeClientProps) {
   const autoLocationApplied = useRef(false);
   const isOffline = useOffline();
   const [mounted, setMounted] = useState(false);
+
+  const cachedProvidersRef = useRef<ProviderWithProfile[]>(initialProviders);
 
   const [isClient, setIsClient] = useState(false);
   useEffect(() => { setIsClient(true); }, []);
@@ -95,7 +97,9 @@ export function HomeClient({ initialProviders }: HomeClientProps) {
     queryKey: ['featured-providers', userLat, userLng, stateFilter, lgaFilter],
     queryFn: async () => {
       const { data, error } = await db.rpc('get_featured_providers', { limit_count: 50 });
-      if (error || !data) return [] as ProviderWithProfile[];
+      if (error || !data) {
+        return cachedProvidersRef.current.length > 0 ? cachedProvidersRef.current : [] as ProviderWithProfile[];
+      }
 
       const providers: any[] = Array.isArray(data) ? data : [];
 
@@ -159,6 +163,7 @@ export function HomeClient({ initialProviders }: HomeClientProps) {
         result.sort((a, b) => (scoreMap.get(b.id) || 0) - (scoreMap.get(a.id) || 0));
       }
 
+      cachedProvidersRef.current = result;
       return result;
     },
     initialData: initialProviders,
@@ -279,50 +284,48 @@ export function HomeClient({ initialProviders }: HomeClientProps) {
   );
 
   const OfflineBanner = () => (
-    <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6 text-center mb-4">
-      <WifiOff className="h-12 w-12 text-yellow-600 mx-auto mb-3" />
-      <h3 className="font-semibold text-gray-900 mb-1">You're offline</h3>
-      <p className="text-gray-600 text-sm">Connect to the internet to load the latest providers.</p>
-      <p className="text-gray-500 text-xs mt-2">Previously loaded providers may still be visible below.</p>
+    <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 flex items-center gap-3 mb-4">
+      <WifiOff className="h-5 w-5 text-yellow-600 flex-shrink-0" />
+      <div>
+        <p className="text-sm font-medium text-yellow-800">You're offline</p>
+        <p className="text-xs text-yellow-600">Showing previously loaded providers. Connect to the internet for the latest updates.</p>
+      </div>
     </div>
   );
 
   const renderContent = () => {
     const show = isClient ? featuredProviders : initialProviders;
 
-    if (isClient && isLoading) {
+    if (isClient && isLoading && cachedProvidersRef.current.length === 0) {
       return <ProviderGridSkeleton />;
     }
 
-    if (!show?.length && mounted && isOffline) {
-      return <OfflineBanner />;
-    }
-
-    if (!show?.length) {
+    if (!show || show.length === 0) {
       return <NoProvidersBanner />;
     }
 
-    if (viewMode === 'grid') {
-      return (
-        <div className="columns-2 sm:columns-3 lg:columns-3 xl:columns-3 gap-4 pr-2">
-          {show.map((provider, index) => (
-            <div key={provider.id} className="mb-4 break-inside-avoid">
-              <ProviderCardPortrait
-                provider={provider}
-                imageLoading={index === 0 ? 'eager' : 'lazy'}
-              />
-            </div>
-          ))}
-        </div>
-      );
-    }
-
     return (
-      <div className="flex flex-col gap-3">
-        {show.map(provider => (
-          <ProviderCardHorizontal key={provider.id} provider={provider} />
-        ))}
-      </div>
+      <>
+        {isOffline && <OfflineBanner />}
+        {viewMode === 'grid' ? (
+          <div className="columns-2 sm:columns-3 lg:columns-3 xl:columns-3 gap-4 pr-2">
+            {show.map((provider, index) => (
+              <div key={provider.id} className="mb-4 break-inside-avoid">
+                <ProviderCardPortrait
+                  provider={provider}
+                  imageLoading={index === 0 ? 'eager' : 'lazy'}
+                />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {show.map(provider => (
+              <ProviderCardHorizontal key={provider.id} provider={provider} />
+            ))}
+          </div>
+        )}
+      </>
     );
   };
 
@@ -334,56 +337,63 @@ export function HomeClient({ initialProviders }: HomeClientProps) {
             Connect with professionals near you
           </p>
           <div className="bg-white/80 backdrop-blur-md rounded-lg shadow-sm border border-gray-200/50 p-4 max-w-3xl mx-auto">
-            <div className="flex flex-row justify-center md:justify-start gap-3">
-              <div className="relative flex-1 md:w-auto">
-                <button
-                  ref={locationButtonRef}
-                  onClick={() => setShowLocationDropdown(!showLocationDropdown)}
-                  className="w-full bg-white text-[#008751] border border-[#008751]/30 rounded-lg px-3 md:px-4 py-3 flex items-center justify-between gap-1 md:gap-2 hover:bg-green-50 transition"
-                >
-                  <div className="flex items-center gap-1 md:gap-2">
-                    <MapPin className="h-5 w-5 flex-shrink-0" />
-                    <span className="truncate">{locationLabel}</span>
-                  </div>
-                  <ChevronDown className="h-4 w-4 flex-shrink-0" />
-                </button>
-                {showLocationDropdown && (
-                  <LocationDropdown
-                    onSelectState={(id, name) => handleLocationSelect('state', id, name)}
-                    onSelectLga={(id, name) => handleLocationSelect('lga', id, `${name} LGA`)}
-                    onClear={clearLocation}
-                    onClose={() => setShowLocationDropdown(false)}
-                    preloadedStates={states}
-                    preloadedLgas={preloadedLgas}
-                    triggerRef={locationButtonRef}
-                  />
-                )}
-              </div>
-              <form
-                onSubmit={handleSearch}
-                className="flex bg-white rounded-lg overflow-hidden flex-1 md:flex-1 border border-[#008751]/30"
-              >
-                <div className="hidden md:flex items-center pl-3">
-                  <Search className="h-5 w-5 text-[#008751]" />
+            <div className="flex flex-col sm:flex-row justify-center md:justify-start gap-3">
+              <div className="flex flex-row gap-3 flex-1">
+                <div className="relative flex-1">
+                  <button
+                    ref={locationButtonRef}
+                    onClick={() => setShowLocationDropdown(!showLocationDropdown)}
+                    className="w-full bg-white text-[#008751] border border-[#008751]/30 rounded-lg px-3 md:px-4 py-3 flex items-center justify-between gap-1 md:gap-2 hover:bg-green-50 transition"
+                  >
+                    <div className="flex items-center gap-1 md:gap-2">
+                      <MapPin className="h-5 w-5 flex-shrink-0" />
+                      <span className="truncate">{locationLabel}</span>
+                    </div>
+                    <ChevronDown className="h-4 w-4 flex-shrink-0" />
+                  </button>
+                  {showLocationDropdown && (
+                    <LocationDropdown
+                      onSelectState={(id, name) => handleLocationSelect('state', id, name)}
+                      onSelectLga={(id, name) => handleLocationSelect('lga', id, `${name} LGA`)}
+                      onClear={clearLocation}
+                      onClose={() => setShowLocationDropdown(false)}
+                      preloadedStates={states}
+                      preloadedLgas={preloadedLgas}
+                      triggerRef={locationButtonRef}
+                    />
+                  )}
                 </div>
-                <input
-                  ref={searchInputRef}
-                  type="text"
-                  placeholder="I am looking for..."
-                  className="w-full px-3 py-3 text-gray-900 focus:outline-none text-sm md:text-base"
-                />
-                <button
-                  type="submit"
-                  className="bg-[#008751] hover:bg-green-700 text-white px-3 md:px-6 transition flex items-center justify-center"
+                <form
+                  onSubmit={handleSearch}
+                  className="flex bg-white rounded-lg overflow-hidden flex-1 border border-[#008751]/30"
                 >
-                  <Search className="h-5 w-5" />
-                  <span className="hidden md:inline ml-2">Search</span>
-                </button>
-              </form>
+                  <input
+                    ref={searchInputRef}
+                    type="text"
+                    placeholder="I am looking for..."
+                    className="w-full px-3 py-3 text-gray-900 focus:outline-none text-sm"
+                  />
+                  <button
+                    type="submit"
+                    className="bg-[#008751] hover:bg-green-700 text-white px-3 transition flex items-center justify-center"
+                  >
+                    <Search className="h-5 w-5" />
+                  </button>
+                </form>
+              </div>
+              <button
+                onClick={() => setRadarOpen(true)}
+                className="flex items-center justify-center gap-2 bg-purple-50 border border-purple-200 text-purple-700 rounded-lg px-4 py-3 hover:bg-purple-100 transition font-medium text-sm flex-shrink-0"
+              >
+                <Crosshair className="h-5 w-5 animate-spin" />
+                <span>Find Providers</span>
+              </button>
             </div>
           </div>
         </div>
       </section>
+
+      <PopularServicesSlider />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="hidden md:flex gap-6">
@@ -391,7 +401,6 @@ export function HomeClient({ initialProviders }: HomeClientProps) {
             <CategorySidebar providerCounts={providerCounts} subcategoryCounts={subcategoryCounts} />
           </div>
           <div className="flex-1">
-            <QuickLinksBanner onFindProviders={() => setRadarOpen(true)} />
             <TopProvidersSlider />
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-bold text-gray-900">
@@ -403,24 +412,10 @@ export function HomeClient({ initialProviders }: HomeClientProps) {
               </h2>
               <div className="flex items-center gap-2">
                 <div className="flex border border-gray-200 rounded-lg overflow-hidden">
-                  <button
-                    onClick={() => setViewMode('grid')}
-                    className={cn('p-2 text-gray-500 hover:text-primary-600', viewMode === 'grid' && 'bg-primary-50 text-primary-600')}
-                    title="Grid view"
-                  >
-                    <LayoutGrid className="h-5 w-5" />
-                  </button>
-                  <button
-                    onClick={() => setViewMode('list')}
-                    className={cn('p-2 text-gray-500 hover:text-primary-600', viewMode === 'list' && 'bg-primary-50 text-primary-600')}
-                    title="List view"
-                  >
-                    <List className="h-5 w-5" />
-                  </button>
+                  <button onClick={() => setViewMode('grid')} className={cn('p-2 text-gray-500 hover:text-primary-600', viewMode === 'grid' && 'bg-primary-50 text-primary-600')} title="Grid view"><LayoutGrid className="h-5 w-5" /></button>
+                  <button onClick={() => setViewMode('list')} className={cn('p-2 text-gray-500 hover:text-primary-600', viewMode === 'list' && 'bg-primary-50 text-primary-600')} title="List view"><List className="h-5 w-5" /></button>
                 </div>
-                <Link href="/search" className="text-primary-600 hover:text-primary-700 text-sm font-medium">
-                  View all →
-                </Link>
+                <Link href="/search" className="text-primary-600 hover:text-primary-700 text-sm font-medium">View all →</Link>
               </div>
             </div>
             {renderContent()}
@@ -428,7 +423,6 @@ export function HomeClient({ initialProviders }: HomeClientProps) {
         </div>
 
         <div className="block md:hidden">
-          <QuickLinksBanner onFindProviders={() => setRadarOpen(true)} />
           <TopProvidersSlider />
           <div className="mb-4 px-4">
             <CategoryButtons providerCounts={providerCounts} subcategoryCounts={subcategoryCounts} />
@@ -436,32 +430,14 @@ export function HomeClient({ initialProviders }: HomeClientProps) {
           <section>
             <div className="flex items-center justify-between mb-3 px-4">
               <h2 className="text-lg font-bold text-gray-900">
-                {lgaFilter
-                  ? `Providers in ${locationName}`
-                  : stateFilter
-                  ? `Providers in ${locationName}`
-                  : 'Recommended'}
+                {lgaFilter ? `Providers in ${locationName}` : stateFilter ? `Providers in ${locationName}` : 'Recommended'}
               </h2>
               <div className="flex items-center gap-2">
                 <div className="flex border border-gray-200 rounded-lg overflow-hidden">
-                  <button
-                    onClick={() => setViewMode('grid')}
-                    className={cn('p-2', viewMode === 'grid' && 'bg-primary-50 text-primary-600')}
-                    title="Grid view"
-                  >
-                    <LayoutGrid className="h-4 w-4" />
-                  </button>
-                  <button
-                    onClick={() => setViewMode('list')}
-                    className={cn('p-2', viewMode === 'list' && 'bg-primary-50 text-primary-600')}
-                    title="List view"
-                  >
-                    <List className="h-4 w-4" />
-                  </button>
+                  <button onClick={() => setViewMode('grid')} className={cn('p-2', viewMode === 'grid' && 'bg-primary-50 text-primary-600')} title="Grid view"><LayoutGrid className="h-4 w-4" /></button>
+                  <button onClick={() => setViewMode('list')} className={cn('p-2', viewMode === 'list' && 'bg-primary-50 text-primary-600')} title="List view"><List className="h-4 w-4" /></button>
                 </div>
-                <Link href="/search" className="text-xs text-primary-600 font-medium">
-                  View all →
-                </Link>
+                <Link href="/search" className="text-xs text-primary-600 font-medium">View all →</Link>
               </div>
             </div>
             {renderContent()}

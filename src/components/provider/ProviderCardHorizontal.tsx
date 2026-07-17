@@ -88,16 +88,13 @@ export const ProviderCardHorizontal = memo(function ProviderCardHorizontal({
     router.push(`/provider/${provider.id}?book=true`);
   };
 
-  // Prefetch route + data + component chunk on hover
+  // Prefetch route + data on hover
   const handleMouseEnter = () => {
     // Prefetch the route HTML
     const preloadLink = document.createElement('link');
     preloadLink.rel = 'prefetch';
     preloadLink.href = `/provider/${provider.id}`;
     document.head.appendChild(preloadLink);
-
-    // Prefetch the lazy component chunk (Next.js App Router path)
-    import('@/app/provider/[id]/page').catch(() => {});
 
     // Prefetch profile data
     queryClient.prefetchQuery({

@@ -1,10 +1,12 @@
 // src/app/sitemap.ts
 import { MetadataRoute } from 'next';
-import { supabaseServer } from '@/lib/supabase-server';
+import { db } from '@/lib/supabase-any';
+import { TIERS } from '@/data/categories';
 
 const BASE_URL = 'https://nimart.ng';
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  // Static pages
   const staticPages = [
     { url: `${BASE_URL}/`, priority: 1, changeFrequency: 'daily' as const },
     { url: `${BASE_URL}/search`, priority: 0.9, changeFrequency: 'daily' as const },
@@ -23,12 +25,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   ];
 
   // Provider pages
-  const { data: providers } = await supabaseServer
+  const { data: providers } = await db
     .from('providers')
     .select('id, updated_at')
     .eq('is_available', true);
 
-  const providerUrls = (providers || []).map((p) => ({
+  const providerUrls = ((providers || []) as any[]).map((p) => ({
     url: `${BASE_URL}/provider/${p.id}`,
     lastModified: p.updated_at ? new Date(p.updated_at) : new Date(),
     changeFrequency: 'weekly' as const,
@@ -36,39 +38,49 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   }));
 
   // Blog posts
-  const { data: blogPosts } = await supabaseServer
+  const { data: blogPosts } = await db
     .from('blog_posts')
     .select('slug, updated_at')
     .eq('published', true);
 
-  const blogUrls = (blogPosts || []).map((p) => ({
+  const blogUrls = ((blogPosts || []) as any[]).map((p) => ({
     url: `${BASE_URL}/blog/${p.slug}`,
     lastModified: p.updated_at ? new Date(p.updated_at) : new Date(),
     changeFrequency: 'monthly' as const,
     priority: 0.6,
   }));
 
-  // Service‑location pages (category + LGA)
-  const { data: catLgaPairs } = await supabaseServer
-    .from('providers')
-    .select('selected_category_slug, profiles!inner(lga_id)')
-    .eq('is_available', true)
-    .not('profiles.lga_id', 'is', null);
-
-  const pairs = new Set<string>();
-  (catLgaPairs || []).forEach((row: any) => {
-    const lgaId = row.profiles?.lga_id;
-    if (row.selected_category_slug && lgaId) {
-      pairs.add(`/services/${row.selected_category_slug}/in/${lgaId}`);
-    }
-  });
-
-  const serviceLocationUrls = Array.from(pairs).map((path) => ({
-    url: `${BASE_URL}${path}`,
+  // Tier pages (e.g., /category/automotive, /category/home-property)
+  const tierUrls = TIERS.map((tier) => ({
+    url: `${BASE_URL}/category/${tier.slug}`,
     lastModified: new Date(),
     changeFrequency: 'weekly' as const,
-    priority: 0.7,
+    priority: 0.6,
   }));
 
-  return [...staticPages, ...providerUrls, ...blogUrls, ...serviceLocationUrls];
+  // ALL LGA-category combos (even empty ones — each page attracts "Be the first" traffic)
+  const { data: categories } = await db
+    .from('providers')
+    .select('selected_category_slug')
+    .eq('is_available', true)
+    .not('selected_category_slug', 'is', null);
+
+  const { data: lgas } = await db
+    .from('lga_centers')
+    .select('lga_id')
+    .not('lga_id', 'is', null);
+
+  const uniqueCategories = [...new Set(((categories || []) as any[]).map((c: any) => c.selected_category_slug))];
+  const uniqueLgas = [...new Set(((lgas || []) as any[]).map((l: any) => l.lga_id))];
+
+  const serviceLocationUrls = uniqueCategories.flatMap((catSlug: string) =>
+    uniqueLgas.map((lgaId: number) => ({
+      url: `${BASE_URL}/services/${catSlug}/in/${lgaId}`,
+      lastModified: new Date(),
+      changeFrequency: 'weekly' as const,
+      priority: 0.5,
+    }))
+  );
+
+  return [...staticPages, ...providerUrls, ...blogUrls, ...tierUrls, ...serviceLocationUrls];
 }

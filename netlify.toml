@@ -5,11 +5,24 @@
 [build.environment]
   SECRETS_SCAN_OMIT_PATHS = "public/firebase-messaging-sw.js"
 
-# Force browsers to always revalidate the main HTML (everything else is hashed by Next.js)
+# Force browsers to always revalidate the main HTML
 [[headers]]
   for = "/*"
   [headers.values]
     Cache-Control = "public, max-age=0, must-revalidate"
+
+# Redirect all HTTP traffic to HTTPS (non‑www to www if needed)
+[[redirects]]
+  from = "http://*"
+  to = "https://:splat"
+  status = 301
+  force = true
+
+# Redirect old /marketplace path to /search
+[[redirects]]
+  from = "/marketplace"
+  to = "/search"
+  status = 301
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"

@@ -33,7 +33,6 @@ export interface ProviderWithProfile extends ProviderRow {
 interface ProviderCardPortraitProps {
   provider: ProviderWithProfile;
   className?: string;
-  /** Use "eager" for the first card (LCP) – overrides default "lazy" */
   imageLoading?: 'lazy' | 'eager';
 }
 
@@ -120,9 +119,6 @@ export const ProviderCardPortrait = memo(function ProviderCardPortrait({
     preloadLink.rel = 'prefetch';
     preloadLink.href = `/provider/${provider.id}`;
     document.head.appendChild(preloadLink);
-
-    // Corrected: prefetch the Next.js App Router page
-    import('@/app/provider/[id]/page').catch(() => {});
 
     queryClient.prefetchQuery({
       queryKey: ['provider', provider.id],

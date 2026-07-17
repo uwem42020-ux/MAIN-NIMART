@@ -26,21 +26,27 @@ export function AdminRoute({ children }: AdminRouteProps) {
         return;
       }
 
-      await new Promise(resolve => setTimeout(resolve, 100));
-
       const { data, error } = await db.rpc('is_admin', { user_id: user.id } as any);
 
       if (error) {
         console.error('Admin verification error:', error);
         setIsAdmin(false);
       } else {
-        setIsAdmin(data as boolean || false);
+        // The RPC returns true/false directly
+        setIsAdmin(data === true);
       }
       setChecking(false);
     }
 
     verifyAdmin();
   }, [user, authLoading]);
+
+  // Redirect in useEffect, not during render
+  useEffect(() => {
+    if (!checking && (!user || !isAdmin)) {
+      router.replace('/');
+    }
+  }, [checking, user, isAdmin, router]);
 
   if (authLoading || checking) {
     return (
@@ -50,8 +56,8 @@ export function AdminRoute({ children }: AdminRouteProps) {
     );
   }
 
+  // Don't render children while redirecting
   if (!user || !isAdmin) {
-    router.replace('/');
     return null;
   }
 

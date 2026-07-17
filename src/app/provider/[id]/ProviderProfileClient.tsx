@@ -31,6 +31,7 @@ import {
   LayoutGrid,
   List,
   Maximize2,
+  ExternalLink,
 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import toast from 'react-hot-toast';
@@ -458,6 +459,7 @@ export function ProviderProfileClient({
   const lgaName = provider?.profile?.lga_name || 'your area';
   const stateName = (provider?.profile as any)?.state_name || 'Nigeria';
   const providerName = provider?.business_name || provider?.profile?.full_name || 'Provider';
+  const providerLgaId = provider?.profile?.lga_id;
 
   const shortDescription = provider?.description
     ? provider.description.length > 150
@@ -474,6 +476,64 @@ export function ProviderProfileClient({
   const Card = ({ children, className }: { children: React.ReactNode; className?: string }) => (
     <div className={cn('bg-white rounded-2xl shadow-sm border border-gray-100 p-6', className)}>
       {children}
+    </div>
+  );
+
+  // Related links section component (used in both mobile and desktop)
+  const RelatedServicesSection = () => (
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-6">
+      <h2 className="text-base sm:text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+        <ExternalLink className="h-4 w-4 sm:h-5 sm:w-5 text-primary-600" />
+        Explore More
+      </h2>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {provider?.selected_category_slug && providerLgaId && (
+          <Link
+            href={`/services/${provider.selected_category_slug}/in/${providerLgaId}`}
+            className="flex items-center justify-between p-3 bg-primary-50 rounded-xl hover:bg-primary-100 transition group"
+          >
+            <div>
+              <p className="text-sm font-semibold text-primary-700">More {categoryName} in {lgaName}</p>
+              <p className="text-xs text-primary-600/70">See all {categoryName.toLowerCase()} near you</p>
+            </div>
+            <ArrowRight className="h-4 w-4 text-primary-600 group-hover:translate-x-1 transition-transform" />
+          </Link>
+        )}
+        {providerLgaId && (
+          <Link
+            href={`/search?lga=${providerLgaId}`}
+            className="flex items-center justify-between p-3 bg-green-50 rounded-xl hover:bg-green-100 transition group"
+          >
+            <div>
+              <p className="text-sm font-semibold text-green-700">Other services in {lgaName}</p>
+              <p className="text-xs text-green-600/70">Browse all providers in your area</p>
+            </div>
+            <ArrowRight className="h-4 w-4 text-green-600 group-hover:translate-x-1 transition-transform" />
+          </Link>
+        )}
+        {provider?.selected_category_slug && (
+          <Link
+            href={`/search?category=${provider.selected_category_slug}`}
+            className="flex items-center justify-between p-3 bg-amber-50 rounded-xl hover:bg-amber-100 transition group"
+          >
+            <div>
+              <p className="text-sm font-semibold text-amber-700">{categoryName} in other areas</p>
+              <p className="text-xs text-amber-600/70">Find {categoryName.toLowerCase()} across Nigeria</p>
+            </div>
+            <ArrowRight className="h-4 w-4 text-amber-600 group-hover:translate-x-1 transition-transform" />
+          </Link>
+        )}
+        <Link
+          href="/search"
+          className="flex items-center justify-between p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition group"
+        >
+          <div>
+            <p className="text-sm font-semibold text-gray-700">All services</p>
+            <p className="text-xs text-gray-500">Browse all categories and providers</p>
+          </div>
+          <ArrowRight className="h-4 w-4 text-gray-600 group-hover:translate-x-1 transition-transform" />
+        </Link>
+      </div>
     </div>
   );
 
@@ -671,6 +731,10 @@ export function ProviderProfileClient({
           </Card>
         </div>
 
+        <div className="px-4 mb-6">
+          <RelatedServicesSection />
+        </div>
+
         <div className="px-4 mb-8">
           <Card>
             <h2 className="text-base font-bold text-gray-900 mb-3 flex items-center gap-2">Reviews</h2>
@@ -846,6 +910,10 @@ export function ProviderProfileClient({
             <h2 className="text-lg font-bold text-gray-900 mb-4">Reviews</h2>
             <ReviewsList reviews={(provider?.reviews || []) as any} />
           </Card>
+        </div>
+
+        <div className="mb-8">
+          <RelatedServicesSection />
         </div>
 
         {similarProviders && similarProviders.length > 0 && (

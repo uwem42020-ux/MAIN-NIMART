@@ -1,13 +1,13 @@
 // src/app/admin/blog/page.tsx
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { db } from '@/lib/supabase-any';
 import { SEO } from '@/components/common/SEO';
 import { NimartSpinner } from '@/components/common/NimartSpinner';
-import { Plus, Edit, Trash2, Save, X, Eye, EyeOff } from 'lucide-react';
+import { Plus, Edit, Trash2, Save, X, Eye, EyeOff, Image, Upload, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 interface BlogPost {
@@ -41,6 +41,10 @@ export default function AdminBlog() {
   const queryClient = useQueryClient();
   const [editingPost, setEditingPost] = useState<Partial<BlogPost> | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [uploadingFeatured, setUploadingFeatured] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const featuredInputRef = useRef<HTMLInputElement>(null);
 
   const { data: posts, isLoading } = useQuery({
     queryKey: ['admin-blog-posts'],
@@ -116,6 +120,72 @@ export default function AdminBlog() {
     } else {
       toast.success(post.published ? 'Post unpublished' : 'Post published');
       queryClient.invalidateQueries({ queryKey: ['admin-blog-posts'] });
+    }
+  };
+
+  // Upload an inline image and insert Markdown into content
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !editingPost) return;
+
+    setUploadingImage(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `blog-images/${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(fileName, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(fileName);
+      const imageUrl = urlData.publicUrl;
+      const markdown = `![${file.name}](${imageUrl})`;
+
+      setEditingPost({
+        ...editingPost,
+        content: (editingPost.content || '') + '\n' + markdown + '\n',
+      });
+
+      toast.success('Image uploaded and inserted!');
+    } catch (error: any) {
+      toast.error('Upload failed: ' + error.message);
+    } finally {
+      setUploadingImage(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  // Upload featured image
+  const handleFeaturedUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !editingPost) return;
+
+    setUploadingFeatured(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `blog-featured/${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(fileName, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(fileName);
+
+      setEditingPost({
+        ...editingPost,
+        featured_image: urlData.publicUrl,
+      });
+
+      toast.success('Featured image uploaded!');
+    } catch (error: any) {
+      toast.error('Upload failed: ' + error.message);
+    } finally {
+      setUploadingFeatured(false);
+      if (featuredInputRef.current) featuredInputRef.current.value = '';
     }
   };
 
@@ -274,18 +344,61 @@ export default function AdminBlog() {
                   />
                 </div>
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Featured Image URL</label>
-                  <input
-                    type="text"
-                    value={editingPost.featured_image || ''}
-                    onChange={(e) => setEditingPost({ ...editingPost, featured_image: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:outline-none"
-                  />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Featured Image</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={editingPost.featured_image || ''}
+                      onChange={(e) => setEditingPost({ ...editingPost, featured_image: e.target.value })}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:outline-none"
+                      placeholder="Paste URL or upload"
+                    />
+                    <input
+                      ref={featuredInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleFeaturedUpload}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => featuredInputRef.current?.click()}
+                      disabled={uploadingFeatured}
+                      className="px-4 py-2 bg-gray-100 border border-gray-300 rounded-lg hover:bg-gray-200 flex items-center gap-2 text-sm"
+                    >
+                      {uploadingFeatured ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                      Upload
+                    </button>
+                  </div>
+                  {editingPost.featured_image && (
+                    <img src={editingPost.featured_image} alt="Featured preview" className="mt-2 h-24 rounded-lg object-cover" />
+                  )}
                 </div>
               </div>
 
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Content (Markdown) *</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-sm font-medium text-gray-700">Content (Markdown) *</label>
+                  <div className="flex gap-2">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleImageUpload}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploadingImage}
+                      className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 border border-gray-300 rounded-lg hover:bg-gray-200 text-xs font-medium text-gray-700"
+                    >
+                      {uploadingImage ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Image className="h-3.5 w-3.5" />}
+                      {uploadingImage ? 'Uploading...' : 'Insert Image'}
+                    </button>
+                    <span className="text-xs text-gray-400 self-center">or paste image URL: ![alt](url)</span>
+                  </div>
+                </div>
                 <textarea
                   rows={16}
                   value={editingPost.content || ''}
