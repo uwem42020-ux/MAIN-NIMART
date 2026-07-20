@@ -25,7 +25,6 @@ import { useState, useRef, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { db } from '@/lib/supabase-any';
 import { cn } from '@/lib/utils';
-import { OptimizedImage } from '@/components/common/OptimizedImage';
 import toast from 'react-hot-toast';
 
 // Solid icons
@@ -322,10 +321,12 @@ export function Header() {
                     <span className="relative flex items-center justify-center w-9 h-9">
                       <span className="absolute inset-0 rounded-full bg-[#008751]" />
                       {profile?.avatar_url ? (
-                        <OptimizedImage
+                        <img
                           src={profile.avatar_url}
                           alt={profile.full_name || 'User'}
                           className="relative w-8 h-8 rounded-full object-cover ring-2 ring-white"
+                          width={32}
+                          height={32}
                         />
                       ) : (
                         <svg className="relative w-5 h-5 text-white" aria-hidden="true">

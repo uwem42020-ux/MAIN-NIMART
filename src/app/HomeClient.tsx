@@ -27,9 +27,11 @@ import { fetchProviderProfile } from '@/lib/queries';
 
 interface HomeClientProps {
   initialProviders: ProviderWithProfile[];
+  initialPopularCombos: { cat: string; lga: string; lgaId: number; count: number }[];
+  initialTopProviders: any[];
 }
 
-export function HomeClient({ initialProviders }: HomeClientProps) {
+export function HomeClient({ initialProviders, initialPopularCombos, initialTopProviders }: HomeClientProps) {
   const { profile } = useAuth();
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -158,10 +160,21 @@ export function HomeClient({ initialProviders }: HomeClientProps) {
         }
       }
 
-      if (smartSortData?.length) {
-        const scoreMap = new Map(smartSortData.map(s => [s.provider_id, s.score]));
-        result.sort((a, b) => (scoreMap.get(b.id) || 0) - (scoreMap.get(a.id) || 0));
-      }
+      result.sort((a, b) => {
+        const now = new Date();
+        const aBoosted = a.boost_until && new Date(a.boost_until) > now ? 1 : 0;
+        const bBoosted = b.boost_until && new Date(b.boost_until) > now ? 1 : 0;
+        if (aBoosted !== bBoosted) return bBoosted - aBoosted;
+
+        if (smartSortData?.length) {
+          const scoreMap = new Map(smartSortData.map(s => [s.provider_id, s.score]));
+          const aScore = scoreMap.get(a.id) || 0;
+          const bScore = scoreMap.get(b.id) || 0;
+          return bScore - aScore;
+        }
+
+        return (b.average_rating ?? 0) - (a.average_rating ?? 0);
+      });
 
       cachedProvidersRef.current = result;
       return result;
@@ -295,18 +308,20 @@ export function HomeClient({ initialProviders }: HomeClientProps) {
 
   const renderContent = () => {
     const show = isClient ? featuredProviders : initialProviders;
+    const isClientMounted = isClient && mounted;
 
     if (isClient && isLoading && cachedProvidersRef.current.length === 0) {
       return <ProviderGridSkeleton />;
     }
 
     if (!show || show.length === 0) {
+      if (isClientMounted && isOffline) return <OfflineBanner />;
       return <NoProvidersBanner />;
     }
 
     return (
       <>
-        {isOffline && <OfflineBanner />}
+        {isClientMounted && isOffline && <OfflineBanner />}
         {viewMode === 'grid' ? (
           <div className="columns-2 sm:columns-3 lg:columns-3 xl:columns-3 gap-4 pr-2">
             {show.map((provider, index) => (
@@ -393,7 +408,7 @@ export function HomeClient({ initialProviders }: HomeClientProps) {
         </div>
       </section>
 
-      <PopularServicesSlider />
+      <PopularServicesSlider initialCombos={initialPopularCombos} />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="hidden md:flex gap-6">
@@ -401,7 +416,7 @@ export function HomeClient({ initialProviders }: HomeClientProps) {
             <CategorySidebar providerCounts={providerCounts} subcategoryCounts={subcategoryCounts} />
           </div>
           <div className="flex-1">
-            <TopProvidersSlider />
+            <TopProvidersSlider initialData={initialTopProviders} />
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-bold text-gray-900">
                 {lgaFilter
@@ -423,7 +438,7 @@ export function HomeClient({ initialProviders }: HomeClientProps) {
         </div>
 
         <div className="block md:hidden">
-          <TopProvidersSlider />
+          <TopProvidersSlider initialData={initialTopProviders} />
           <div className="mb-4 px-4">
             <CategoryButtons providerCounts={providerCounts} subcategoryCounts={subcategoryCounts} />
           </div>

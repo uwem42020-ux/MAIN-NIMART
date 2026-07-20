@@ -71,10 +71,14 @@ const SkeletonCard = () => (
 );
 
 /* ---------- component ---------- */
-export function TopProvidersSlider() {
-  const [isOffline, setIsOffline] = useState(!navigator.onLine);
+export function TopProvidersSlider({ initialData = [] }: { initialData?: any[] }) {
+  const [isOffline, setIsOffline] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setIsOffline(!navigator.onLine);
+    setMounted(true);
+
     const handleOnline = () => setIsOffline(false);
     const handleOffline = () => setIsOffline(true);
     window.addEventListener('online', handleOnline);
@@ -141,13 +145,14 @@ export function TopProvidersSlider() {
         throw err;
       }
     },
+    initialData: initialData.length > 0 ? initialData : undefined,
     staleTime: 1000 * 60 * 60 * 6,
     gcTime: 1000 * 60 * 60 * 24,
     retry: 1,
     placeholderData: loadFromCache('top-providers-cache'),
   });
 
-  if (isLoading && !topProviders) {
+  if (isLoading && !topProviders && initialData.length === 0) {
     return (
       <div className="mb-6 px-2 sm:px-6 lg:px-8">
         <div className="inline-block bg-[#008751] text-white text-sm font-semibold px-4 py-1.5 rounded-full mb-3">
@@ -169,7 +174,7 @@ export function TopProvidersSlider() {
     <div className="mb-6 px-2 sm:px-6 lg:px-8">
       <div className="inline-block bg-[#008751] text-white text-sm font-semibold px-4 py-1.5 rounded-full mb-3">
         Top Providers
-        {isOffline && <span className="ml-2 text-xs text-white/80">(Offline mode)</span>}
+        {mounted && isOffline && <span className="ml-2 text-xs text-white/80">(Offline mode)</span>}
       </div>
       <div className="flex gap-3 overflow-x-auto no-scrollbar snap-x snap-mandatory pb-2">
         {displayData.map((provider: any, index: number) => {
@@ -177,7 +182,7 @@ export function TopProvidersSlider() {
           const isVerified = prof.is_verified;
           const isBoosted = provider.isBoosted;
           const bgImage = prof.avatar_url || null;
-          const isFirst = index === 0;
+          const isFirstThree = index <= 2;
 
           return (
             <Link
@@ -190,15 +195,25 @@ export function TopProvidersSlider() {
             >
               <div className="rounded-xl overflow-hidden bg-white shadow-sm">
                 <div className="relative w-full aspect-[4/5] bg-gray-100">
-                  {bgImage ? (
+                  {bgImage && isFirstThree ? (
+                    <img
+                      src={bgImage}
+                      alt={provider.business_name || 'Provider'}
+                      className="absolute inset-0 w-full h-full object-cover"
+                      loading="eager"
+                      fetchPriority="high"
+                      width={160}
+                      height={200}
+                    />
+                  ) : bgImage ? (
                     <OptimizedImage
                       src={bgImage}
                       alt={provider.business_name || 'Provider'}
                       className="absolute inset-0 w-full h-full object-cover"
                       width={160}
                       height={200}
-                      loading={isFirst ? 'eager' : 'lazy'}
-                      fetchpriority={isFirst ? 'high' : 'auto'}
+                      loading="lazy"
+                      fetchpriority="auto"
                     />
                   ) : (
                     <div className="absolute inset-0 bg-gradient-to-br from-primary-100 to-primary-200" />

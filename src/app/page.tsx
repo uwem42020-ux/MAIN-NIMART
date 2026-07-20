@@ -1,7 +1,7 @@
 // app/page.tsx
 import { Suspense } from 'react';
 import { HomeClient } from './HomeClient';
-import { fetchInitialProviders } from '@/lib/serverQueries';
+import { fetchInitialProviders, fetchPopularCombos, fetchTopProviders } from '@/lib/serverQueries';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
@@ -58,6 +58,8 @@ const jsonLd = {
 
 export default async function HomePage() {
   const initialProviders = await fetchInitialProviders();
+  const initialPopularCombos = await fetchPopularCombos();
+  const initialTopProviders = await fetchTopProviders();
 
   return (
     <>
@@ -72,7 +74,11 @@ export default async function HomePage() {
           </div>
         }
       >
-        <HomeClient initialProviders={initialProviders} />
+        <HomeClient
+          initialProviders={initialProviders}
+          initialPopularCombos={initialPopularCombos}
+          initialTopProviders={initialTopProviders}
+        />
       </Suspense>
     </>
   );

@@ -1,9 +1,7 @@
 // src/app/layout.tsx
 import '@/styles/globals.css';
-import { Header } from '@/components/common/Header';
-import { Footer } from '@/components/common/Footer';
 import { Providers } from '@/components/Providers';
-import { MobileBottomNav } from '@/components/common/MobileBottomNav';
+import { createServerSupabase } from '@/lib/supabase-server';
 
 export const metadata = {
   title: "Nimart - Nigeria's Trusted Service Marketplace",
@@ -11,21 +9,30 @@ export const metadata = {
   metadataBase: new URL('https://nimart.ng'),
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const supabase = await createServerSupabase();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  let initialProfile = null;
+  if (user) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role, is_verified, avatar_url, full_name')
+      .eq('id', user.id)
+      .single();
+    initialProfile = profile;
+  }
+
   return (
     <html lang="en">
       <head>
-        {/* Prevent mobile/desktop HTML caching */}
         <meta httpEquiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
         <meta httpEquiv="Pragma" content="no-cache" />
         <meta httpEquiv="Expires" content="0" />
       </head>
       <body className="min-h-screen bg-gray-50 flex flex-col">
-        <Providers>
-          <Header />
-          <main className="flex-1">{children}</main>
-          <Footer />
-          <MobileBottomNav />
+        <Providers initialUser={user} initialProfile={initialProfile}>
+          {children}
         </Providers>
       </body>
     </html>

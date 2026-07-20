@@ -74,7 +74,7 @@ const categoryIcons: Record<string, string> = {
 
 const defaultIcon = '/auto/vehicle.png';
 
-export function PopularServicesSlider() {
+export function PopularServicesSlider({ initialCombos = [] }: { initialCombos?: { cat: string; lga: string; lgaId: number; count: number }[] }) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const { data: combos } = useQuery({
@@ -112,11 +112,12 @@ export function PopularServicesSlider() {
       return Array.from(countMap.entries())
         .map(([key, count]) => {
           const [cat, lga, lgaId] = key.split('||');
-          return { cat, lga, lgaId, count };
+          return { cat, lga, lgaId: parseInt(lgaId), count };
         })
         .sort((a, b) => b.count - a.count)
         .slice(0, 8);
     },
+    initialData: initialCombos,
     staleTime: 1000 * 60 * 30,
   });
 

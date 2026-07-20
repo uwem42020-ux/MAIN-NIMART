@@ -6,21 +6,36 @@ import { AuthProvider } from '@/contexts/AuthContext';
 import { NotificationProvider } from '@/contexts/NotificationContext';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import { UpdateNotification } from '@/components/common/UpdateNotification';
+import { Header } from '@/components/common/Header';
+import { Footer } from '@/components/common/Footer';
+import { MobileBottomNav } from '@/components/common/MobileBottomNav';
+import { InstallPrompt } from '@/components/common/InstallPrompt';
 import { Toaster } from 'react-hot-toast';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 1000 * 60 * 5,
-      gcTime: 1000 * 60 * 10,
-      retry: 1,
-      refetchOnWindowFocus: false,
-    },
-  },
-});
+export function Providers({
+  children,
+  initialUser,
+  initialProfile,
+}: {
+  children: React.ReactNode;
+  initialUser: any;
+  initialProfile: any;
+}) {
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            staleTime: 1000 * 60 * 5,
+            gcTime: 1000 * 60 * 10,
+            retry: 1,
+            refetchOnWindowFocus: false,
+          },
+        },
+      })
+  );
 
-export function Providers({ children }: { children: React.ReactNode }) {
   // Firebase lazy loading (after idle)
   useEffect(() => {
     const timeout = setTimeout(async () => {
@@ -58,23 +73,27 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthProvider>
+      <AuthProvider initialUser={initialUser} initialProfile={initialProfile}>
         <NotificationProvider>
           <UpdateNotification />
+          <Header />
+          <main className="flex-1">{children}</main>
+          <Footer />
+          <MobileBottomNav />
+          <InstallPrompt />
           <ErrorBoundary>
-            {children}
+            <Toaster
+              position="top-center"
+              toastOptions={{
+                duration: 4000,
+                style: { background: '#363636', color: '#fff' },
+                success: {
+                  duration: 3000,
+                  iconTheme: { primary: '#008751', secondary: '#fff' },
+                },
+              }}
+            />
           </ErrorBoundary>
-          <Toaster
-            position="top-center"
-            toastOptions={{
-              duration: 4000,
-              style: { background: '#363636', color: '#fff' },
-              success: {
-                duration: 3000,
-                iconTheme: { primary: '#008751', secondary: '#fff' },
-              },
-            }}
-          />
         </NotificationProvider>
       </AuthProvider>
     </QueryClientProvider>
