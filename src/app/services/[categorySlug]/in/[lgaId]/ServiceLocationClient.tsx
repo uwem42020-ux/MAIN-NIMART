@@ -5,6 +5,8 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { db } from '@/lib/supabase-any';
+import { useAuth } from '@/contexts/AuthContext';
+import { calculateDistance } from '@/lib/distance';
 import { ProviderCardPortrait } from '@/components/provider/ProviderCardPortrait';
 import { ProviderCardHorizontal } from '@/components/provider/ProviderCardHorizontal';
 import { Breadcrumbs } from '@/components/common/Breadcrumbs';
@@ -40,10 +42,11 @@ interface ServiceLocationClientProps {
 }
 
 export function ServiceLocationClient({ categorySlug, lgaId, lgaData }: ServiceLocationClientProps) {
+  const { user, profile } = useAuth();
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
   const { data, isLoading } = useQuery({
-    queryKey: ['service-location', categorySlug, lgaId],
+    queryKey: ['service-location', categorySlug, lgaId, profile?.lat, profile?.lng],
     queryFn: async () => {
       if (!categorySlug || !lgaId) return null;
 
@@ -103,20 +106,30 @@ export function ServiceLocationClient({ categorySlug, lgaId, lgaData }: ServiceL
         cur.count += 1;
       });
 
+      // User location for distance calculation
+      const userLat = profile?.lat ?? null;
+      const userLng = profile?.lng ?? null;
+
       const enriched = providersList.map((provider: any) => {
-        const profile = profilesMap.get(provider.id) || null;
+        const providerProfile = profilesMap.get(provider.id) || null;
         const images = imagesMap.get(provider.id) || [];
         const reviewStats = reviewsMap.get(provider.id);
         const avgRating = reviewStats ? reviewStats.sum / reviewStats.count : 0;
 
+        // Calculate distance if user location and provider location exist
+        let distance: number | null = null;
+        if (userLat != null && userLng != null && providerProfile?.lat != null && providerProfile?.lng != null) {
+          distance = calculateDistance(userLat, userLng, providerProfile.lat, providerProfile.lng);
+        }
+
         return {
           ...provider,
-          profile,
+          profile: providerProfile,
           portfolio_images: images,
           average_rating: avgRating,
           review_count: reviewStats?.count || 0,
-          distance: null,
-          lastSignInAt: profile?.updated_at || null,
+          distance,
+          lastSignInAt: providerProfile?.updated_at || null,
           is_available_now: provider.status === 'available',
         };
       });
@@ -156,6 +169,20 @@ export function ServiceLocationClient({ categorySlug, lgaId, lgaData }: ServiceL
     );
   }
 
+  // Smart join link for hero section and empty state
+  const getJoinLink = () => {
+    if (!user) return '/auth/signup?role=provider';
+    if (profile?.role === 'provider') return '/provider/dashboard';
+    // logged in but not a provider – still send to signup? better: could switch role, but for now signup page handles it
+    return '/auth/signup?role=provider';
+  };
+
+  const getJoinText = () => {
+    if (!user) return `Are you a ${categoryName.toLowerCase()}? Join Nimart`;
+    if (profile?.role === 'provider') return 'Go to your Dashboard';
+    return `Become a ${categoryName.toLowerCase()}`;
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <Breadcrumbs items={breadcrumbItems} />
@@ -175,11 +202,13 @@ export function ServiceLocationClient({ categorySlug, lgaId, lgaData }: ServiceL
             Search & Filter
             <ArrowRight className="h-4 w-4" />
           </Link>
+
+          {/* Smart join button */}
           <Link
-            href="/auth/signup?role=provider"
+            href={getJoinLink()}
             className="inline-flex items-center gap-2 bg-white/20 text-white px-5 py-2.5 rounded-xl font-semibold text-sm hover:bg-white/30 transition border border-white/30"
           >
-            Are you a {categoryName.toLowerCase()}? Join Nimart
+            {getJoinText()}
           </Link>
         </div>
       </div>
@@ -212,8 +241,8 @@ export function ServiceLocationClient({ categorySlug, lgaId, lgaData }: ServiceL
           <p className="mt-2 text-gray-500 max-w-md mx-auto">
             There are no {categoryName.toLowerCase()} listed in {lgaName} yet. If you're a professional in this area, join Nimart and start getting bookings today.
           </p>
-          <Link href="/auth/signup?role=provider" className="mt-6 inline-flex items-center gap-2 bg-primary-600 text-white px-6 py-3 rounded-xl hover:bg-primary-700 transition font-semibold">
-            Join as a Provider
+          <Link href={getJoinLink()} className="mt-6 inline-flex items-center gap-2 bg-primary-600 text-white px-6 py-3 rounded-xl hover:bg-primary-700 transition font-semibold">
+            {getJoinText()}
             <ArrowRight className="h-5 w-5" />
           </Link>
         </div>
