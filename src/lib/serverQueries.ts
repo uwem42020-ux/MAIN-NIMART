@@ -61,14 +61,35 @@ export async function fetchSearchProviders(searchParams: {
     const lgaNum = parseInt(lga);
     filtered = filtered.filter(p => p.profile?.lga_id === lgaNum);
   } else if (state) {
-    const { data: lgasInState } = await db
-      .from('lga_centers')
-      .select('lga_id')
-      .eq('state_id', parseInt(state));
+    // state can be an ID (number) or a name (e.g. "FCT")
+    let stateId: number | null = null;
+    const parsed = parseInt(state);
+    if (!isNaN(parsed)) {
+      stateId = parsed;
+    } else {
+      // look up state ID by name
+      const { data: stateData } = await db
+        .from('lga_centers')
+        .select('state_id')
+        .eq('state_name', state)
+        .limit(1);
+      if (stateData && (stateData as any[]).length > 0) {
+        stateId = (stateData as any[])[0].state_id;
+      }
+    }
 
-    if (lgasInState?.length) {
-      const lgaIds = (lgasInState as any[]).map(l => l.lga_id);
-      filtered = filtered.filter(p => lgaIds.includes(p.profile?.lga_id));
+    if (stateId !== null) {
+      const { data: lgasInState } = await db
+        .from('lga_centers')
+        .select('lga_id')
+        .eq('state_id', stateId);
+
+      if (lgasInState?.length) {
+        const lgaIds = (lgasInState as any[]).map(l => l.lga_id);
+        filtered = filtered.filter(p => lgaIds.includes(p.profile?.lga_id));
+      } else {
+        return [];
+      }
     } else {
       return [];
     }
