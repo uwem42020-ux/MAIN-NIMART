@@ -47,6 +47,7 @@ export function ServiceLocationClient({ categorySlug, lgaId, lgaData }: ServiceL
     queryFn: async () => {
       if (!categorySlug || !lgaId) return null;
 
+      // 1. Find profiles in this LGA
       const { data: profilesInLga } = await db
         .from('profiles')
         .select('id')
@@ -59,6 +60,7 @@ export function ServiceLocationClient({ categorySlug, lgaId, lgaData }: ServiceL
 
       const profileIds = profiles.map((p: any) => p.id);
 
+      // 2. Find providers in this LGA with the matching category
       const { data: providers, count } = await db
         .from('providers')
         .select('*', { count: 'exact' })
@@ -73,6 +75,7 @@ export function ServiceLocationClient({ categorySlug, lgaId, lgaData }: ServiceL
         return { lga: lgaData, providers: [], totalCount: (count as number) || 0 };
       }
 
+      // 3. Fetch profiles, images, and reviews for these providers
       const providerIds = providersList.map((p: any) => p.id);
 
       const [profilesRes, imagesRes, reviewsRes] = await Promise.all([
@@ -219,7 +222,7 @@ export function ServiceLocationClient({ categorySlug, lgaId, lgaData }: ServiceL
       {(data as any)?.providers?.length > 0 && (
         <>
           {viewMode === 'grid' ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-4">
               {(data as any).providers.map((provider: any) => (
                 <ProviderCardPortrait key={provider.id} provider={{ ...provider, profile: provider.profile || {}, portfolio_images: provider.portfolio_images || [], distance: provider.distance, average_rating: provider.average_rating, review_count: provider.review_count, lastSignInAt: provider.lastSignInAt }} />
               ))}
@@ -231,12 +234,22 @@ export function ServiceLocationClient({ categorySlug, lgaId, lgaData }: ServiceL
               ))}
             </div>
           )}
+
           <div className="mt-10 bg-gray-50 rounded-2xl p-6 sm:p-8 text-center">
             <h3 className="text-lg font-bold text-gray-900">Don't see the right {categoryName.toLowerCase()}?</h3>
             <p className="text-gray-600 mt-2">Expand your search or check back soon — new providers join Nimart every day.</p>
             <div className="flex flex-wrap justify-center gap-3 mt-4">
-              <Link href="/search" className="inline-flex items-center gap-2 bg-primary-600 text-white px-5 py-2.5 rounded-xl font-medium hover:bg-primary-700 transition">Browse All Providers</Link>
-              {lgaData?.state_name && <Link href={`/search?state=${categorySlug}`} className="inline-flex items-center gap-2 border border-gray-300 text-gray-700 px-5 py-2.5 rounded-xl font-medium hover:bg-gray-100 transition">View All in {lgaData.state_name}</Link>}
+              <Link href="/search" className="inline-flex items-center gap-2 bg-primary-600 text-white px-5 py-2.5 rounded-xl font-medium hover:bg-primary-700 transition">
+                Browse All Providers
+              </Link>
+              {stateName && (
+                <Link
+                  href={`/search?state=${encodeURIComponent(stateName)}`}
+                  className="inline-flex items-center gap-2 border border-gray-300 text-gray-700 px-5 py-2.5 rounded-xl font-medium hover:bg-gray-100 transition"
+                >
+                  View All in {stateName}
+                </Link>
+              )}
             </div>
           </div>
         </>
