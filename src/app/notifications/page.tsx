@@ -1,3 +1,4 @@
+// src/app/notifications/page.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -144,7 +145,8 @@ export default function NotificationsPage() {
         url="https://nimart.ng/notifications"
       />
 
-      <div className="max-w-3xl mx-auto px-4 py-8">
+      {/* The container now has a minimum height to always fill the viewport, preventing the bottom nav from appearing cut off */}
+      <div className="max-w-3xl mx-auto px-4 py-8 min-h-[calc(100vh-4rem)]">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold text-gray-900">Notifications</h1>
           <div className="flex items-center gap-3">
