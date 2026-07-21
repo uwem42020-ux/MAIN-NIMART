@@ -8,7 +8,13 @@ import { useNotifications } from '@/contexts/NotificationContext';
 import { cn } from '@/lib/utils';
 import { CalendarDays } from 'lucide-react';
 
-// Solid SVG icons (message & bell)
+// Solid SVG icons (message, bell, home, map)
+const SolidHomeIcon = ({ className }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+    <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" />
+  </svg>
+);
+
 const SolidMessageIcon = ({ className }: { className?: string }) => (
   <svg className={className} viewBox="0 0 24 24" fill="currentColor">
     <path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/>
@@ -18,6 +24,12 @@ const SolidMessageIcon = ({ className }: { className?: string }) => (
 const SolidBellIcon = ({ className }: { className?: string }) => (
   <svg className={className} viewBox="0 0 24 24" fill="currentColor">
     <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm7-5h-1v-4c0-3.3-2.7-6-6-6s-6 2.7-6 6v4H5v2h14v-2z"/>
+  </svg>
+);
+
+const SolidMapIcon = ({ className }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+    <path d="M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z"/>
   </svg>
 );
 
@@ -33,6 +45,8 @@ export function MobileBottomNav() {
   const { counts, markBookingsAsSeen, markMessagesAsSeen, markSystemAsSeen } = useNotifications();
   const router = useRouter();
   const pathname = usePathname();
+
+  const isHomePage = pathname === '/' || pathname === '/search';
 
   const [visible, setVisible] = useState(true);
   const [tierPanelOpen, setTierPanelOpen] = useState(false);
@@ -51,17 +65,20 @@ export function MobileBottomNav() {
     };
   }, []);
 
-  // Hide when footer is visible
+  // Only hide when the large footer is visible AND we are on the homepage
   useEffect(() => {
     const footer = document.querySelector('footer');
-    if (!footer) return;
+    if (!footer || !isHomePage) {
+      setVisible(true);
+      return;
+    }
     footerObserverRef.current = new IntersectionObserver(
       ([entry]) => setVisible(!entry.isIntersecting),
       { threshold: 0, rootMargin: '0px' }
     );
     footerObserverRef.current.observe(footer);
     return () => footerObserverRef.current?.disconnect();
-  }, []);
+  }, [isHomePage]);
 
   const handleNavigation = async (
     id: string,
@@ -92,11 +109,7 @@ export function MobileBottomNav() {
     {
       id: 'home',
       label: 'Home',
-      icon: (
-        <svg className="w-6 h-6" aria-hidden="true">
-          <use href="/icons/sprite.svg#home" />
-        </svg>
-      ),
+      icon: <SolidHomeIcon className="w-6 h-6" />,
       onClick: () => router.push('/'),
     },
     {
@@ -115,17 +128,12 @@ export function MobileBottomNav() {
       id: 'alerts',
       label: 'Alerts',
       icon: <SolidBellIcon className="w-6 h-6" />,
-      // ✅ FIXED: Now navigates to global /notifications
       onClick: () => handleNavigation('alerts', '/notifications', markSystemAsSeen),
     },
     {
       id: 'map',
       label: 'Map',
-      icon: (
-        <svg className="w-6 h-6" aria-hidden="true">
-          <use href="/icons/sprite.svg#map" />
-        </svg>
-      ),
+      icon: <SolidMapIcon className="w-6 h-6" />,
       onClick: () => router.push('/map'),
     },
   ];
@@ -144,21 +152,18 @@ export function MobileBottomNav() {
     >
       <div className="flex justify-around items-center min-h-[56px]">
         {navItems.map((item) => {
-          // --- Correct active detection ---
           let active = false;
           if (item.id === 'home') {
             active = pathname === '/' || pathname === '/search';
           } else if (item.id === 'map') {
             active = pathname.startsWith('/map');
           } else if (item.id === 'alerts') {
-            // Active when on the /notifications page
             active = pathname.startsWith('/notifications');
           } else {
             const basePath = profile?.role === 'provider' ? `/provider/${item.id}` : `/customer/${item.id}`;
             active = pathname.startsWith(basePath);
           }
 
-          // Determine badge count for this item
           const badge = item.id === 'bookings' && showBookingsBadge ? counts.bookings
                      : item.id === 'messages' && showMessagesBadge ? counts.messages
                      : item.id === 'alerts' && showSystemBadge ? counts.system
@@ -180,7 +185,6 @@ export function MobileBottomNav() {
               )}
             >
               <div className="relative">
-                {/* Active background pill */}
                 {active && (
                   <span className="absolute inset-0 w-10 h-8 -top-1 -left-2 bg-primary-100 rounded-full -z-10" />
                 )}
