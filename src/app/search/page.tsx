@@ -1,6 +1,6 @@
 // app/search/page.tsx
 import { Metadata } from 'next';
-import { supabaseServer } from '@/lib/supabase-server';
+import { createServerSupabase } from '@/lib/supabase-server';
 import { fetchSearchProviders } from '@/lib/serverQueries';
 import { SearchClient } from './SearchClient';
 import type { ProviderWithProfile } from '@/components/provider/ProviderCardPortrait';
@@ -11,15 +11,16 @@ interface SearchPageProps {
 
 async function getLocationName(type: 'lga' | 'state', id: string): Promise<string> {
   try {
+    const supabase = await createServerSupabase();
     if (type === 'lga') {
-      const { data } = await supabaseServer
+      const { data } = await supabase
         .from('lga_centers')
         .select('lga_name')
         .eq('lga_id', parseInt(id))
         .single();
       return data?.lga_name || id;
     } else {
-      const { data } = await supabaseServer
+      const { data } = await supabase
         .from('lga_centers')
         .select('state_name')
         .eq('state_id', parseInt(id))
@@ -71,7 +72,6 @@ export async function generateMetadata({ searchParams }: SearchPageProps): Promi
   };
 }
 
-// JSON-LD for search results page
 function generateSearchSchema(providers: ProviderWithProfile[]) {
   return {
     '@context': 'https://schema.org',
