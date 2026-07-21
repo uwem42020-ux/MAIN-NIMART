@@ -2,6 +2,7 @@
 'use client';
 
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { Mail, Phone, MapPin } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
@@ -9,6 +10,8 @@ import { supabase } from '@/lib/supabase';
 export function Footer() {
   const currentYear = new Date().getFullYear();
   const [profile, setProfile] = useState<any>(null);
+  const pathname = usePathname();
+  const isHomePage = pathname === '/' || pathname === '/search';
 
   useEffect(() => {
     async function fetchProfile() {
@@ -31,7 +34,7 @@ export function Footer() {
   };
 
   return (
-    <footer className="bg-[#008751] text-white hidden md:block">
+    <footer className={`bg-[#008751] text-white ${isHomePage ? '' : 'hidden md:block'}`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pl-8 sm:pl-10 lg:pl-32 py-10">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-sm">
           {/* Column 1: Brand */}
