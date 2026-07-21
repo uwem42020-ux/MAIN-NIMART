@@ -25,9 +25,10 @@ import { useState, useRef, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { db } from '@/lib/supabase-any';
 import { cn } from '@/lib/utils';
+import { useNotifications } from '@/contexts/NotificationContext';
 import toast from 'react-hot-toast';
 
-// Solid icons
+/* ---------- Solid SVG icons (same as before) ---------- */
 const SolidBookingIcon = ({ className }: { className?: string }) => (
   <svg className={className} viewBox="0 0 24 24" fill="currentColor">
     <path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V9h14v10zM7 11h4v4H7v-4z"/>
@@ -46,12 +47,18 @@ const SolidBellIcon = ({ className }: { className?: string }) => (
   </svg>
 );
 
+const SolidMapIcon = ({ className }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+    <path d="M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z"/>
+  </svg>
+);
+
 export function Header() {
   const router = useRouter();
   const pathname = usePathname();
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
-  const [counts, setCounts] = useState({ bookings: 0, messages: 0, system: 0 });
+  const { counts } = useNotifications();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [mobileProfileOpen, setMobileProfileOpen] = useState(false);
   const [mobileView, setMobileView] = useState<'main' | 'settings'>('main');
@@ -71,22 +78,8 @@ export function Header() {
           .eq('id', currentUser.id)
           .single();
         setProfile(prof);
-
-        const [
-          { count: bookingCount },
-          { count: msgCount },
-          { count: notifCount },
-        ] = await Promise.all([
-          db.from('bookings').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
-          db.from('threads').select('id', { count: 'exact', head: true })
-            .or(`provider_id.eq.${currentUser.id},customer_id.eq.${currentUser.id}`),
-          db.from('notifications').select('id', { count: 'exact', head: true })
-            .eq('user_id', currentUser.id).eq('is_read', false),
-        ]);
-        setCounts({ bookings: bookingCount || 0, messages: msgCount || 0, system: notifCount || 0 });
       } else {
         setProfile(null);
-        setCounts({ bookings: 0, messages: 0, system: 0 });
       }
     };
     fetchSession();
@@ -101,23 +94,8 @@ export function Header() {
           .eq('id', currentUser.id)
           .single()
           .then(({ data: prof }: { data: any }) => setProfile(prof));
-
-        Promise.all([
-          db.from('bookings').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
-          db.from('threads').select('id', { count: 'exact', head: true })
-            .or(`provider_id.eq.${currentUser.id},customer_id.eq.${currentUser.id}`),
-          db.from('notifications').select('id', { count: 'exact', head: true })
-            .eq('user_id', currentUser.id).eq('is_read', false),
-        ]).then(([b, m, n]) => {
-          setCounts({
-            bookings: b.count || 0,
-            messages: m.count || 0,
-            system: n.count || 0,
-          });
-        });
       } else {
         setProfile(null);
-        setCounts({ bookings: 0, messages: 0, system: 0 });
       }
     });
 
@@ -152,29 +130,33 @@ export function Header() {
   const getServicesLink = () => (role === 'provider' ? '/provider/services' : null);
   const getVerificationLink = () => (role === 'provider' ? '/provider/verification' : null);
 
-  const markBookingsAsSeen = async () => {};
-  const markMessagesAsSeen = async () => {};
-  const markSystemAsSeen = async () => {};
-
+  const isOnBookingsPage = pathname.includes('/bookings');
   const isOnMessagesPage = pathname.includes('/messages');
-  const showMessagesBadge = !isOnMessagesPage && counts.messages > 0;
+  const isOnNotificationsPage = pathname.startsWith('/notifications');
+  const isOnMapPage = pathname.startsWith('/map');
 
-  const handleBookingsClick = async () => {
+  // Badge visibility – hide badge when already on that page
+  const showBookingsBadge = !isOnBookingsPage && counts.bookings > 0;
+  const showMessagesBadge = !isOnMessagesPage && counts.messages > 0;
+  const showSystemBadge = !isOnNotificationsPage && counts.system > 0;
+
+  const handleBookingsClick = () => {
     if (!user) { router.push('/auth/signin'); return; }
-    await markBookingsAsSeen();
     router.push(getBookingsLink());
   };
 
-  const handleMessagesClick = async () => {
+  const handleMessagesClick = () => {
     if (!user) { router.push('/auth/signin'); return; }
-    await markMessagesAsSeen();
     router.push(getMessagesLink());
   };
 
-  const handleNotificationsClick = async () => {
+  const handleNotificationsClick = () => {
     if (!user) { router.push('/auth/signin'); return; }
-    await markSystemAsSeen();
     router.push(getNotificationsLink());
+  };
+
+  const handleMapClick = () => {
+    router.push('/map');
   };
 
   const handleMouseEnter = () => {
@@ -231,6 +213,21 @@ export function Header() {
     setMobileView('main');
   };
 
+  /* ───── icon button classes ───── */
+  const iconBtnClass = (active: boolean) =>
+    cn(
+      'relative hidden md:flex items-center justify-center w-9 h-9 rounded-full',
+      'transition-colors duration-200',
+      'hover:bg-green-50',                     // subtle hover background
+      active && 'bg-primary-50'                // active background
+    );
+
+  const iconClass = (active: boolean) =>
+    cn(
+      'w-5 h-5 transition-colors duration-200',
+      active ? 'text-primary-600' : 'text-[#008751] group-hover:text-[#008751]'
+    );
+
   return (
     <>
       <header
@@ -248,43 +245,59 @@ export function Header() {
             </Link>
 
             <div className="flex items-center space-x-1 sm:space-x-2">
-              {/* Bookings icon */}
-              <button onClick={handleBookingsClick} title="Bookings" aria-label="Bookings" className="relative hidden md:block">
-                <span className="absolute inset-0 flex items-center justify-center rounded-full bg-gray-100" />
-                <span className="relative flex items-center justify-center w-9 h-9">
-                  <SolidBookingIcon className="w-5 h-5 text-[#008751] transition-colors" />
-                  {counts.bookings > 0 && (
-                    <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold leading-none text-white bg-red-500 rounded-full">
-                      {counts.bookings > 9 ? '9+' : counts.bookings}
-                    </span>
-                  )}
-                </span>
+              {/* Bookings */}
+              <button
+                onClick={handleBookingsClick}
+                title="Bookings"
+                aria-label="Bookings"
+                className={cn('group', iconBtnClass(isOnBookingsPage))}
+              >
+                <SolidBookingIcon className={iconClass(isOnBookingsPage)} />
+                {showBookingsBadge && (
+                  <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold leading-none text-white bg-red-500 rounded-full">
+                    {counts.bookings > 9 ? '9+' : counts.bookings}
+                  </span>
+                )}
               </button>
 
-              {/* Messages icon */}
-              <button onClick={handleMessagesClick} title="Messages" aria-label="Messages" className="relative hidden md:block">
-                <span className="absolute inset-0 flex items-center justify-center rounded-full bg-gray-100" />
-                <span className="relative flex items-center justify-center w-9 h-9">
-                  <SolidMessageIcon className="w-5 h-5 text-[#008751] transition-colors" />
-                  {showMessagesBadge && (
-                    <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold leading-none text-white bg-red-500 rounded-full">
-                      {counts.messages > 9 ? '9+' : counts.messages}
-                    </span>
-                  )}
-                </span>
+              {/* Messages */}
+              <button
+                onClick={handleMessagesClick}
+                title="Messages"
+                aria-label="Messages"
+                className={cn('group', iconBtnClass(isOnMessagesPage))}
+              >
+                <SolidMessageIcon className={iconClass(isOnMessagesPage)} />
+                {showMessagesBadge && (
+                  <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold leading-none text-white bg-red-500 rounded-full">
+                    {counts.messages > 9 ? '9+' : counts.messages}
+                  </span>
+                )}
               </button>
 
-              {/* Notifications icon – now goes to /notifications */}
-              <button onClick={handleNotificationsClick} title="Notifications" aria-label="Notifications" className="relative hidden md:block">
-                <span className="absolute inset-0 flex items-center justify-center rounded-full bg-gray-100" />
-                <span className="relative flex items-center justify-center w-9 h-9">
-                  <SolidBellIcon className="w-5 h-5 text-[#008751] transition-colors" />
-                  {counts.system > 0 && (
-                    <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold leading-none text-white bg-red-500 rounded-full">
-                      {counts.system > 9 ? '9+' : counts.system}
-                    </span>
-                  )}
-                </span>
+              {/* Notifications */}
+              <button
+                onClick={handleNotificationsClick}
+                title="Notifications"
+                aria-label="Notifications"
+                className={cn('group', iconBtnClass(isOnNotificationsPage))}
+              >
+                <SolidBellIcon className={iconClass(isOnNotificationsPage)} />
+                {showSystemBadge && (
+                  <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold leading-none text-white bg-red-500 rounded-full">
+                    {counts.system > 9 ? '9+' : counts.system}
+                  </span>
+                )}
+              </button>
+
+              {/* Map */}
+              <button
+                onClick={handleMapClick}
+                title="Map"
+                aria-label="Map"
+                className={cn('group', iconBtnClass(isOnMapPage))}
+              >
+                <SolidMapIcon className={iconClass(isOnMapPage)} />
               </button>
 
               {/* Auth buttons */}
