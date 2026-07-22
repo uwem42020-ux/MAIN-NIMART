@@ -64,7 +64,10 @@ export function MapView() {
   const mapRef = useRef<google.maps.Map | null>(null);
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
-  const { isLoaded } = useJsApiLoader({ id: 'google-map-script', googleMapsApiKey: apiKey });
+  const { isLoaded, loadError } = useJsApiLoader({
+    id: 'google-map-script',
+    googleMapsApiKey: apiKey || 'MISSING_KEY',
+  });
 
   const [selectedProvider, setSelectedProvider] = useState<MapProvider | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -78,14 +81,12 @@ export function MapView() {
   const [selectedState, setSelectedState] = useState('');
   const [selectedLga, setSelectedLga] = useState('');
 
-  // Smooth fly-to (simpler version)
   const flyTo = useCallback((lat: number, lng: number, zoom: number) => {
     if (!mapRef.current) return;
     mapRef.current.panTo({ lat, lng });
     mapRef.current.setZoom(zoom);
   }, []);
 
-  // Fetch states & LGAs once
   useEffect(() => {
     db.from('lga_centers').select('state_id, state_name').order('state_name').then(({ data }: { data: any }) => {
       if (data) {
@@ -95,7 +96,6 @@ export function MapView() {
     });
   }, []);
 
-  // Auto-detect user location
   useEffect(() => {
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
@@ -111,7 +111,6 @@ export function MapView() {
     );
   }, [selectedState, flyTo]);
 
-  // Fetch LGAs when state changes
   useEffect(() => {
     if (!selectedState) { setLgas([]); setSelectedLga(''); return; }
     db.from('lga_centers').select('lga_id, lga_name, lat, lng').eq('state_id', parseInt(selectedState)).order('lga_name')
@@ -130,7 +129,6 @@ export function MapView() {
     if (lga?.lat != null && lga?.lng != null) flyTo(lga.lat, lga.lng, 14);
   }, [lgas, flyTo]);
 
-  // Query providers — slim: only fetch what we display
   const { data: allProviders, isLoading } = useQuery({
     queryKey: ['map-providers'],
     queryFn: async () => {
@@ -173,7 +171,6 @@ export function MapView() {
     staleTime: 1000 * 60 * 5,
   });
 
-  // Filter providers
   const providersWithCoords = useMemo(() => {
     let filtered = (allProviders || []).filter((p: any) => {
       if (searchTerm) {
@@ -209,10 +206,29 @@ export function MapView() {
     );
   };
 
-  if (!isLoaded) {
+  // Show loading spinner while API key is loading
+  if (!isLoaded && !loadError) {
     return (
       <div className="flex items-center justify-center h-[calc(100dvh-64px-56px)] md:h-[calc(100dvh-64px)]">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+      </div>
+    );
+  }
+
+  // Show fallback if API key failed to load
+  if (loadError || !apiKey) {
+    return (
+      <div className="flex items-center justify-center h-[calc(100dvh-64px-56px)] md:h-[calc(100dvh-64px)]">
+        <div className="text-center">
+          <MapPin className="mx-auto h-12 w-12 text-gray-400 mb-3" />
+          <p className="text-gray-500 mb-2">Map is temporarily unavailable.</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="text-primary-600 hover:underline text-sm font-medium"
+          >
+            Tap to reload
+          </button>
+        </div>
       </div>
     );
   }
