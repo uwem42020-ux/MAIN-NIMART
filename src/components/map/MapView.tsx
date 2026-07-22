@@ -7,7 +7,7 @@ import { GoogleMap, InfoWindow, OverlayView, useJsApiLoader } from '@react-googl
 import { db } from '@/lib/supabase-any';
 import { useAuth } from '@/contexts/AuthContext';
 import { calculateDistance } from '@/lib/distance';
-import { Search, X, LocateFixed, Maximize2, Minimize2, Map as MapIcon, List, Satellite } from 'lucide-react';
+import { Search, X, LocateFixed, Maximize2, Minimize2, Map as MapIcon, List, Satellite, MapPin } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import toast from 'react-hot-toast';
 
