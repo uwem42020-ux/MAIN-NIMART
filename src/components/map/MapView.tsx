@@ -37,7 +37,6 @@ const statusColors: Record<string, string> = {
   away: '#ef4444',
 };
 
-// ── Pulsing user location overlay ──
 function UserLocationOverlay({ position }: { position: google.maps.LatLngLiteral }) {
   if (!position) return null;
   return (
@@ -56,7 +55,6 @@ function UserLocationOverlay({ position }: { position: google.maps.LatLngLiteral
   );
 }
 
-// ── Provider marker overlay ──
 function ProviderMarkerOverlay({
   position,
   status,
@@ -169,37 +167,24 @@ export function MapView() {
       });
   }, []);
 
-  // Auto‑detect user location
+  // Auto‑detect user location – only fly to it, do NOT set any filter
   useEffect(() => {
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         setUserLocation(loc);
-        if (allLgaCenters.length > 0) {
-          let nearest: any = null;
-          let minDist = Infinity;
-          allLgaCenters.forEach((lga) => {
-            const dist = calculateDistance(loc.lat, loc.lng, lga.lat, lga.lng);
-            if (dist < minDist) {
-              minDist = dist;
-              nearest = lga;
-            }
-          });
-          if (nearest) {
-            setSelectedState(nearest.state_id.toString());
-            pendingLgaRef.current = nearest.lga_id.toString();
-          }
+        // fly to user location only when no manual state/LGA is selected yet
+        if (mapRef.current && !selectedState) {
+          flyTo(loc.lat, loc.lng, 16);
         }
       },
       () => {},
       { enableHighAccuracy: true, timeout: 10000 }
     );
-  }, [allLgaCenters]);
+  }, [selectedState, flyTo]);   // re‑run when selectedState changes (so it doesn't fight manual selection)
 
-  const pendingLgaRef = useRef<string | null>(null);
-
-  // Fetch LGAs when state changes
+  // Fetch LGAs when state changes (manual selection only)
   useEffect(() => {
     if (!selectedState) {
       setLgas([]);
@@ -215,13 +200,7 @@ export function MapView() {
       .then(({ data }: { data: any }) => {
         const fetched = data || [];
         setLgas(fetched);
-
-        if (pendingLgaRef.current && fetched.some((l: any) => l.lga_id.toString() === pendingLgaRef.current)) {
-          const targetLga = fetched.find((l: any) => l.lga_id.toString() === pendingLgaRef.current);
-          setSelectedLga(pendingLgaRef.current);
-          if (targetLga?.lat != null && targetLga?.lng != null) flyTo(targetLga.lat, targetLga.lng, 14);
-          pendingLgaRef.current = null;
-        } else if (fetched.length > 0 && !selectedLga) {
+        if (fetched.length > 0 && !selectedLga) {
           const firstLga = fetched[0];
           setSelectedLga(firstLga.lga_id.toString());
           if (firstLga.lat != null && firstLga.lng != null) flyTo(firstLga.lat, firstLga.lng, 14);
@@ -275,6 +254,7 @@ export function MapView() {
           p.selected_category_slug?.toLowerCase().includes(term)
         );
       }
+      // only filter by LGA if both state and LGA are manually selected
       if (selectedState && selectedLga && p.profile?.lga_id?.toString() !== selectedLga) return false;
       return p.profile?.lat != null && p.profile?.lng != null;
     });
@@ -442,7 +422,8 @@ export function MapView() {
               streetViewControl: false,
               mapTypeControl: false,
               fullscreenControl: false,
-              zoomControl: false,
+              zoomControl: true,            // show +/– buttons
+              gestureHandling: 'greedy',    // smooth one‑finger pan/zoom
             }}
           >
             {userLocation && <UserLocationOverlay position={userLocation} />}
@@ -503,7 +484,6 @@ export function MapView() {
             )}
           </GoogleMap>
 
-          {/* Mobile provider count pill */}
           {!isLoading && (
             <div className="absolute bottom-4 left-4 z-10 md:hidden">
               <div className="bg-white/80 backdrop-blur-md rounded-full px-3 py-1.5 text-xs font-medium shadow-lg border border-white/30">
@@ -515,7 +495,6 @@ export function MapView() {
           )}
         </div>
 
-        {/* Desktop sidebar */}
         {showProviderList && (
           <div className="hidden md:block w-80 border-l border-gray-200 bg-white overflow-y-auto">
             <div className="p-4 border-b sticky top-0 bg-white">
