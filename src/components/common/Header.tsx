@@ -28,7 +28,7 @@ import { cn } from '@/lib/utils';
 import { useNotifications } from '@/contexts/NotificationContext';
 import toast from 'react-hot-toast';
 
-/* ---------- Solid SVG icons (same as before) ---------- */
+// Solid icons
 const SolidBookingIcon = ({ className }: { className?: string }) => (
   <svg className={className} viewBox="0 0 24 24" fill="currentColor">
     <path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V9h14v10zM7 11h4v4H7v-4z"/>
@@ -130,14 +130,12 @@ export function Header() {
   const getServicesLink = () => (role === 'provider' ? '/provider/services' : null);
   const getVerificationLink = () => (role === 'provider' ? '/provider/verification' : null);
 
-  const isOnBookingsPage = pathname.includes('/bookings');
   const isOnMessagesPage = pathname.includes('/messages');
+  const isOnBookingsPage = pathname.includes('/bookings');
   const isOnNotificationsPage = pathname.startsWith('/notifications');
   const isOnMapPage = pathname.startsWith('/map');
-
-  // Badge visibility – hide badge when already on that page
-  const showBookingsBadge = !isOnBookingsPage && counts.bookings > 0;
   const showMessagesBadge = !isOnMessagesPage && counts.messages > 0;
+  const showBookingsBadge = !isOnBookingsPage && counts.bookings > 0;
   const showSystemBadge = !isOnNotificationsPage && counts.system > 0;
 
   const handleBookingsClick = () => {
@@ -213,21 +211,6 @@ export function Header() {
     setMobileView('main');
   };
 
-  /* ───── icon button classes ───── */
-  const iconBtnClass = (active: boolean) =>
-    cn(
-      'relative hidden md:flex items-center justify-center w-9 h-9 rounded-full',
-      'transition-colors duration-200',
-      'hover:bg-green-50',                     // subtle hover background
-      active && 'bg-primary-50'                // active background
-    );
-
-  const iconClass = (active: boolean) =>
-    cn(
-      'w-5 h-5 transition-colors duration-200',
-      active ? 'text-primary-600' : 'text-[#008751] group-hover:text-[#008751]'
-    );
-
   return (
     <>
       <header
@@ -245,59 +228,83 @@ export function Header() {
             </Link>
 
             <div className="flex items-center space-x-1 sm:space-x-2">
-              {/* Bookings */}
+              {/* Bookings icon */}
               <button
                 onClick={handleBookingsClick}
                 title="Bookings"
                 aria-label="Bookings"
-                className={cn('group', iconBtnClass(isOnBookingsPage))}
-              >
-                <SolidBookingIcon className={iconClass(isOnBookingsPage)} />
-                {showBookingsBadge && (
-                  <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold leading-none text-white bg-red-500 rounded-full">
-                    {counts.bookings > 9 ? '9+' : counts.bookings}
-                  </span>
+                className={cn(
+                  'relative hidden md:block',
+                  isOnBookingsPage && 'bg-primary-50 rounded-full'
                 )}
+              >
+                <span className="absolute inset-0 flex items-center justify-center rounded-full bg-gray-100" />
+                <span className={cn('relative flex items-center justify-center w-9 h-9', isOnBookingsPage && 'text-primary-600')}>
+                  <SolidBookingIcon className="w-5 h-5 text-[#008751] transition-colors" />
+                  {showBookingsBadge && (
+                    <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold leading-none text-white bg-red-500 rounded-full">
+                      {counts.bookings > 9 ? '9+' : counts.bookings}
+                    </span>
+                  )}
+                </span>
               </button>
 
-              {/* Messages */}
+              {/* Messages icon */}
               <button
                 onClick={handleMessagesClick}
                 title="Messages"
                 aria-label="Messages"
-                className={cn('group', iconBtnClass(isOnMessagesPage))}
-              >
-                <SolidMessageIcon className={iconClass(isOnMessagesPage)} />
-                {showMessagesBadge && (
-                  <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold leading-none text-white bg-red-500 rounded-full">
-                    {counts.messages > 9 ? '9+' : counts.messages}
-                  </span>
+                className={cn(
+                  'relative hidden md:block',
+                  isOnMessagesPage && 'bg-primary-50 rounded-full'
                 )}
+              >
+                <span className="absolute inset-0 flex items-center justify-center rounded-full bg-gray-100" />
+                <span className={cn('relative flex items-center justify-center w-9 h-9', isOnMessagesPage && 'text-primary-600')}>
+                  <SolidMessageIcon className="w-5 h-5 text-[#008751] transition-colors" />
+                  {showMessagesBadge && (
+                    <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold leading-none text-white bg-red-500 rounded-full">
+                      {counts.messages > 9 ? '9+' : counts.messages}
+                    </span>
+                  )}
+                </span>
               </button>
 
-              {/* Notifications */}
+              {/* Notifications icon */}
               <button
                 onClick={handleNotificationsClick}
                 title="Notifications"
                 aria-label="Notifications"
-                className={cn('group', iconBtnClass(isOnNotificationsPage))}
-              >
-                <SolidBellIcon className={iconClass(isOnNotificationsPage)} />
-                {showSystemBadge && (
-                  <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold leading-none text-white bg-red-500 rounded-full">
-                    {counts.system > 9 ? '9+' : counts.system}
-                  </span>
+                className={cn(
+                  'relative hidden md:block',
+                  isOnNotificationsPage && 'bg-primary-50 rounded-full'
                 )}
+              >
+                <span className="absolute inset-0 flex items-center justify-center rounded-full bg-gray-100" />
+                <span className={cn('relative flex items-center justify-center w-9 h-9', isOnNotificationsPage && 'text-primary-600')}>
+                  <SolidBellIcon className="w-5 h-5 text-[#008751] transition-colors" />
+                  {showSystemBadge && (
+                    <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold leading-none text-white bg-red-500 rounded-full">
+                      {counts.system > 9 ? '9+' : counts.system}
+                    </span>
+                  )}
+                </span>
               </button>
 
-              {/* Map */}
+              {/* Map icon */}
               <button
                 onClick={handleMapClick}
                 title="Map"
                 aria-label="Map"
-                className={cn('group', iconBtnClass(isOnMapPage))}
+                className={cn(
+                  'relative hidden md:block',
+                  isOnMapPage && 'bg-primary-50 rounded-full'
+                )}
               >
-                <SolidMapIcon className={iconClass(isOnMapPage)} />
+                <span className="absolute inset-0 flex items-center justify-center rounded-full bg-gray-100" />
+                <span className={cn('relative flex items-center justify-center w-9 h-9', isOnMapPage && 'text-primary-600')}>
+                  <SolidMapIcon className="w-5 h-5 text-[#008751] transition-colors" />
+                </span>
               </button>
 
               {/* Auth buttons */}
