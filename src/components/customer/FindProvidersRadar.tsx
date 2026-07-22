@@ -2,28 +2,23 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import Link from 'next/link';
-import { useQuery } from '@tanstack/react-query';
-import { GoogleMap, useJsApiLoader, OverlayView, Circle } from '@react-google-maps/api';
 import { db } from '@/lib/supabase-any';
+import { X, Search, Loader2, Navigation, ChevronDown, AlertTriangle, RotateCcw } from 'lucide-react';
 import { getAllCategories, SUBCATEGORIES } from '@/data/categories';
 import { LocationDropdown } from '@/components/common/LocationDropdown';
-import {
-  X, Search, Loader2, Navigation, ChevronDown, AlertTriangle, RotateCcw,
-  MapPin, Sparkles, ArrowRight
-} from 'lucide-react';
-import toast from 'react-hot-toast';
-import { cn } from '@/lib/utils';
+import Link from 'next/link';
 
-/* ---------- helpers ---------- */
+// ----- helper: distance & bearing -----
 function getDistanceAndBearing(lat1: number, lon1: number, lat2: number, lon2: number) {
   const R = 6371;
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    Math.cos(lat1 * Math.PI / 180) *
+      Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   const distance = R * c;
   const y = Math.sin(dLon) * Math.cos(lat2 * Math.PI / 180);
@@ -58,6 +53,7 @@ const RADIUS_OPTIONS = [10, 20, 50, 100];
 const categoryNameToSlug = new Map(getAllCategories().map(c => [c.name, c.slug]));
 const allCategoryNames = Array.from(categoryNameToSlug.keys()).sort();
 
+// Enhance with subcategory keywords -> category slug
 const subcategoryKeywords: Map<string, string> = new Map();
 SUBCATEGORIES.forEach(sub => {
   const key = sub.name.toLowerCase().trim();
@@ -69,91 +65,13 @@ SUBCATEGORIES.forEach(sub => {
 const normalizeText = (s: string) =>
   s.trim().replace(/\s+/g, ' ').replace(/&amp;/g, '&').toLowerCase();
 
-/* ---------- marker overlays (same as MapView) ---------- */
-const statusColors: Record<string, string> = {
-  available: '#22c55e',
-  busy: '#eab308',
-  away: '#ef4444',
-};
-
-function UserLocationOverlay({ position }: { position: google.maps.LatLngLiteral }) {
-  if (!position) return null;
-  return (
-    <OverlayView position={position} mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
-      getPixelPositionOffset={() => ({ x: -16, y: -16 })}>
-      <div className="flex flex-col items-center">
-        <div className="relative flex items-center justify-center">
-          <div className="absolute w-8 h-8 bg-blue-500/30 rounded-full animate-ping" />
-          <div className="w-4 h-4 bg-blue-600 rounded-full border-2 border-white shadow-lg z-10" />
-        </div>
-      </div>
-    </OverlayView>
-  );
-}
-
-function ProviderMarkerOverlay({
-  position,
-  status,
-  onClick,
-}: {
-  position: google.maps.LatLngLiteral;
-  status: string;
-  onClick: () => void;
-}) {
-  const color = statusColors[status] || '#6b7280';
-  return (
-    <OverlayView position={position} mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
-      getPixelPositionOffset={() => ({ x: -14, y: -30 })}>
-      <div className="flex flex-col items-center cursor-pointer" onClick={onClick}>
-        <div className="w-4 h-4 rounded-full border-2 border-white shadow-md" style={{ backgroundColor: color }} />
-        <img src="/robot-marker.png" alt="" className="w-6 h-6 mt-0.5 object-contain" style={{ imageRendering: 'auto' }} />
-      </div>
-    </OverlayView>
-  );
-}
-
-/* ---------- radar rings overlay (circle inside map) ---------- */
-function RadarRings({ center, radiusKm }: { center: google.maps.LatLngLiteral; radiusKm: number }) {
-  if (!center) return null;
-  const rings = [radiusKm * 0.25, radiusKm * 0.5, radiusKm * 0.75, radiusKm];
-  return (
-    <>
-      {rings.map((r, i) => (
-        <Circle
-          key={i}
-          center={center}
-          radius={r * 1000}
-          options={{
-            strokeColor: '#64c8ff',
-            strokeOpacity: 0.4,
-            strokeWeight: 1,
-            fillOpacity: 0,
-            clickable: false,
-            zIndex: 1,
-          }}
-        />
-      ))}
-    </>
-  );
-}
-
 export function FindProvidersRadar({
   isOpen,
   onClose,
   userLat,
   userLng,
 }: FindProvidersRadarProps) {
-  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
-  const mapRef = useRef<google.maps.Map | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const locationButtonRef = useRef<HTMLButtonElement>(null);
-  const categorySlugRef = useRef('');
-  const suppressSuggestionsRef = useRef(false);
-
-  const { isLoaded } = useJsApiLoader({ id: 'radar-map', googleMapsApiKey: apiKey });
-
-  // ---- state ----
+  // Location data (loaded internally)
   const [states, setStates] = useState<any[]>([]);
   const [lgas, setLgas] = useState<Record<string, any[]>>({});
   const [locationLoading, setLocationLoading] = useState(false);
@@ -162,12 +80,14 @@ export function FindProvidersRadar({
   const [searchTerm, setSearchTerm] = useState('');
   const [category, setCategory] = useState('');
   const [categorySlug, setCategorySlug] = useState('');
+  const categorySlugRef = useRef('');
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
   const [loading, setLoading] = useState(false);
+  const [scanning, setScanning] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
   const [errorMsg, setErrorMsg] = useState('');
-  const [currentCoords, setCurrentCoords] = useState<google.maps.LatLngLiteral | null>(
+  const [currentCoords, setCurrentCoords] = useState<{ lat: number; lng: number } | null>(
     userLat && userLng ? { lat: userLat, lng: userLng } : null
   );
   const [gettingLocation, setGettingLocation] = useState(false);
@@ -177,9 +97,51 @@ export function FindProvidersRadar({
   const [locationLabel, setLocationLabel] = useState(
     userLat && userLng ? 'My location' : 'All Nigeria'
   );
-  const [showOnboarding, setShowOnboarding] = useState(true);
 
-  // ---- load LGA data ----
+  const suppressSuggestionsRef = useRef(false);
+  const locationButtonRef = useRef<HTMLButtonElement>(null);
+
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const animationRef = useRef<number | null>(null);
+  const rotationAngleRef = useRef(0);
+  const scanningRef = useRef(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [dimensions, setDimensions] = useState({ width: 400, height: 400 });
+
+  // Local pulse phase – per component instance
+  const pulsePhaseRef = useRef(0);
+
+  useEffect(() => {
+    scanningRef.current = scanning;
+  }, [scanning]);
+
+  // Cleanup animation on unmount
+  useEffect(() => {
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+        animationRef.current = null;
+      }
+    };
+  }, []);
+
+  // Canvas sizing
+  useEffect(() => {
+    if (!isOpen) return;
+    const updateSize = () => {
+      if (containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect();
+        const size = Math.min(rect.width, rect.height, 500);
+        setDimensions({ width: size, height: size });
+      }
+    };
+    updateSize();
+    window.addEventListener('resize', updateSize);
+    return () => window.removeEventListener('resize', updateSize);
+  }, [isOpen]);
+
+  // Load states & LGAs internally – only once
   const loadLocations = useCallback(async () => {
     setLocationLoading(true);
     setLocationLoadError(false);
@@ -190,7 +152,9 @@ export function FindProvidersRadar({
         .order('state_name');
       if (stateError) throw stateError;
       const dataArr = (allStates || []) as any[];
-      const uniqueStates = dataArr.filter((v, i, a) => a.findIndex(t => t.state_id === v.state_id) === i);
+      const uniqueStates = dataArr.filter((v, i, a) =>
+        a.findIndex(t => t.state_id === v.state_id) === i
+      );
       setStates(uniqueStates);
 
       const { data: allLgas, error: lgaError } = await db
@@ -218,15 +182,22 @@ export function FindProvidersRadar({
 
   useEffect(() => {
     if (!isOpen) return;
-    if (states.length === 0 && !locationLoading && !locationLoadError) loadLocations();
+    if (states.length === 0 && !locationLoading && !locationLoadError) {
+      loadLocations();
+    }
   }, [isOpen, states.length, locationLoading, locationLoadError, loadLocations]);
 
-  // ---- geolocation ----
+  // Initial location
   useEffect(() => {
-    if (!isOpen || !navigator.geolocation) return;
+    if (!isOpen) return;
     if (userLat && userLng) {
       setCurrentCoords({ lat: userLat, lng: userLng });
       setLocationLabel('My location');
+      return;
+    }
+    if (currentCoords) return;
+    if (!navigator.geolocation) {
+      setErrorMsg('Geolocation not supported.');
       return;
     }
     setGettingLocation(true);
@@ -238,6 +209,7 @@ export function FindProvidersRadar({
         setLocationLabel('My location');
       },
       (err) => {
+        console.error(err);
         if (err.code === 1) setErrorMsg('Location denied. Enable location to find providers.');
         else setErrorMsg('Unable to get location.');
         setGettingLocation(false);
@@ -246,10 +218,12 @@ export function FindProvidersRadar({
     );
   }, [isOpen, userLat, userLng]);
 
-  // ---- location dropdown handlers ----
+  // Location selection
   const handleLocationSelect = (type: 'state' | 'lga', id: string, label: string) => {
     if (type === 'lga') {
-      const stateId = Object.keys(lgas).find(key => lgas[key].some((lga: any) => lga.lga_id.toString() === id));
+      const stateId = Object.keys(lgas).find(key =>
+        lgas[key].some((lga: any) => lga.lga_id.toString() === id)
+      );
       if (stateId) {
         const lga = lgas[stateId].find((l: any) => l.lga_id.toString() === id);
         if (lga?.lat && lga?.lng) {
@@ -285,6 +259,7 @@ export function FindProvidersRadar({
     setErrorMsg('');
   };
 
+  // Reset all search state
   const resetSearch = () => {
     setSearchTerm('');
     setCategory('');
@@ -296,22 +271,33 @@ export function FindProvidersRadar({
     setErrorMsg('');
   };
 
-  // ---- fetch providers ----
+  // Fetch providers for a given slug
   const fetchNearbyProvidersWithSlug = async (slug: string) => {
     if (!slug) {
       setErrorMsg('Please select a service category.');
       return;
     }
     setLoading(true);
+    setScanning(true);
     setErrorMsg('');
     setProviders([]);
     setSelectedProvider(null);
-    setShowOnboarding(false);
+    rotationAngleRef.current = 0;
+
+    // Start animation
+    if (animationRef.current) cancelAnimationFrame(animationRef.current);
+    const animate = () => {
+      if (!scanningRef.current) return;
+      rotationAngleRef.current = (rotationAngleRef.current + 2) % 360;
+      drawCanvas();
+      animationRef.current = requestAnimationFrame(animate);
+    };
+    animationRef.current = requestAnimationFrame(animate);
 
     try {
       const { data: providersData, error: providersError } = await db
         .from('providers')
-        .select('id, business_name, selected_category_slug, boost_until, status')
+        .select('id, business_name, selected_category_slug, boost_until')
         .eq('selected_category_slug', slug)
         .eq('is_available', true)
         .limit(200);
@@ -319,21 +305,24 @@ export function FindProvidersRadar({
       if (providersError) throw providersError;
       const provs = (providersData || []) as any[];
       if (provs.length === 0) {
-        setErrorMsg(`No providers found for "${category}". Try a different category or increase the radius.`);
+        setErrorMsg(`No providers found for "${category}". Try a different category.`);
+        setScanning(false);
+        if (animationRef.current) cancelAnimationFrame(animationRef.current);
+        drawCanvas();
         return;
       }
 
       const providerIds = provs.map((p: any) => p.id);
       const { data: profilesData, error: profilesError } = await db
         .from('profiles')
-        .select('id, lat, lng, avatar_url, lga_name')
+        .select('id, lat, lng, avatar_url')
         .in('id', providerIds);
 
       if (profilesError) throw profilesError;
       const profs = (profilesData || []) as any[];
       const profileMap = new Map(profs.map((p: any) => [p.id, p]));
-
       const nearby: Provider[] = [];
+
       if (currentCoords === null) {
         for (const prov of provs) {
           const profile = profileMap.get(prov.id);
@@ -354,7 +343,7 @@ export function FindProvidersRadar({
         for (const prov of provs) {
           const profile = profileMap.get(prov.id);
           if (!profile?.lat || !profile?.lng) continue;
-          const { distance } = getDistanceAndBearing(
+          const { distance, bearing } = getDistanceAndBearing(
             currentCoords.lat,
             currentCoords.lng,
             profile.lat,
@@ -365,7 +354,7 @@ export function FindProvidersRadar({
               id: prov.id,
               business_name: prov.business_name,
               distance,
-              bearing: 0,
+              bearing,
               lat: profile.lat,
               lng: profile.lng,
               category: prov.selected_category_slug,
@@ -373,24 +362,35 @@ export function FindProvidersRadar({
             });
           }
         }
-        nearby.sort((a, b) => a.distance - b.distance);
+        // Sort: boosted first, then by distance
+        nearby.sort((a, b) => {
+          const aBoosted = provs.find((p: any) => p.id === a.id)?.boost_until && new Date(provs.find((p: any) => p.id === a.id)!.boost_until!) > new Date() ? 1 : 0;
+          const bBoosted = provs.find((p: any) => p.id === b.id)?.boost_until && new Date(provs.find((p: any) => p.id === b.id)!.boost_until!) > new Date() ? 1 : 0;
+          if (aBoosted !== bBoosted) return bBoosted - aBoosted;
+          return a.distance - b.distance;
+        });
       }
 
       setProviders(nearby.slice(0, 50));
       if (nearby.length === 0) {
-        setErrorMsg(currentCoords === null
-          ? `No providers with location data found for "${category}".`
-          : `No providers within ${radius}km. Try a wider radius.`);
+        setErrorMsg(
+          currentCoords === null
+            ? `No providers with location data found for "${category}".`
+            : `No providers within ${radius}km. Try a wider radius.`
+        );
       }
     } catch (err) {
       console.error(err);
       setErrorMsg('Failed to fetch providers. Please try again.');
     } finally {
       setLoading(false);
+      setScanning(false);
+      if (animationRef.current) cancelAnimationFrame(animationRef.current);
+      drawCanvas();
     }
   };
 
-  // ---- autocomplete ----
+  // Autocomplete with extended keyword matching
   useEffect(() => {
     const timer = setTimeout(() => {
       if (suppressSuggestionsRef.current) {
@@ -403,7 +403,11 @@ export function FindProvidersRadar({
         return;
       }
       const term = searchTerm.toLowerCase().trim();
-      const catMatches = allCategoryNames.filter(name => name.toLowerCase().includes(term));
+
+      const catMatches = allCategoryNames.filter(name =>
+        name.toLowerCase().includes(term)
+      );
+
       const subMatches: string[] = [];
       subcategoryKeywords.forEach((catSlug, subName) => {
         if (subName.includes(term)) {
@@ -413,6 +417,7 @@ export function FindProvidersRadar({
           }
         }
       });
+
       const combined = [...new Set([...catMatches, ...subMatches])].slice(0, 10);
       setSuggestions(combined);
       setSuggestionIndex(-1);
@@ -424,9 +429,11 @@ export function FindProvidersRadar({
     const normalized = normalizeText(input);
     let slug = categoryNameToSlug.get(input);
     if (slug) return slug;
+
     for (const [name, s] of categoryNameToSlug.entries()) {
       if (normalizeText(name) === normalized) return s;
     }
+
     const lower = input.toLowerCase().trim();
     for (const [subName, catSlug] of subcategoryKeywords.entries()) {
       if (subName === lower) return catSlug;
@@ -463,114 +470,216 @@ export function FindProvidersRadar({
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (suggestions.length === 0) {
-      if (e.key === 'Enter') { e.preventDefault(); applyCategory(searchTerm); }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        applyCategory(searchTerm);
+      }
       return;
     }
-    if (e.key === 'ArrowDown') { e.preventDefault(); setSuggestionIndex(prev => (prev + 1) % suggestions.length); }
-    else if (e.key === 'ArrowUp') { e.preventDefault(); setSuggestionIndex(prev => (prev - 1 + suggestions.length) % suggestions.length); }
-    else if (e.key === 'Enter') {
+    if (e.key === 'ArrowDown') {
       e.preventDefault();
-      if (suggestionIndex >= 0) applyCategory(suggestions[suggestionIndex]);
-      else applyCategory(searchTerm);
+      setSuggestionIndex(prev => (prev + 1) % suggestions.length);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setSuggestionIndex(prev => (prev - 1 + suggestions.length) % suggestions.length);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (suggestionIndex >= 0) {
+        applyCategory(suggestions[suggestionIndex]);
+      } else {
+        applyCategory(searchTerm);
+      }
     }
   };
 
-  const selectSuggestion = (name: string) => applyCategory(name);
+  const selectSuggestion = (name: string) => {
+    applyCategory(name);
+  };
+
+  // ---- CANVAS DRAWING ----
+  const drawCanvas = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const size = dimensions.width;
+    canvas.width = size;
+    canvas.height = size;
+    const centerX = size / 2;
+    const centerY = size / 2;
+    const maxRadius = size * 0.4;
+    const isScanning = scanningRef.current;
+
+    // Background
+    const grad = ctx.createLinearGradient(0, 0, size, size);
+    grad.addColorStop(0, '#0a0f1e');
+    grad.addColorStop(1, '#101624');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, size, size);
+
+    if (currentCoords !== null) {
+      const ringKm = [radius * 0.25, radius * 0.5, radius * 0.75, radius];
+      ctx.strokeStyle = 'rgba(100, 200, 255, 0.4)';
+      ctx.lineWidth = 1;
+      ringKm.forEach(km => {
+        const r = (km / radius) * maxRadius;
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, r, 0, 2 * Math.PI);
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(200, 220, 255, 0.7)';
+        ctx.font = '10px monospace';
+        ctx.fillText(`${km}km`, centerX + r + 3, centerY - 3);
+      });
+    } else {
+      ctx.strokeStyle = 'rgba(200, 200, 200, 0.3)';
+      ctx.setLineDash([8, 4]);
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, maxRadius, 0, 2 * Math.PI);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = 'rgba(200, 200, 200, 0.5)';
+      ctx.font = '12px monospace';
+      ctx.fillText('All Nigeria', centerX - 35, centerY - maxRadius - 5);
+    }
+
+    // Crosshair
+    ctx.beginPath();
+    ctx.moveTo(centerX - 5, centerY);
+    ctx.lineTo(centerX + 5, centerY);
+    ctx.moveTo(centerX, centerY - 5);
+    ctx.lineTo(centerX, centerY + 5);
+    ctx.stroke();
+
+    // Pulsing You dot
+    if (currentCoords !== null) {
+      pulsePhaseRef.current = (pulsePhaseRef.current + 0.05) % (2 * Math.PI);
+      const pulseRadius = 6 + Math.sin(pulsePhaseRef.current) * 4;
+      ctx.fillStyle = '#3b82f6';
+      ctx.shadowBlur = 12;
+      ctx.shadowColor = '#3b82f6';
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, pulseRadius, 0, 2 * Math.PI);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+
+      ctx.strokeStyle = 'rgba(59,130,246,0.5)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, pulseRadius + 4, 0, 2 * Math.PI);
+      ctx.stroke();
+    }
+
+    // Provider markers
+    if (!isScanning) {
+      providers.forEach(provider => {
+        if (currentCoords === null) return;
+        const r = (provider.distance / radius) * maxRadius;
+        const angle = (provider.bearing - 90) * Math.PI / 180;
+        const x = centerX + r * Math.cos(angle);
+        const y = centerY + r * Math.sin(angle);
+
+        ctx.fillStyle = '#10b981';
+        ctx.shadowBlur = 8;
+        ctx.shadowColor = '#10b981';
+        ctx.beginPath();
+        ctx.arc(x, y, 6, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        (provider as any).canvasX = x;
+        (provider as any).canvasY = y;
+      });
+    }
+
+    // Sweeping radar line
+    if (isScanning && currentCoords !== null) {
+      const angle = (rotationAngleRef.current - 90) * Math.PI / 180;
+      const ex = centerX + maxRadius * Math.cos(angle);
+      const ey = centerY + maxRadius * Math.sin(angle);
+      ctx.beginPath();
+      ctx.moveTo(centerX, centerY);
+      ctx.lineTo(ex, ey);
+      ctx.strokeStyle = '#00ffaa';
+      ctx.lineWidth = 2;
+      ctx.shadowBlur = 15;
+      ctx.shadowColor = '#00ffaa';
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+  }, [dimensions, providers, radius, currentCoords]);
+
+  useEffect(() => {
+    drawCanvas();
+  }, [drawCanvas]);
+
+  const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (scanning || currentCoords === null) return;
+    const rect = canvasRef.current!.getBoundingClientRect();
+    const scaleX = canvasRef.current!.width / rect.width;
+    const scaleY = canvasRef.current!.height / rect.height;
+    const clickX = (e.clientX - rect.left) * scaleX;
+    const clickY = (e.clientY - rect.top) * scaleY;
+    const found = providers.find(p => {
+      const dx = (p as any).canvasX - clickX;
+      const dy = (p as any).canvasY - clickY;
+      return Math.hypot(dx, dy) < 15;
+    });
+    setSelectedProvider(found || null);
+  };
+
+  const requestLocationAgain = () => {
+    if (!navigator.geolocation) return;
+    setGettingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setCurrentCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        setErrorMsg('');
+        setGettingLocation(false);
+        setLocationLabel('My location');
+      },
+      (err) => {
+        setErrorMsg('Location access still denied.');
+        setGettingLocation(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
 
   if (!isOpen) return null;
-
-  const mapCenter = currentCoords || { lat: 9.0765, lng: 7.3986 };
-  const mapZoom = currentCoords ? 13 : 7;
 
   return (
     <div className="fixed inset-0 z-[2000] bg-black/90 flex items-center justify-center">
       <div className="relative w-full h-full max-w-5xl mx-auto flex flex-col" ref={containerRef}>
-        <button onClick={onClose} className="absolute top-4 right-4 z-20 bg-white/20 backdrop-blur-md text-white p-2 rounded-full hover:bg-white/30 transition">
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 z-20 bg-white/20 backdrop-blur-md text-white p-2 rounded-full hover:bg-white/30 transition"
+        >
           <X className="h-6 w-6" />
         </button>
 
-        {/* Onboarding */}
-        {showOnboarding && !category && (
-          <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-            <div className="bg-gray-900 text-white rounded-2xl p-6 max-w-sm text-center shadow-2xl border border-gray-700">
-              <Sparkles className="h-10 w-10 mx-auto text-cyan-400 mb-3" />
-              <h3 className="text-lg font-bold mb-2">Find Providers Near You</h3>
-              <p className="text-sm text-gray-300 mb-4">
-                Type a service category (e.g. Plumber, Makeup Artist) and press Enter to scan.
-                Tap on the coloured dots to see providers and book instantly.
-              </p>
-              <button
-                onClick={() => { setShowOnboarding(false); inputRef.current?.focus(); }}
-                className="bg-cyan-600 hover:bg-cyan-700 text-white px-5 py-2 rounded-xl font-medium transition"
-              >
-                Got it!
-              </button>
-            </div>
-          </div>
-        )}
-
+        {/* Main content: Canvas + controls */}
         <div className="flex-1 flex flex-col md:flex-row items-center justify-center gap-4 md:gap-8 p-4 pt-16 md:pt-4 overflow-auto">
-          {/* MAP IN A CIRCLE */}
-          <div className="flex-1 flex justify-center items-center">
-            <div className="relative w-full max-w-[400px] aspect-square">
-              <div className="absolute inset-0 rounded-full overflow-hidden shadow-2xl border-4 border-gray-700">
-                {isLoaded ? (
-                  <GoogleMap
-                    mapContainerStyle={{ width: '100%', height: '100%' }}
-                    center={mapCenter}
-                    zoom={mapZoom}
-                    onLoad={(map) => { mapRef.current = map; }}
-                    options={{
-                      mapTypeId: 'roadmap',
-                      streetViewControl: false,
-                      mapTypeControl: false,
-                      fullscreenControl: false,
-                      zoomControl: false,
-                      gestureHandling: 'greedy',
-                      styles: [
-                        { featureType: 'all', elementType: 'labels.text.fill', stylers: [{ color: '#ffffff' }] },
-                        { featureType: 'all', elementType: 'labels.text.stroke', stylers: [{ color: '#000000' }, { lightness: 13 }] },
-                        { featureType: 'administrative', elementType: 'geometry.fill', stylers: [{ visibility: 'off' }] },
-                        { featureType: 'landscape', elementType: 'all', stylers: [{ color: '#08304b' }] },
-                        { featureType: 'poi', elementType: 'geometry', stylers: [{ color: '#0c4152' }, { lightness: 5 }] },
-                        { featureType: 'road.highway', elementType: 'geometry.fill', stylers: [{ color: '#000000' }] },
-                        { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#0b434f' }, { lightness: 25 }] },
-                        { featureType: 'road.arterial', elementType: 'geometry.fill', stylers: [{ color: '#000000' }] },
-                        { featureType: 'road.arterial', elementType: 'geometry.stroke', stylers: [{ color: '#0b3d51' }, { lightness: 16 }] },
-                        { featureType: 'road.local', elementType: 'geometry', stylers: [{ color: '#000000' }] },
-                        { featureType: 'transit', elementType: 'all', stylers: [{ color: '#146474' }] },
-                        { featureType: 'water', elementType: 'all', stylers: [{ color: '#021019' }] },
-                      ],
-                    }}
-                  >
-                    {currentCoords && <UserLocationOverlay position={currentCoords} />}
-                    {currentCoords && <RadarRings center={currentCoords} radiusKm={radius} />}
-
-                    {providers.map((p) => (
-                      <ProviderMarkerOverlay
-                        key={p.id}
-                        position={{ lat: p.lat, lng: p.lng }}
-                        status="available"
-                        onClick={() => setSelectedProvider(p)}
-                      />
-                    ))}
-                  </GoogleMap>
-                ) : (
-                  <div className="w-full h-full bg-gray-900 flex items-center justify-center">
-                    <Loader2 className="h-8 w-8 animate-spin text-white/50" />
-                  </div>
-                )}
-              </div>
-            </div>
+          {/* Canvas area */}
+          <div className="flex-1 flex justify-center items-start md:items-center mt-2 md:mt-0">
+            <canvas
+              ref={canvasRef}
+              width={dimensions.width}
+              height={dimensions.height}
+              className="rounded-full shadow-2xl cursor-pointer transition hover:scale-[1.02] bg-black/40 max-w-full"
+              onClick={handleCanvasClick}
+            />
           </div>
 
-          {/* CONTROLS */}
+          {/* Right panel with all controls */}
           <div className="flex-1 w-full max-w-md space-y-4 mt-2 md:mt-0">
+            {/* Location + GPS button */}
             <div className="flex flex-row gap-2">
               <div className="flex-1">
                 <label className="block text-sm font-medium text-gray-300 mb-1">📍 Location</label>
                 {locationLoading ? (
-                  <div className="flex items-center gap-2 text-gray-400"><Loader2 className="h-4 w-4 animate-spin" /> Loading…</div>
+                  <div className="flex items-center gap-2 text-gray-400">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+                  </div>
                 ) : locationLoadError ? (
                   <div className="flex items-center gap-2 text-yellow-400">
                     <AlertTriangle className="h-4 w-4" />
@@ -579,9 +688,13 @@ export function FindProvidersRadar({
                   </div>
                 ) : (
                   <div className="relative">
-                    <button ref={locationButtonRef} onClick={() => setShowLocationDropdown(!showLocationDropdown)}
-                      className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 flex items-center justify-between gap-1 hover:bg-gray-750 transition">
-                      <span className="truncate">{locationLabel}</span><ChevronDown className="h-4 w-4 flex-shrink-0" />
+                    <button
+                      ref={locationButtonRef}
+                      onClick={() => setShowLocationDropdown(!showLocationDropdown)}
+                      className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 flex items-center justify-between gap-1 hover:bg-gray-750 transition"
+                    >
+                      <span className="truncate">{locationLabel}</span>
+                      <ChevronDown className="h-4 w-4 flex-shrink-0" />
                     </button>
                     {showLocationDropdown && (
                       <LocationDropdown
@@ -598,34 +711,28 @@ export function FindProvidersRadar({
                 )}
               </div>
               <div className="flex items-end">
-                <button onClick={() => {
-                  if (!navigator.geolocation) { toast.error('Geolocation not supported'); return; }
-                  setGettingLocation(true);
-                  navigator.geolocation.getCurrentPosition(
-                    (pos) => {
-                      const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-                      setCurrentCoords(loc);
-                      setLocationLabel('My location');
-                      setGettingLocation(false);
-                    },
-                    () => { setErrorMsg('Location access still denied.'); setGettingLocation(false); },
-                    { enableHighAccuracy: true, timeout: 10000 }
-                  );
-                }} disabled={gettingLocation}
-                  className="h-[42px] px-3 bg-primary-600 text-white rounded-lg disabled:opacity-50 flex items-center gap-1 whitespace-nowrap">
+                <button
+                  onClick={requestLocationAgain}
+                  disabled={gettingLocation}
+                  className="h-[42px] px-3 bg-primary-600 text-white rounded-lg disabled:opacity-50 flex items-center gap-1 whitespace-nowrap"
+                >
                   {gettingLocation ? <Loader2 className="h-4 w-4 animate-spin" /> : <Navigation className="h-4 w-4" />}
                   <span className="text-xs sm:text-sm">My Location</span>
                 </button>
               </div>
             </div>
 
-            {currentCoords && (
+            {/* Radius selector */}
+            {currentCoords !== null && (
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-1">Search Radius</label>
                 <div className="flex gap-2 flex-wrap">
                   {RADIUS_OPTIONS.map(r => (
-                    <button key={r} onClick={() => setRadius(r)}
-                      className={`px-3 py-1 rounded-full text-sm ${radius === r ? 'bg-cyan-600 text-white' : 'bg-gray-700 text-gray-300'}`}>
+                    <button
+                      key={r}
+                      onClick={() => setRadius(r)}
+                      className={`px-3 py-1 rounded-full text-sm ${radius === r ? 'bg-cyan-600 text-white' : 'bg-gray-700 text-gray-300'}`}
+                    >
                       {r} km
                     </button>
                   ))}
@@ -633,18 +740,30 @@ export function FindProvidersRadar({
               </div>
             )}
 
+            {/* Category input with autocomplete */}
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">Service Category</label>
               <div className="relative">
-                <input ref={inputRef} type="text" value={searchTerm}
-                  onChange={e => setSearchTerm(e.target.value)} onKeyDown={handleKeyDown}
-                  placeholder="e.g., Auto Repair, Plumbing, Makeup..."
-                  className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm sm:text-base" />
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="e.g., Auto Repair, Plumbing, Graphic Design..."
+                  className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                />
                 {suggestions.length > 0 && (
-                  <ul className="absolute z-10 mt-1 w-full bg-gray-900 border border-gray-700 rounded-lg shadow-lg max-h-60 overflow-auto">
+                  <ul className="absolute z-10 mt-1 w-full bg-gray-800 border border-gray-700 rounded-lg shadow-lg max-h-60 overflow-auto">
                     {suggestions.map((s, idx) => (
-                      <li key={s} className={`px-4 py-2 cursor-pointer text-white ${idx === suggestionIndex ? 'bg-gray-700' : 'hover:bg-gray-700'}`}
-                        onMouseDown={e => { e.preventDefault(); selectSuggestion(s); }}>
+                      <li
+                        key={s}
+                        className={`px-4 py-2 cursor-pointer text-white ${idx === suggestionIndex ? 'bg-gray-600' : 'hover:bg-gray-700'}`}
+                        onMouseDown={e => {
+                          e.preventDefault();
+                          selectSuggestion(s);
+                        }}
+                      >
                         {s}
                       </li>
                     ))}
@@ -653,53 +772,69 @@ export function FindProvidersRadar({
               </div>
             </div>
 
+            {/* Action buttons */}
             <div className="flex gap-2">
-              <button onClick={() => {
-                if (categorySlug) fetchNearbyProvidersWithSlug(categorySlug);
-                else applyCategory(searchTerm);
-              }} disabled={loading}
-                className="flex-1 flex items-center justify-center gap-2 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold py-2 px-4 rounded-lg transition disabled:opacity-50">
+              <button
+                onClick={() => {
+                  if (categorySlug) {
+                    fetchNearbyProvidersWithSlug(categorySlug);
+                  } else {
+                    applyCategory(searchTerm);
+                  }
+                }}
+                disabled={loading}
+                className="flex-1 flex items-center justify-center gap-2 bg-cyan-600 hover:bg-cyan-700 text-white font-semibold py-2 px-4 rounded-lg transition disabled:opacity-50"
+              >
                 {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Search className="h-5 w-5" />}
                 {loading ? 'Scanning...' : 'Find Providers'}
               </button>
-              <button onClick={resetSearch}
-                className="flex items-center justify-center gap-1 bg-gray-700 hover:bg-gray-600 text-white py-2 px-3 rounded-lg transition">
-                <RotateCcw className="h-4 w-4" /><span className="text-xs">Reset</span>
+              <button
+                onClick={resetSearch}
+                className="flex items-center justify-center gap-1 bg-gray-700 hover:bg-gray-600 text-white py-2 px-3 rounded-lg transition"
+                title="Reset search"
+              >
+                <RotateCcw className="h-4 w-4" />
               </button>
             </div>
 
             {errorMsg && (
-              <div className="p-3 bg-gray-800 border border-gray-700 rounded-lg text-gray-300 text-sm">
-                <div className="flex items-start gap-2">
-                  <AlertTriangle className="h-4 w-4 text-yellow-400 mt-0.5 flex-shrink-0" />
-                  <div>
-                    <p className="font-medium text-white mb-1">No Results</p>
-                    <p>{errorMsg}</p>
-                    <p className="mt-1 text-xs text-gray-400">Try a different category, increase the radius, or check your location.</p>
-                  </div>
-                </div>
+              <div className="p-3 bg-red-900/50 border border-red-700 rounded-lg text-red-200 text-sm">
+                {errorMsg}
               </div>
             )}
 
             {selectedProvider && (
               <div className="p-3 bg-gray-800 rounded-lg">
                 <p className="font-semibold text-white">{selectedProvider.business_name}</p>
-                <p className="text-sm text-gray-300">{selectedProvider.distance > 0 ? `${selectedProvider.distance.toFixed(1)} km away` : ''}</p>
-                <Link href={`/provider/${selectedProvider.id}`} onClick={onClose}
-                  className="mt-2 inline-flex items-center gap-1 bg-primary-600 text-white px-3 py-1.5 rounded-lg text-sm hover:bg-primary-700 transition">
-                  View Profile <ArrowRight className="h-4 w-4" />
+                <p className="text-sm text-gray-300">
+                  {selectedProvider.distance > 0 ? `${selectedProvider.distance.toFixed(1)} km away` : ''}
+                </p>
+                <Link
+                  href={`/provider/${selectedProvider.id}`}
+                  onClick={onClose}
+                  className="mt-2 inline-block text-cyan-400 text-sm hover:underline"
+                >
+                  View Profile →
                 </Link>
               </div>
             )}
 
+            {/* Nearest Providers list – boosted first, then by distance */}
             {providers.length > 0 && !selectedProvider && (
               <div className="bg-gray-800 rounded-lg p-3 max-h-60 overflow-auto space-y-2">
-                <p className="text-sm text-gray-300 font-medium mb-1">{currentCoords ? 'Nearest Providers' : 'All Providers'}</p>
+                <p className="text-sm text-gray-300 font-medium mb-1">
+                  {currentCoords !== null ? 'Nearest Providers' : 'All Providers'}
+                </p>
                 {providers.map(p => (
-                  <button key={p.id} className="block w-full text-left p-2 rounded hover:bg-gray-700 text-white"
-                    onClick={() => setSelectedProvider(p)}>
+                  <button
+                    key={p.id}
+                    className="block w-full text-left p-2 rounded hover:bg-gray-700 text-white"
+                    onClick={() => setSelectedProvider(p)}
+                  >
                     <span className="font-medium">{p.business_name}</span>
-                    {currentCoords && <span className="float-right text-xs text-gray-400">{p.distance.toFixed(1)} km</span>}
+                    {currentCoords !== null && (
+                      <span className="float-right text-xs text-gray-400">{p.distance.toFixed(1)} km</span>
+                    )}
                   </button>
                 ))}
               </div>
