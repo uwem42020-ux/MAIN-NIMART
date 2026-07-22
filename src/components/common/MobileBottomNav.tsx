@@ -50,7 +50,6 @@ export function MobileBottomNav() {
 
   const [visible, setVisible] = useState(true);
   const [tierPanelOpen, setTierPanelOpen] = useState(false);
-  const [loadingId, setLoadingId] = useState<string | null>(null);
   const footerObserverRef = useRef<IntersectionObserver | null>(null);
 
   // Listen for tier panel open/close
@@ -80,20 +79,6 @@ export function MobileBottomNav() {
     return () => footerObserverRef.current?.disconnect();
   }, [isHomePage]);
 
-  const handleNavigation = async (
-    id: string,
-    navigateTo: string,
-    markAsSeen?: () => Promise<void>
-  ) => {
-    if (loadingId) return;
-    setLoadingId(id);
-    router.push(navigateTo);
-    if (markAsSeen) {
-      markAsSeen().catch(console.error);
-    }
-    setTimeout(() => setLoadingId(null), 500);
-  };
-
   const getLink = (roleSuffix: string) => {
     if (!profile) return '/auth/signin';
     return profile.role === 'provider' ? `/provider/${roleSuffix}` : `/customer/${roleSuffix}`;
@@ -105,36 +90,42 @@ export function MobileBottomNav() {
   const showBookingsBadge = counts.bookings > 0;
   const showSystemBadge = counts.system > 0;
 
+  // Navigate and mark as seen — instant response, no setTimeout
+  const navigate = (path: string, markAsSeen?: () => Promise<void>) => {
+    router.replace(path);
+    if (markAsSeen) markAsSeen().catch(console.error);
+  };
+
   const navItems: NavItem[] = [
     {
       id: 'home',
       label: 'Home',
       icon: <SolidHomeIcon className="w-6 h-6" />,
-      onClick: () => router.push('/'),
+      onClick: () => navigate('/'),
     },
     {
       id: 'bookings',
       label: 'Bookings',
       icon: <CalendarDays className="w-6 h-6" />,
-      onClick: () => handleNavigation('bookings', getLink('bookings'), markBookingsAsSeen),
+      onClick: () => navigate(getLink('bookings'), markBookingsAsSeen),
     },
     {
       id: 'messages',
       label: 'Messages',
       icon: <SolidMessageIcon className="w-6 h-6" />,
-      onClick: () => handleNavigation('messages', getLink('messages'), markMessagesAsSeen),
+      onClick: () => navigate(getLink('messages'), markMessagesAsSeen),
     },
     {
       id: 'alerts',
       label: 'Alerts',
       icon: <SolidBellIcon className="w-6 h-6" />,
-      onClick: () => handleNavigation('alerts', '/notifications', markSystemAsSeen),
+      onClick: () => navigate('/notifications', markSystemAsSeen),
     },
     {
       id: 'map',
       label: 'Map',
       icon: <SolidMapIcon className="w-6 h-6" />,
-      onClick: () => router.push('/map'),
+      onClick: () => navigate('/map'),
     },
   ];
 
@@ -173,15 +164,13 @@ export function MobileBottomNav() {
             <button
               key={item.id}
               onClick={item.onClick}
-              disabled={loadingId === item.id}
               aria-label={item.label}
               className={cn(
                 'relative flex flex-col items-center justify-center flex-1 py-1',
-                'transition-colors duration-200',
+                'transition-colors duration-200 active:scale-90',
                 active
                   ? 'text-primary-600'
-                  : 'text-gray-500 hover:text-primary-600',
-                loadingId === item.id && 'opacity-50 cursor-not-allowed'
+                  : 'text-gray-500 hover:text-primary-600'
               )}
             >
               <div className="relative">
