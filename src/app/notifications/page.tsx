@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabase';
 import { db } from '@/lib/supabase-any';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatDistanceToNow } from 'date-fns';
-import { Bell, Calendar, MessageCircle, AlertCircle, XCircle } from 'lucide-react';
+import { Bell, Calendar, MessageCircle, AlertCircle, XCircle, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import toast from 'react-hot-toast';
 import { NimartSpinner } from '@/components/common/NimartSpinner';
@@ -30,15 +30,24 @@ const iconMap: Record<string, React.ElementType> = {
   alert: AlertCircle,
 };
 
+const INITIAL_DISPLAY = 10;
+
 export default function NotificationsPage() {
-  const { user } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
   const router = useRouter();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
+  const [displayCount, setDisplayCount] = useState(INITIAL_DISPLAY);
 
   useEffect(() => {
+    // Stop loading if auth check completes and there's no user
+    if (!authLoading && !user) {
+      setLoading(false);
+      return;
+    }
     if (!user) return;
+
     fetchNotifications();
 
     const channel = supabase
@@ -65,7 +74,7 @@ export default function NotificationsPage() {
     return () => {
       supabase.removeChannel(channel).catch(console.warn);
     };
-  }, [user]);
+  }, [user, authLoading]);
 
   async function fetchNotifications() {
     if (!user) return;
@@ -82,7 +91,7 @@ export default function NotificationsPage() {
   async function markAsRead(id: string) {
     await db
       .from('notifications')
-      .update({ is_read: true, read_at: new Date().toISOString() })
+      .update({ is_read: true, read_at: new Date().toISOString() } as any)
       .eq('id', id);
   }
 
@@ -90,7 +99,7 @@ export default function NotificationsPage() {
     if (!user) return;
     await db
       .from('notifications')
-      .update({ is_read: true, read_at: new Date().toISOString() })
+      .update({ is_read: true, read_at: new Date().toISOString() } as any)
       .eq('user_id', user.id)
       .eq('is_read', false);
     setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
@@ -98,8 +107,14 @@ export default function NotificationsPage() {
   }
 
   async function deleteNotification(id: string) {
-    await db.from('notifications').delete().eq('id', id);
+    const { error } = await db.from('notifications').delete().eq('id', id);
+    if (error) {
+      toast.error('Failed to delete notification');
+      return;
+    }
+    // Remove from local state immediately
     setNotifications(prev => prev.filter(n => n.id !== id));
+    toast.success('Notification deleted');
   }
 
   const handleNotificationClick = (notification: Notification) => {
@@ -126,11 +141,15 @@ export default function NotificationsPage() {
     ? notifications
     : notifications.filter(n => !n.is_read);
 
+  const displayedNotifications = filteredNotifications.slice(0, displayCount);
+  const hasMore = filteredNotifications.length > displayCount;
+
   const unreadCount = notifications.filter(n => !n.is_read).length;
 
-  if (!user && !loading) {
+  // Show sign‑in prompt if auth loaded and no user
+  if (!authLoading && !user) {
     return (
-      <div className="max-w-3xl mx-auto px-4 py-12 text-center">
+      <div className="max-w-3xl mx-auto px-4 py-12 text-center min-h-[calc(100vh-4rem)]">
         <Bell className="mx-auto h-12 w-12 text-gray-400 mb-4" />
         <p className="text-gray-500">Please sign in to view notifications.</p>
       </div>
@@ -174,7 +193,7 @@ export default function NotificationsPage() {
           </div>
         ) : (
           <div className="space-y-2">
-            {filteredNotifications.map((notif) => {
+            {displayedNotifications.map((notif) => {
               const Icon = iconMap[notif.type] || Bell;
               const hasAction = notif.data?.booking_id || notif.data?.thread_id || notif.data?.provider_id;
 
@@ -188,7 +207,6 @@ export default function NotificationsPage() {
                   )}
                   onClick={() => handleNotificationClick(notif)}
                 >
-                  {/* Delete button – absolutely positioned so it never overflows */}
                   <button
                     onClick={(e) => { e.stopPropagation(); deleteNotification(notif.id); }}
                     className="absolute top-2 right-2 text-gray-400 hover:text-red-500 z-10"
@@ -221,6 +239,17 @@ export default function NotificationsPage() {
                 </div>
               );
             })}
+
+            {/* Load More button */}
+            {hasMore && (
+              <button
+                onClick={() => setDisplayCount(prev => prev + INITIAL_DISPLAY)}
+                className="w-full py-3 mt-4 bg-gray-50 hover:bg-gray-100 rounded-lg text-sm font-medium text-gray-600 flex items-center justify-center gap-2 transition"
+              >
+                <ChevronDown className="h-4 w-4" />
+                Load more ({filteredNotifications.length - displayedNotifications.length} remaining)
+              </button>
+            )}
           </div>
         )}
       </div>
