@@ -3,33 +3,29 @@
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { GoogleMap, Marker, InfoWindow, OverlayView, useJsApiLoader } from '@react-google-maps/api';
+import { GoogleMap, InfoWindow, OverlayView, useJsApiLoader } from '@react-google-maps/api';
 import { db } from '@/lib/supabase-any';
 import { useAuth } from '@/contexts/AuthContext';
 import { calculateDistance } from '@/lib/distance';
 import { Search, X, LocateFixed, Maximize2, Minimize2, Map as MapIcon, List, Satellite } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import toast from 'react-hot-toast';
-import type { Database } from '@/types/database';
 
-type ProviderRow = Database['public']['Tables']['providers']['Row'];
-type ProfileRow = Database['public']['Tables']['profiles']['Row'];
-
-interface MapProvider extends ProviderRow {
-  profile: ProfileRow | null;
+type MapProvider = {
+  id: string;
+  business_name: string;
+  status: string;
+  selected_category_slug: string;
+  lat: number;
+  lng: number;
+  avatar_url: string | null;
+  lga_name: string | null;
+  state_name: string | null;
   distance?: number;
-  display_lat?: number;
-  display_lng?: number;
-}
-
-const containerStyle = { width: '100%', height: '100%' };
-const defaultCenter = { lat: 9.0765, lng: 7.3986 };
-const nigeriaBounds = {
-  north: 14.0,
-  south: 4.0,
-  east: 15.0,
-  west: 2.0,
 };
+
+const defaultCenter = { lat: 9.0765, lng: 7.3986 };
+const nigeriaBounds = { north: 14.0, south: 4.0, east: 15.0, west: 2.0 };
 
 const statusColors: Record<string, string> = {
   available: '#22c55e',
@@ -40,11 +36,7 @@ const statusColors: Record<string, string> = {
 function UserLocationOverlay({ position }: { position: google.maps.LatLngLiteral }) {
   if (!position) return null;
   return (
-    <OverlayView
-      position={position}
-      mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
-      getPixelPositionOffset={() => ({ x: -16, y: -16 })}
-    >
+    <OverlayView position={position} mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET} getPixelPositionOffset={() => ({ x: -16, y: -16 })}>
       <div className="flex flex-col items-center">
         <div className="relative flex items-center justify-center">
           <div className="absolute w-8 h-8 bg-blue-500/30 rounded-full animate-ping" />
@@ -55,33 +47,13 @@ function UserLocationOverlay({ position }: { position: google.maps.LatLngLiteral
   );
 }
 
-function ProviderMarkerOverlay({
-  position,
-  status,
-  onClick,
-}: {
-  position: google.maps.LatLngLiteral;
-  status: string;
-  onClick: () => void;
-}) {
+function ProviderMarkerOverlay({ position, status, onClick }: { position: google.maps.LatLngLiteral; status: string; onClick: () => void }) {
   const color = statusColors[status] || '#6b7280';
   return (
-    <OverlayView
-      position={position}
-      mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
-      getPixelPositionOffset={() => ({ x: -14, y: -30 })}
-    >
+    <OverlayView position={position} mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET} getPixelPositionOffset={() => ({ x: -14, y: -30 })}>
       <div className="flex flex-col items-center cursor-pointer" onClick={onClick}>
-        <div
-          className="w-4 h-4 rounded-full border-2 border-white shadow-md"
-          style={{ backgroundColor: color }}
-        />
-        <img
-          src="/robot-marker.png"
-          alt=""
-          className="w-6 h-6 mt-0.5 object-contain"
-          style={{ imageRendering: 'auto' }}
-        />
+        <div className="w-4 h-4 rounded-full border-2 border-white shadow-md" style={{ backgroundColor: color }} />
+        <img src="/robot-marker.png" alt="" className="w-6 h-6 mt-0.5 object-contain" style={{ imageRendering: 'auto' }} />
       </div>
     </OverlayView>
   );
@@ -92,10 +64,7 @@ export function MapView() {
   const mapRef = useRef<google.maps.Map | null>(null);
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
-  const { isLoaded } = useJsApiLoader({
-    id: 'google-map-script',
-    googleMapsApiKey: apiKey,
-  });
+  const { isLoaded } = useJsApiLoader({ id: 'google-map-script', googleMapsApiKey: apiKey });
 
   const [selectedProvider, setSelectedProvider] = useState<MapProvider | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -109,72 +78,30 @@ export function MapView() {
   const [selectedState, setSelectedState] = useState('');
   const [selectedLga, setSelectedLga] = useState('');
 
-  const [allLgaCenters, setAllLgaCenters] = useState<any[]>([]);
-
-  // Smooth fly‑to
+  // Smooth fly-to (simpler version)
   const flyTo = useCallback((lat: number, lng: number, zoom: number) => {
     if (!mapRef.current) return;
-    const map = mapRef.current;
-    const currentCenter = map.getCenter();
-    const currentZoom = map.getZoom();
-    if (!currentCenter || currentZoom === undefined) {
-      map.setCenter({ lat, lng });
-      map.setZoom(zoom);
-      return;
-    }
-    const duration = 800;
-    const frames = 60;
-    const stepDuration = duration / frames;
-    const startLat = currentCenter.lat();
-    const startLng = currentCenter.lng();
-    const startZoom = currentZoom;
-    let frame = 0;
-    const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
-    const animate = () => {
-      frame++;
-      const progress = easeOutCubic(Math.min(frame / frames, 1));
-      map.setCenter({
-        lat: startLat + (lat - startLat) * progress,
-        lng: startLng + (lng - startLng) * progress,
-      });
-      map.setZoom(startZoom + (zoom - startZoom) * progress);
-      if (frame < frames) setTimeout(animate, stepDuration);
-    };
-    animate();
+    mapRef.current.panTo({ lat, lng });
+    mapRef.current.setZoom(zoom);
   }, []);
 
-  // Fetch all LGA centers
+  // Fetch states & LGAs once
   useEffect(() => {
-    db
-      .from('lga_centers')
-      .select('state_id, state_name, lga_id, lga_name, lat, lng')
-      .then(({ data }: { data: any }) => {
-        if (data) setAllLgaCenters(data);
-      });
+    db.from('lga_centers').select('state_id, state_name').order('state_name').then(({ data }: { data: any }) => {
+      if (data) {
+        const unique = data.filter((v: any, i: number, a: any[]) => a.findIndex((t: any) => t.state_id === v.state_id) === i);
+        setStates(unique);
+      }
+    });
   }, []);
 
-  // Fetch states
-  useEffect(() => {
-    db
-      .from('lga_centers')
-      .select('state_id, state_name')
-      .order('state_name')
-      .then(({ data }: { data: any }) => {
-        if (data) {
-          const unique = data.filter((v: any, i: number, a: any[]) => a.findIndex((t: any) => t.state_id === v.state_id) === i);
-          setStates(unique);
-        }
-      });
-  }, []);
-
-  // Auto‑detect user location – only fly to it, do NOT set any filter
+  // Auto-detect user location
   useEffect(() => {
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         setUserLocation(loc);
-        // fly to user location only when no manual state/LGA is selected yet
         if (mapRef.current && !selectedState) {
           flyTo(loc.lat, loc.lng, 16);
         }
@@ -182,28 +109,17 @@ export function MapView() {
       () => {},
       { enableHighAccuracy: true, timeout: 10000 }
     );
-  }, [selectedState, flyTo]);   // re‑run when selectedState changes (so it doesn't fight manual selection)
+  }, [selectedState, flyTo]);
 
-  // Fetch LGAs when state changes (manual selection only)
+  // Fetch LGAs when state changes
   useEffect(() => {
-    if (!selectedState) {
-      setLgas([]);
-      setSelectedLga('');
-      if (mapRef.current) flyTo(defaultCenter.lat, defaultCenter.lng, 7);
-      return;
-    }
-    db
-      .from('lga_centers')
-      .select('lga_id, lga_name, lat, lng')
-      .eq('state_id', parseInt(selectedState))
-      .order('lga_name')
+    if (!selectedState) { setLgas([]); setSelectedLga(''); return; }
+    db.from('lga_centers').select('lga_id, lga_name, lat, lng').eq('state_id', parseInt(selectedState)).order('lga_name')
       .then(({ data }: { data: any }) => {
-        const fetched = data || [];
-        setLgas(fetched);
-        if (fetched.length > 0 && !selectedLga) {
-          const firstLga = fetched[0];
-          setSelectedLga(firstLga.lga_id.toString());
-          if (firstLga.lat != null && firstLga.lng != null) flyTo(firstLga.lat, firstLga.lng, 14);
+        setLgas(data || []);
+        if (data?.length && !selectedLga) {
+          setSelectedLga(data[0].lga_id.toString());
+          if (data[0].lat != null && data[0].lng != null) flyTo(data[0].lat, data[0].lng, 14);
         }
       });
   }, [selectedState, flyTo, selectedLga]);
@@ -214,75 +130,64 @@ export function MapView() {
     if (lga?.lat != null && lga?.lng != null) flyTo(lga.lat, lga.lng, 14);
   }, [lgas, flyTo]);
 
-  // Query providers
+  // Query providers — slim: only fetch what we display
   const { data: allProviders, isLoading } = useQuery({
-    queryKey: ['map-providers', userLocation?.lat, userLocation?.lng],
+    queryKey: ['map-providers'],
     queryFn: async () => {
       const { data: providers, error } = await db
         .from('providers')
-        .select('*')
+        .select('id, business_name, status, selected_category_slug')
         .eq('is_available', true)
-        .limit(200);
-      if (error) throw error;
-      const provs = (providers || []) as any[];
-      if (!provs.length) return [];
+        .limit(100);
 
-      const ids = provs.map((p: any) => p.id);
-      const { data: profiles } = await db.from('profiles').select('*').in('id', ids);
-      const profs = (profiles || []) as any[];
-      const profileMap = new Map(profs.map((p: any) => [p.id, p]));
+      if (error || !providers) return [];
 
-      return provs.map((provider: any) => {
-        const p = profileMap.get(provider.id) || null;
-        const distance = userLocation && p?.lat != null && p?.lng != null
-          ? calculateDistance(userLocation.lat, userLocation.lng, p.lat, p.lng)
+      const providerIds = (providers as any[]).map((p: any) => p.id);
+
+      const { data: profiles } = await db
+        .from('profiles')
+        .select('id, lat, lng, avatar_url, lga_name, state_name')
+        .in('id', providerIds);
+
+      const profileMap = new Map((profiles as any[])?.map((p: any) => [p.id, p]) || []);
+
+      return (providers as any[]).map((p: any) => {
+        const prof = profileMap.get(p.id) || {};
+        const distance = userLocation && prof?.lat != null && prof?.lng != null
+          ? calculateDistance(userLocation.lat, userLocation.lng, prof.lat, prof.lng)
           : undefined;
-        return { ...provider, profile: p, distance } as MapProvider;
+        return {
+          id: p.id,
+          business_name: p.business_name,
+          status: p.status,
+          selected_category_slug: p.selected_category_slug,
+          lat: prof.lat,
+          lng: prof.lng,
+          avatar_url: prof.avatar_url,
+          lga_name: prof.lga_name,
+          state_name: prof.state_name,
+          distance,
+        };
       });
     },
     staleTime: 1000 * 60 * 5,
   });
 
-  // Filter + spread coordinates
+  // Filter providers
   const providersWithCoords = useMemo(() => {
     let filtered = (allProviders || []).filter((p: any) => {
       if (searchTerm) {
         const term = searchTerm.toLowerCase();
         return (
           p.business_name?.toLowerCase().includes(term) ||
-          p.profile?.full_name?.toLowerCase().includes(term) ||
-          p.selected_category_slug?.toLowerCase().includes(term)
+          p.selected_category_slug?.toLowerCase().includes(term) ||
+          p.lga_name?.toLowerCase().includes(term)
         );
       }
-      // only filter by LGA if both state and LGA are manually selected
-      if (selectedState && selectedLga && p.profile?.lga_id?.toString() !== selectedLga) return false;
-      return p.profile?.lat != null && p.profile?.lng != null;
+      if (selectedState && selectedLga && p.lga_id?.toString() !== selectedLga) return false;
+      return p.lat != null && p.lng != null;
     });
-
-    const groups = new Map<string, MapProvider[]>();
-    filtered.forEach((p: any) => {
-      const key = `${p.profile!.lat},${p.profile!.lng}`;
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key)!.push(p);
-    });
-
-    const result: MapProvider[] = [];
-    groups.forEach(providers => {
-      if (providers.length === 1) {
-        const lat = Number(providers[0].profile!.lat!);
-        const lng = Number(providers[0].profile!.lng!);
-        result.push({ ...providers[0], display_lat: lat, display_lng: lng });
-      } else {
-        providers.forEach((p, idx) => {
-          const angle = (2 * Math.PI * idx) / providers.length;
-          const offset = 0.002;
-          const lat = Number(p.profile!.lat!) + offset * Math.cos(angle);
-          const lng = Number(p.profile!.lng!) + offset * Math.sin(angle);
-          result.push({ ...p, display_lat: lat, display_lng: lng });
-        });
-      }
-    });
-    return result;
+    return filtered;
   }, [allProviders, searchTerm, selectedLga, selectedState]);
 
   const selectedLgaName = useMemo(() => {
@@ -293,27 +198,15 @@ export function MapView() {
 
   const handleLocate = () => {
     if (!navigator.geolocation) { toast.error('Geolocation not supported'); return; }
-    toast.loading('Getting your location...', { id: 'locate' });
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         setUserLocation(loc);
         flyTo(loc.lat, loc.lng, 16);
-        toast.success('Location found', { id: 'locate' });
       },
-      (err) => {
-        let message = 'Unable to get your location. ';
-        if (err.code === 1) message += 'Please allow location access.';
-        else if (err.code === 2) message += 'Location unavailable.';
-        else if (err.code === 3) message += 'Request timed out.';
-        toast.error(message, { id: 'locate' });
-      },
+      () => toast.error('Unable to get location'),
       { enableHighAccuracy: true, timeout: 10000 }
     );
-  };
-
-  const toggleMapType = () => {
-    setMapType(prev => (prev === 'roadmap' ? 'hybrid' : 'roadmap'));
   };
 
   if (!isLoaded) {
@@ -325,72 +218,32 @@ export function MapView() {
   }
 
   return (
-    <div className={cn(
-      'relative',
-      isFullscreen
-        ? 'fixed inset-0 z-50 h-screen'
-        : 'h-[calc(100dvh-64px-56px)] md:h-[calc(100dvh-64px)]'
-    )}>
+    <div className={cn('relative', isFullscreen ? 'fixed inset-0 z-50 h-screen' : 'h-[calc(100dvh-64px-56px)] md:h-[calc(100dvh-64px)]')}>
       {/* Top bar */}
       <div className="absolute top-3 left-3 right-3 z-10 flex gap-2 items-stretch">
         <div className="flex-1 relative max-w-[200px] sm:max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search…"
-            className="w-full h-full pl-9 pr-8 py-2.5 bg-white/80 backdrop-blur-md rounded-lg shadow-lg border border-white/30 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-          />
-          {searchTerm && (
-            <button onClick={() => setSearchTerm('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500">
-              <X className="h-4 w-4" />
-            </button>
-          )}
+          <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Search…"
+            className="w-full h-full pl-9 pr-8 py-2.5 bg-white/80 backdrop-blur-md rounded-lg shadow-lg border border-white/30 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+          {searchTerm && <button onClick={() => setSearchTerm('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"><X className="h-4 w-4" /></button>}
         </div>
-
         <div className="flex gap-1">
-          <div className="relative">
-            <select
-              value={selectedState}
-              onChange={(e) => setSelectedState(e.target.value)}
-              className="appearance-none h-full text-xs bg-white/15 backdrop-blur-md border-0 shadow-lg rounded-lg px-3 py-2.5 pr-6 w-[110px] sm:w-[140px] text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-primary-400 cursor-pointer"
-            >
-              <option value="" className="text-gray-900">Nigeria</option>
-              {states.map(s => (
-                <option key={s.state_id} value={s.state_id} className="text-gray-900">{s.state_name}</option>
-              ))}
-            </select>
-            <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none">
-              <svg className="w-3 h-3 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-            </div>
-          </div>
-
+          <select value={selectedState} onChange={(e) => setSelectedState(e.target.value)}
+            className="appearance-none h-full text-xs bg-white/15 backdrop-blur-md border-0 shadow-lg rounded-lg px-3 py-2.5 pr-6 w-[110px] sm:w-[140px] text-gray-900 font-medium cursor-pointer">
+            <option value="">Nigeria</option>
+            {states.map(s => <option key={s.state_id} value={s.state_id}>{s.state_name}</option>)}
+          </select>
           {selectedState && (
-            <div className="relative">
-              <select
-                value={selectedLga}
-                onChange={(e) => handleLgaSelect(parseInt(e.target.value))}
-                className="appearance-none h-full text-xs bg-white/15 backdrop-blur-md border-0 shadow-lg rounded-lg px-3 py-2.5 pr-6 w-[110px] sm:w-[140px] text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-primary-400 cursor-pointer"
-              >
-                <option value="" className="text-gray-500">LGA</option>
-                {lgas.map(l => (
-                  <option key={l.lga_id} value={l.lga_id} className="text-gray-900">{l.lga_name}</option>
-                ))}
-              </select>
-              <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none">
-                <svg className="w-3 h-3 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </div>
-            </div>
+            <select value={selectedLga} onChange={(e) => handleLgaSelect(parseInt(e.target.value))}
+              className="appearance-none h-full text-xs bg-white/15 backdrop-blur-md border-0 shadow-lg rounded-lg px-3 py-2.5 pr-6 w-[110px] sm:w-[140px] text-gray-900 font-medium cursor-pointer">
+              <option value="">LGA</option>
+              {lgas.map(l => <option key={l.lga_id} value={l.lga_id}>{l.lga_name}</option>)}
+            </select>
           )}
         </div>
       </div>
 
-      {/* Right control buttons */}
+      {/* Right buttons */}
       <div className="absolute top-20 right-3 z-10 flex flex-col gap-2">
         <button onClick={() => setIsFullscreen(!isFullscreen)} className="bg-white/80 backdrop-blur-md p-2.5 rounded-lg shadow-lg border border-white/30">
           {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
@@ -401,83 +254,38 @@ export function MapView() {
         <button onClick={handleLocate} className="bg-white/80 backdrop-blur-md p-2.5 rounded-lg shadow-lg border border-white/30 hover:bg-white/60 transition">
           <LocateFixed className="h-4 w-4 text-primary-600" />
         </button>
-        <button onClick={toggleMapType} className="bg-white/80 backdrop-blur-md p-2.5 rounded-lg shadow-lg border border-white/30 hover:bg-white/60 transition">
+        <button onClick={() => setMapType(prev => (prev === 'roadmap' ? 'hybrid' : 'roadmap'))} className="bg-white/80 backdrop-blur-md p-2.5 rounded-lg shadow-lg border border-white/30 hover:bg-white/60 transition">
           <Satellite className="h-4 w-4 text-gray-700" />
         </button>
       </div>
 
-      {/* Map & sidebar */}
+      {/* Map */}
       <div className="flex h-full">
         <div className={cn('flex-1 relative', !showProviderList && 'w-full')}>
-          <GoogleMap
-            mapContainerStyle={containerStyle}
-            center={defaultCenter}
-            zoom={7}
-            mapTypeId={mapType}
+          <GoogleMap mapContainerStyle={{ width: '100%', height: '100%' }} center={defaultCenter} zoom={7} mapTypeId={mapType}
             onLoad={(map) => { mapRef.current = map; }}
             options={{
               mapId: process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID || '',
               restriction: { latLngBounds: nigeriaBounds, strictBounds: false },
-              minZoom: 6,
-              streetViewControl: false,
-              mapTypeControl: false,
-              fullscreenControl: false,
-              zoomControl: true,            // show +/– buttons
-              gestureHandling: 'greedy',    // smooth one‑finger pan/zoom
-            }}
-          >
+              minZoom: 6, streetViewControl: false, mapTypeControl: false, fullscreenControl: false,
+              zoomControl: true, gestureHandling: 'greedy',
+            }}>
             {userLocation && <UserLocationOverlay position={userLocation} />}
-
-            {providersWithCoords.map(provider => (
-              provider.display_lat != null && provider.display_lng != null && (
-                <ProviderMarkerOverlay
-                  key={provider.id}
-                  position={{ lat: provider.display_lat, lng: provider.display_lng }}
-                  status={provider.status}
-                  onClick={() => setSelectedProvider(provider)}
-                />
+            {providersWithCoords.map(p => (
+              p.lat != null && p.lng != null && (
+                <ProviderMarkerOverlay key={p.id} position={{ lat: p.lat, lng: p.lng }} status={p.status} onClick={() => setSelectedProvider(p)} />
               )
             ))}
-
             {selectedProvider && (
-              <InfoWindow
-                key={selectedProvider.id}
-                position={{
-                  lat: selectedProvider.display_lat!,
-                  lng: selectedProvider.display_lng!,
-                }}
-                onCloseClick={() => setSelectedProvider(null)}
-              >
+              <InfoWindow position={{ lat: selectedProvider.lat, lng: selectedProvider.lng }} onCloseClick={() => setSelectedProvider(null)}>
                 <div className="w-56 font-sans text-sm">
-                  <h4 className="font-semibold text-gray-900 mb-1">
-                    {selectedProvider.business_name || selectedProvider.profile?.full_name || 'Provider'}
-                  </h4>
-                  <p className="text-gray-500">{selectedProvider.profile?.lga_name || ''}</p>
+                  <h4 className="font-semibold text-gray-900 mb-1">{selectedProvider.business_name || 'Provider'}</h4>
+                  <p className="text-gray-500">{[selectedProvider.lga_name, selectedProvider.state_name].filter(Boolean).join(', ') || ''}</p>
                   {selectedProvider.distance !== undefined && (
                     <p className="font-medium text-gray-700 mt-1">{selectedProvider.distance.toFixed(1)} km away</p>
                   )}
                   <div className="mt-2 flex gap-2">
-                    <a
-                      href={`/provider/${selectedProvider.id}`}
-                      className="flex-1 text-center bg-primary-600 text-white py-1.5 rounded-md text-xs font-medium hover:bg-primary-700"
-                    >
-                      View Details →
-                    </a>
-                    <a
-                      href={selectedProvider.status === 'available' ? `/book/${selectedProvider.id}` : '#'}
-                      onClick={(e) => {
-                        if (selectedProvider.status !== 'available') e.preventDefault();
-                      }}
-                      className={cn(
-                        'flex-1 text-center py-1.5 rounded-md text-xs font-medium',
-                        selectedProvider.status === 'available'
-                          ? 'bg-green-600 text-white hover:bg-green-700'
-                          : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                      )}
-                      aria-disabled={selectedProvider.status !== 'available'}
-                    >
-                      {selectedProvider.status === 'available' ? 'Book Now' : 'Unavailable'}
-                    </a>
+                    <a href={`/provider/${selectedProvider.id}`} className="flex-1 text-center bg-primary-600 text-white py-1.5 rounded-md text-xs font-medium hover:bg-primary-700">View Details →</a>
                   </div>
                 </div>
               </InfoWindow>
@@ -495,46 +303,27 @@ export function MapView() {
           )}
         </div>
 
+        {/* Desktop sidebar */}
         {showProviderList && (
           <div className="hidden md:block w-80 border-l border-gray-200 bg-white overflow-y-auto">
             <div className="p-4 border-b sticky top-0 bg-white">
-              <h3 className="font-semibold text-gray-900">
-                {isLoading ? 'Searching providers…' : `${providersWithCoords.length} provider${providersWithCoords.length !== 1 ? 's' : ''} found`}
-              </h3>
+              <h3 className="font-semibold text-gray-900">{isLoading ? 'Searching…' : `${providersWithCoords.length} provider${providersWithCoords.length !== 1 ? 's' : ''} found`}</h3>
             </div>
             <div className="p-3 space-y-3">
               {isLoading ? (
                 <div className="space-y-2">{Array(3).fill(0).map((_, i) => <div key={i} className="h-16 bg-gray-100 rounded animate-pulse" />)}</div>
               ) : (
                 providersWithCoords.map(provider => (
-                  <button
-                    key={provider.id}
-                    onClick={() => {
-                      setSelectedProvider(provider);
-                      if (provider.display_lat != null && provider.display_lng != null) {
-                        flyTo(provider.display_lat, provider.display_lng, 17);
-                      }
-                    }}
-                    className={cn('w-full text-left p-3 rounded-lg border hover:bg-gray-50 transition', selectedProvider?.id === provider.id ? 'border-primary-500 bg-primary-50' : 'border-gray-200')}
-                  >
+                  <button key={provider.id} onClick={() => { setSelectedProvider(provider); if (provider.lat && provider.lng) flyTo(provider.lat, provider.lng, 17); }}
+                    className={cn('w-full text-left p-3 rounded-lg border hover:bg-gray-50 transition', selectedProvider?.id === provider.id ? 'border-primary-500 bg-primary-50' : 'border-gray-200')}>
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-full bg-gray-100 flex-shrink-0 overflow-hidden">
-                        {provider.profile?.avatar_url ? (
-                          <img src={provider.profile.avatar_url} alt="" className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-sm font-bold text-primary-600 bg-primary-50">
-                            {(provider.business_name || 'P')[0]}
-                          </div>
-                        )}
+                        {provider.avatar_url ? <img src={provider.avatar_url} alt="" className="w-full h-full object-cover" />
+                          : <div className="w-full h-full flex items-center justify-center text-sm font-bold text-primary-600 bg-primary-50">{(provider.business_name || 'P')[0]}</div>}
                       </div>
                       <div className="min-w-0">
-                        <p className="font-medium text-sm text-gray-900 truncate">
-                          {provider.business_name || provider.profile?.full_name || 'Unnamed'}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {provider.profile?.lga_name || 'Location not set'}
-                          {provider.distance !== undefined && ` • ${provider.distance.toFixed(1)} km`}
-                        </p>
+                        <p className="font-medium text-sm text-gray-900 truncate">{provider.business_name || 'Unnamed'}</p>
+                        <p className="text-xs text-gray-500">{provider.lga_name || 'Location not set'}{provider.distance !== undefined && ` • ${provider.distance.toFixed(1)} km`}</p>
                       </div>
                     </div>
                   </button>
