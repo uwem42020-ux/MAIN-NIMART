@@ -28,7 +28,7 @@ import { cn } from '@/lib/utils';
 import { useNotifications } from '@/contexts/NotificationContext';
 import toast from 'react-hot-toast';
 
-// Solid icons
+// Solid SVG icons
 const SolidBookingIcon = ({ className }: { className?: string }) => (
   <svg className={className} viewBox="0 0 24 24" fill="currentColor">
     <path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V9h14v10zM7 11h4v4H7v-4z"/>
@@ -130,12 +130,13 @@ export function Header() {
   const getServicesLink = () => (role === 'provider' ? '/provider/services' : null);
   const getVerificationLink = () => (role === 'provider' ? '/provider/verification' : null);
 
-  const isOnMessagesPage = pathname.includes('/messages');
   const isOnBookingsPage = pathname.includes('/bookings');
+  const isOnMessagesPage = pathname.includes('/messages');
   const isOnNotificationsPage = pathname.startsWith('/notifications');
   const isOnMapPage = pathname.startsWith('/map');
-  const showMessagesBadge = !isOnMessagesPage && counts.messages > 0;
+
   const showBookingsBadge = !isOnBookingsPage && counts.bookings > 0;
+  const showMessagesBadge = !isOnMessagesPage && counts.messages > 0;
   const showSystemBadge = !isOnNotificationsPage && counts.system > 0;
 
   const handleBookingsClick = () => {
@@ -211,15 +212,27 @@ export function Header() {
     setMobileView('main');
   };
 
+  // ── Shared button classes with micro‑interactions ──
+  const iconBtnClass = (active: boolean) =>
+    cn(
+      'relative hidden md:flex items-center justify-center w-9 h-9 rounded-full',
+      'transition-all duration-200 ease-in-out',
+      'hover:bg-green-50 hover:scale-110',           // hover: green bg + slight grow
+      'active:scale-95',                             // click: shrink (press effect)
+      active ? 'bg-primary-50 text-primary-600' : 'text-[#008751]'
+    );
+
+  const iconClass = (active: boolean) =>
+    cn(
+      'w-5 h-5 transition-transform duration-200',
+      active ? 'scale-105' : ''
+    );
+
   return (
     <>
       <header
         className="sticky top-0 z-50 bg-white/70 backdrop-blur-md border-b border-gray-200/50"
-        style={{
-          transform: 'translateZ(0)',
-          willChange: 'transform',
-          position: 'sticky',
-        }}
+        style={{ transform: 'translateZ(0)', willChange: 'transform', position: 'sticky' }}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
@@ -228,83 +241,59 @@ export function Header() {
             </Link>
 
             <div className="flex items-center space-x-1 sm:space-x-2">
-              {/* Bookings icon */}
+              {/* Bookings */}
               <button
                 onClick={handleBookingsClick}
                 title="Bookings"
                 aria-label="Bookings"
-                className={cn(
-                  'relative hidden md:block',
-                  isOnBookingsPage && 'bg-primary-50 rounded-full'
-                )}
+                className={cn('group', iconBtnClass(isOnBookingsPage))}
               >
-                <span className="absolute inset-0 flex items-center justify-center rounded-full bg-gray-100" />
-                <span className={cn('relative flex items-center justify-center w-9 h-9', isOnBookingsPage && 'text-primary-600')}>
-                  <SolidBookingIcon className="w-5 h-5 text-[#008751] transition-colors" />
-                  {showBookingsBadge && (
-                    <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold leading-none text-white bg-red-500 rounded-full">
-                      {counts.bookings > 9 ? '9+' : counts.bookings}
-                    </span>
-                  )}
-                </span>
+                <SolidBookingIcon className={iconClass(isOnBookingsPage)} />
+                {showBookingsBadge && (
+                  <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold leading-none text-white bg-red-500 rounded-full">
+                    {counts.bookings > 9 ? '9+' : counts.bookings}
+                  </span>
+                )}
               </button>
 
-              {/* Messages icon */}
+              {/* Messages */}
               <button
                 onClick={handleMessagesClick}
                 title="Messages"
                 aria-label="Messages"
-                className={cn(
-                  'relative hidden md:block',
-                  isOnMessagesPage && 'bg-primary-50 rounded-full'
-                )}
+                className={cn('group', iconBtnClass(isOnMessagesPage))}
               >
-                <span className="absolute inset-0 flex items-center justify-center rounded-full bg-gray-100" />
-                <span className={cn('relative flex items-center justify-center w-9 h-9', isOnMessagesPage && 'text-primary-600')}>
-                  <SolidMessageIcon className="w-5 h-5 text-[#008751] transition-colors" />
-                  {showMessagesBadge && (
-                    <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold leading-none text-white bg-red-500 rounded-full">
-                      {counts.messages > 9 ? '9+' : counts.messages}
-                    </span>
-                  )}
-                </span>
+                <SolidMessageIcon className={iconClass(isOnMessagesPage)} />
+                {showMessagesBadge && (
+                  <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold leading-none text-white bg-red-500 rounded-full">
+                    {counts.messages > 9 ? '9+' : counts.messages}
+                  </span>
+                )}
               </button>
 
-              {/* Notifications icon */}
+              {/* Notifications */}
               <button
                 onClick={handleNotificationsClick}
                 title="Notifications"
                 aria-label="Notifications"
-                className={cn(
-                  'relative hidden md:block',
-                  isOnNotificationsPage && 'bg-primary-50 rounded-full'
-                )}
+                className={cn('group', iconBtnClass(isOnNotificationsPage))}
               >
-                <span className="absolute inset-0 flex items-center justify-center rounded-full bg-gray-100" />
-                <span className={cn('relative flex items-center justify-center w-9 h-9', isOnNotificationsPage && 'text-primary-600')}>
-                  <SolidBellIcon className="w-5 h-5 text-[#008751] transition-colors" />
-                  {showSystemBadge && (
-                    <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold leading-none text-white bg-red-500 rounded-full">
-                      {counts.system > 9 ? '9+' : counts.system}
-                    </span>
-                  )}
-                </span>
+                <SolidBellIcon className={iconClass(isOnNotificationsPage)} />
+                {showSystemBadge && (
+                  <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold leading-none text-white bg-red-500 rounded-full">
+                    {counts.system > 9 ? '9+' : counts.system}
+                  </span>
+                )}
               </button>
 
-              {/* Map icon */}
+              {/* Map */}
               <button
                 onClick={handleMapClick}
                 title="Map"
                 aria-label="Map"
-                className={cn(
-                  'relative hidden md:block',
-                  isOnMapPage && 'bg-primary-50 rounded-full'
-                )}
+                className={cn('group', iconBtnClass(isOnMapPage))}
               >
-                <span className="absolute inset-0 flex items-center justify-center rounded-full bg-gray-100" />
-                <span className={cn('relative flex items-center justify-center w-9 h-9', isOnMapPage && 'text-primary-600')}>
-                  <SolidMapIcon className="w-5 h-5 text-[#008751] transition-colors" />
-                </span>
+                <SolidMapIcon className={iconClass(isOnMapPage)} />
               </button>
 
               {/* Auth buttons */}
@@ -312,14 +301,14 @@ export function Header() {
                 <div className="flex items-center gap-1">
                   <button
                     onClick={() => router.push('/auth/signin')}
-                    className="flex items-center gap-1 px-1.5 py-1.5 rounded-full border border-[#008751] text-[#008751] hover:bg-green-50 transition text-xs sm:text-sm font-medium"
+                    className="flex items-center gap-1 px-1.5 py-1.5 rounded-full border border-[#008751] text-[#008751] hover:bg-green-50 active:scale-95 transition text-xs sm:text-sm font-medium"
                   >
                     <LogIn className="h-4 w-4" />
                     <span>Sign In</span>
                   </button>
                   <button
                     onClick={() => router.push('/auth/signup')}
-                    className="flex items-center gap-1 px-1.5 py-1.5 rounded-full bg-[#008751] text-white hover:bg-green-700 transition text-xs sm:text-sm font-medium"
+                    className="flex items-center gap-1 px-1.5 py-1.5 rounded-full bg-[#008751] text-white hover:bg-green-700 active:scale-95 transition text-xs sm:text-sm font-medium"
                   >
                     <UserPlus className="h-4 w-4" />
                     <span>Register</span>
@@ -336,7 +325,7 @@ export function Header() {
                     title="Account"
                     aria-label="Account"
                     onClick={handleMobileProfileClick}
-                    className="flex items-center space-x-1 p-1"
+                    className="flex items-center space-x-1 p-1 active:scale-95 transition"
                   >
                     <span className="relative flex items-center justify-center w-9 h-9">
                       <span className="absolute inset-0 rounded-full bg-[#008751]" />
@@ -419,7 +408,7 @@ export function Header() {
                       disabled={item.disabled}
                       className={cn(
                         'flex flex-col items-center justify-center p-4 rounded-xl border border-gray-100 bg-gray-50 transition',
-                        item.disabled ? 'opacity-40 pointer-events-none' : 'hover:bg-primary-50 hover:border-primary-200'
+                        item.disabled ? 'opacity-40 pointer-events-none' : 'hover:bg-primary-50 hover:border-primary-200 active:scale-95'
                       )}
                       aria-label={item.label}
                     >
@@ -433,7 +422,7 @@ export function Header() {
                       onClick={closeMobileProfile}
                       className={cn(
                         'flex flex-col items-center justify-center p-4 rounded-xl border border-gray-100 bg-gray-50 transition',
-                        item.disabled ? 'opacity-40 pointer-events-none' : 'hover:bg-primary-50 hover:border-primary-200'
+                        item.disabled ? 'opacity-40 pointer-events-none' : 'hover:bg-primary-50 hover:border-primary-200 active:scale-95'
                       )}
                     >
                       <div className={cn('mb-2', item.disabled ? 'text-gray-400' : 'text-primary-600')}>{item.icon}</div>
@@ -444,7 +433,7 @@ export function Header() {
                 <button
                   onClick={handleSignOut}
                   disabled={signingOut}
-                  className="flex flex-col items-center justify-center p-4 rounded-xl border border-gray-100 bg-gray-50 hover:bg-red-50 hover:border-red-200 transition group disabled:opacity-50"
+                  className="flex flex-col items-center justify-center p-4 rounded-xl border border-gray-100 bg-gray-50 hover:bg-red-50 hover:border-red-200 active:scale-95 transition group disabled:opacity-50"
                   aria-label="Sign Out"
                 >
                   <LogOut className="h-5 w-5 text-red-500 group-hover:text-red-600 mb-2" />
@@ -461,7 +450,7 @@ export function Header() {
                       key={item.label}
                       onClick={item.action}
                       className={cn(
-                        'flex flex-col items-center justify-center p-4 rounded-xl border border-gray-100 bg-gray-50 transition hover:bg-primary-50 hover:border-primary-200',
+                        'flex flex-col items-center justify-center p-4 rounded-xl border border-gray-100 bg-gray-50 transition hover:bg-primary-50 hover:border-primary-200 active:scale-95',
                         item.danger && 'hover:bg-red-50 hover:border-red-200'
                       )}
                       aria-label={item.label}
@@ -475,7 +464,7 @@ export function Header() {
                       href={item.to || '#'}
                       onClick={closeMobileProfile}
                       className={cn(
-                        'flex flex-col items-center justify-center p-4 rounded-xl border border-gray-100 bg-gray-50 transition hover:bg-primary-50 hover:border-primary-200',
+                        'flex flex-col items-center justify-center p-4 rounded-xl border border-gray-100 bg-gray-50 transition hover:bg-primary-50 hover:border-primary-200 active:scale-95',
                         item.danger && 'hover:bg-red-50 hover:border-red-200'
                       )}
                     >
