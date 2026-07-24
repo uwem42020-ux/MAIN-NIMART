@@ -7,7 +7,7 @@ import { GoogleMap, InfoWindow, OverlayView, useJsApiLoader } from '@react-googl
 import { db } from '@/lib/supabase-any';
 import { useAuth } from '@/contexts/AuthContext';
 import { calculateDistance } from '@/lib/distance';
-import { Search, X, LocateFixed, Maximize2, Minimize2, Map as MapIcon, List, Satellite, MapPin } from 'lucide-react';
+import { Search, X, LocateFixed, Maximize2, Minimize2, Map as MapIcon, List, Satellite } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import toast from 'react-hot-toast';
 
@@ -75,12 +75,14 @@ export function MapView() {
   const [searchTerm, setSearchTerm] = useState('');
   const [userLocation, setUserLocation] = useState<google.maps.LatLngLiteral | null>(null);
   const [mapType, setMapType] = useState<'roadmap' | 'hybrid'>('roadmap');
+  const [interactiveReady, setInteractiveReady] = useState(false);
 
   const [states, setStates] = useState<any[]>([]);
   const [lgas, setLgas] = useState<any[]>([]);
   const [selectedState, setSelectedState] = useState('');
   const [selectedLga, setSelectedLga] = useState('');
 
+  // Auto‑zoom to user location
   const flyTo = useCallback((lat: number, lng: number, zoom: number) => {
     if (!mapRef.current) return;
     mapRef.current.panTo({ lat, lng });
@@ -96,6 +98,7 @@ export function MapView() {
     });
   }, []);
 
+  // Get user location and auto‑zoom
   useEffect(() => {
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
@@ -110,6 +113,14 @@ export function MapView() {
       { enableHighAccuracy: true, timeout: 10000 }
     );
   }, [selectedState, flyTo]);
+
+  // Show interactive map after a short delay (lets static map show first)
+  useEffect(() => {
+    if (isLoaded) {
+      const timer = setTimeout(() => setInteractiveReady(true), 300);
+      return () => clearTimeout(timer);
+    }
+  }, [isLoaded]);
 
   useEffect(() => {
     if (!selectedState) { setLgas([]); setSelectedLga(''); return; }
@@ -141,7 +152,6 @@ export function MapView() {
       if (error || !providers) return [];
 
       const providerIds = (providers as any[]).map((p: any) => p.id);
-
       const { data: profiles } = await db
         .from('profiles')
         .select('id, lat, lng, avatar_url, lga_name, state_name')
@@ -206,28 +216,16 @@ export function MapView() {
     );
   };
 
-  // Show loading spinner while API key is loading
-  if (!isLoaded && !loadError) {
-    return (
-      <div className="flex items-center justify-center h-[calc(100dvh-64px-56px)] md:h-[calc(100dvh-64px)]">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
-      </div>
-    );
-  }
+  // Static map URL for instant display
+  const staticMapUrl = `https://maps.googleapis.com/maps/api/staticmap?center=${userLocation?.lat || defaultCenter.lat},${userLocation?.lng || defaultCenter.lng}&zoom=${userLocation ? 16 : 7}&size=800x600&key=${apiKey}&style=feature:all|element:labels|visibility:on&style=feature:poi|visibility:off`;
 
-  // Show fallback if API key failed to load
+  // Error / loading states
   if (loadError || !apiKey) {
     return (
       <div className="flex items-center justify-center h-[calc(100dvh-64px-56px)] md:h-[calc(100dvh-64px)]">
         <div className="text-center">
-          <MapPin className="mx-auto h-12 w-12 text-gray-400 mb-3" />
           <p className="text-gray-500 mb-2">Map is temporarily unavailable.</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="text-primary-600 hover:underline text-sm font-medium"
-          >
-            Tap to reload
-          </button>
+          <button onClick={() => window.location.reload()} className="text-primary-600 hover:underline text-sm font-medium">Tap to reload</button>
         </div>
       </div>
     );
@@ -275,38 +273,55 @@ export function MapView() {
         </button>
       </div>
 
-      {/* Map */}
+      {/* Map area */}
       <div className="flex h-full">
         <div className={cn('flex-1 relative', !showProviderList && 'w-full')}>
-          <GoogleMap mapContainerStyle={{ width: '100%', height: '100%' }} center={defaultCenter} zoom={7} mapTypeId={mapType}
-            onLoad={(map) => { mapRef.current = map; }}
-            options={{
-              mapId: process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID || '',
-              restriction: { latLngBounds: nigeriaBounds, strictBounds: false },
-              minZoom: 6, streetViewControl: false, mapTypeControl: false, fullscreenControl: false,
-              zoomControl: true, gestureHandling: 'greedy',
-            }}>
-            {userLocation && <UserLocationOverlay position={userLocation} />}
-            {providersWithCoords.map(p => (
-              p.lat != null && p.lng != null && (
-                <ProviderMarkerOverlay key={p.id} position={{ lat: p.lat, lng: p.lng }} status={p.status} onClick={() => setSelectedProvider(p)} />
-              )
-            ))}
-            {selectedProvider && (
-              <InfoWindow position={{ lat: selectedProvider.lat, lng: selectedProvider.lng }} onCloseClick={() => setSelectedProvider(null)}>
-                <div className="w-56 font-sans text-sm">
-                  <h4 className="font-semibold text-gray-900 mb-1">{selectedProvider.business_name || 'Provider'}</h4>
-                  <p className="text-gray-500">{[selectedProvider.lga_name, selectedProvider.state_name].filter(Boolean).join(', ') || ''}</p>
-                  {selectedProvider.distance !== undefined && (
-                    <p className="font-medium text-gray-700 mt-1">{selectedProvider.distance.toFixed(1)} km away</p>
-                  )}
-                  <div className="mt-2 flex gap-2">
-                    <a href={`/provider/${selectedProvider.id}`} className="flex-1 text-center bg-primary-600 text-white py-1.5 rounded-md text-xs font-medium hover:bg-primary-700">View Details →</a>
+          {/* Static map image – shows instantly */}
+          {!interactiveReady && (
+            <img
+              src={staticMapUrl}
+              alt="Map"
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+          )}
+
+          {/* Interactive map – swaps in after static image */}
+          {interactiveReady && (
+            <GoogleMap
+              mapContainerStyle={{ width: '100%', height: '100%' }}
+              center={userLocation || defaultCenter}
+              zoom={userLocation ? 16 : 7}
+              mapTypeId={mapType}
+              onLoad={(map) => { mapRef.current = map; }}
+              options={{
+                mapId: process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID || '',
+                restriction: { latLngBounds: nigeriaBounds, strictBounds: false },
+                minZoom: 6, streetViewControl: false, mapTypeControl: false, fullscreenControl: false,
+                zoomControl: true, gestureHandling: 'greedy',
+              }}
+            >
+              {userLocation && <UserLocationOverlay position={userLocation} />}
+              {providersWithCoords.map(p => (
+                p.lat != null && p.lng != null && (
+                  <ProviderMarkerOverlay key={p.id} position={{ lat: p.lat, lng: p.lng }} status={p.status} onClick={() => setSelectedProvider(p)} />
+                )
+              ))}
+              {selectedProvider && (
+                <InfoWindow position={{ lat: selectedProvider.lat, lng: selectedProvider.lng }} onCloseClick={() => setSelectedProvider(null)}>
+                  <div className="w-56 font-sans text-sm">
+                    <h4 className="font-semibold text-gray-900 mb-1">{selectedProvider.business_name || 'Provider'}</h4>
+                    <p className="text-gray-500">{[selectedProvider.lga_name, selectedProvider.state_name].filter(Boolean).join(', ') || ''}</p>
+                    {selectedProvider.distance !== undefined && (
+                      <p className="font-medium text-gray-700 mt-1">{selectedProvider.distance.toFixed(1)} km away</p>
+                    )}
+                    <div className="mt-2 flex gap-2">
+                      <a href={`/provider/${selectedProvider.id}`} className="flex-1 text-center bg-primary-600 text-white py-1.5 rounded-md text-xs font-medium hover:bg-primary-700">View Details →</a>
+                    </div>
                   </div>
-                </div>
-              </InfoWindow>
-            )}
-          </GoogleMap>
+                </InfoWindow>
+              )}
+            </GoogleMap>
+          )}
 
           {!isLoading && (
             <div className="absolute bottom-4 left-4 z-10 md:hidden">

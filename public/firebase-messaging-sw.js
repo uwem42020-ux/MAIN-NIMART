@@ -1,13 +1,6 @@
-// Prevent service worker from caching navigation requests (HTML pages)
-self.addEventListener('fetch', (event) => {
-  if (event.request.mode === 'navigate') {
-    return; // Let the browser handle navigation normally
-  }
-});
+// public/firebase-messaging-sw.js
 
-// Firebase service worker for background push notifications
-const CACHE_VERSION = 'nimart-v3'; // bumped version to force refresh
-
+// Firebase service worker for background push notifications (no fetch handler)
 importScripts("https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js");
 importScripts("https://www.gstatic.com/firebasejs/10.9.0/firebase-messaging-compat.js");
 
@@ -39,3 +32,5 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(clients.claim());
 });
+
+// No fetch listener — all network requests go straight to the server/network
