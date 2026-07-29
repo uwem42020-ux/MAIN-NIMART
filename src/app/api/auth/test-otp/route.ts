@@ -11,18 +11,27 @@ export async function GET() {
       auth: { persistSession: false }
     });
 
-    const testEmail = 'your-actual-email@example.com';
+    // Test 1: Basic connection - get server time
+    const { data: healthData, error: healthError } = await supabaseAdmin
+      .from('profiles')
+      .select('count')
+      .limit(1);
     
+    // Test 2: Try OTP
+    const testEmail = 'your-actual-email@example.com';
     const { data, error } = await supabaseAdmin.auth.signInWithOtp({
       email: testEmail,
       options: { shouldCreateUser: true },
     });
 
     return NextResponse.json({
-      success: !error,
-      errorMessage: error?.message,
-      errorCode: error?.code,
-      errorStatus: error?.status,
+      dbConnected: !healthError,
+      dbError: healthError?.message || null,
+      otpSuccess: !error,
+      otpErrorMessage: error?.message,
+      otpErrorCode: error?.code,
+      otpErrorStatus: error?.status,
+      fullError: error ? JSON.stringify(error, Object.getOwnPropertyNames(error)) : null,
       hasData: !!data,
     });
 
