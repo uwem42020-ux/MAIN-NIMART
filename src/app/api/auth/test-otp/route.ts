@@ -6,7 +6,7 @@ export async function GET() {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-    const testEmail = 'your-actual-email@example.com';
+    const testEmail = 'uwem42020@gmail.com';
     
     // Direct API call to Supabase auth endpoint
     const response = await fetch(`${supabaseUrl}/auth/v1/otp`, {
