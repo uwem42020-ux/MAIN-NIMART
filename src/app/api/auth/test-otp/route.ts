@@ -11,28 +11,22 @@ export async function GET() {
       auth: { persistSession: false }
     });
 
-    // Test 1: Basic connection - get server time
-    const { data: healthData, error: healthError } = await supabaseAdmin
-      .from('profiles')
-      .select('count')
-      .limit(1);
-    
-    // Test 2: Try OTP
     const testEmail = 'your-actual-email@example.com';
+    
+    // Try sending a magic link instead (no OTP)
     const { data, error } = await supabaseAdmin.auth.signInWithOtp({
       email: testEmail,
-      options: { shouldCreateUser: true },
+      options: { 
+        shouldCreateUser: true,
+      },
     });
 
     return NextResponse.json({
-      dbConnected: !healthError,
-      dbError: healthError?.message || null,
-      otpSuccess: !error,
-      otpErrorMessage: error?.message,
-      otpErrorCode: error?.code,
-      otpErrorStatus: error?.status,
-      fullError: error ? JSON.stringify(error, Object.getOwnPropertyNames(error)) : null,
+      success: !error,
+      errorMessage: error?.message,
+      errorStatus: error?.status,
       hasData: !!data,
+      note: 'This sends magic link by default if OTP is not explicitly configured'
     });
 
   } catch (err) {
