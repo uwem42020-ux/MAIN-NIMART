@@ -1,3 +1,4 @@
+// src/app/api/auth/test-otp/route.ts
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
@@ -14,7 +15,6 @@ export async function GET() {
       }, { status: 500 });
     }
 
-    // Extract project reference from URL
     const projectRef = supabaseUrl.match(/https:\/\/(.+)\.supabase\.co/)?.[1] || 'unknown';
 
     const supabaseAdmin = createClient(supabaseUrl, serviceKey, {
@@ -23,15 +23,9 @@ export async function GET() {
 
     const testEmail = 'your-actual-email@example.com';
     
-    // Try to get project config to verify connection
-    const { data: settings, error: settingsError } = await supabaseAdmin
-      .rpc('get_project_settings')
-      .maybeSingle();
-    
-    // Try OTP
     const { data, error } = await supabaseAdmin.auth.signInWithOtp({
       email: testEmail,
-      options: { shouldCreateUser: true },
+      options: { shouldCreateUser: false },
     });
 
     return NextResponse.json({
