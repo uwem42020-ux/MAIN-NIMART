@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { GoogleMap, useJsApiLoader, Marker } from '@react-google-maps/api';
+import { GoogleMap, useJsApiLoader, Marker, Autocomplete, OverlayView } from '@react-google-maps/api';
 import { supabase } from '@/lib/supabase';
 import { db } from '@/lib/supabase-any';
 import toast from 'react-hot-toast';
@@ -41,6 +41,26 @@ interface LgaOption {
   lng: number;
 }
 
+// ==================== Blue GPS dot overlay (reused from MapView) ====================
+function UserLocationOverlay({ position }: { position: google.maps.LatLngLiteral }) {
+  if (!position) return null;
+  return (
+    <OverlayView
+      position={position}
+      mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+      getPixelPositionOffset={() => ({ x: -16, y: -16 })}
+    >
+      <div className="flex flex-col items-center">
+        <div className="relative flex items-center justify-center">
+          <div className="absolute w-8 h-8 bg-blue-500/30 rounded-full animate-ping" />
+          <div className="w-4 h-4 bg-blue-600 rounded-full border-2 border-white shadow-lg z-10" />
+        </div>
+      </div>
+    </OverlayView>
+  );
+}
+// =================================================================================
+
 export function LocationPickerModal({
   isOpen,
   onClose,
@@ -50,6 +70,8 @@ export function LocationPickerModal({
 }: LocationPickerModalProps) {
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
   const mapRef = useRef<google.maps.Map | null>(null);
+  const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Location state
   const [selectedLat, setSelectedLat] = useState(currentLat);
@@ -59,6 +81,9 @@ export function LocationPickerModal({
   const [loadingLocation, setLoadingLocation] = useState(false);
   const [gettingCurrentLocation, setGettingCurrentLocation] = useState(false);
 
+  // Blue dot state – holds the actual GPS location separately from the draggable pin
+  const [userPosition, setUserPosition] = useState<google.maps.LatLngLiteral | null>(null);
+
   // Dropdown data
   const [states, setStates] = useState<StateOption[]>([]);
   const [lgas, setLgas] = useState<LgaOption[]>([]);
@@ -66,9 +91,9 @@ export function LocationPickerModal({
   const [selectedLgaId, setSelectedLgaId] = useState<number | null>(null);
   const [loadingStates, setLoadingStates] = useState(true);
   const [loadingLgas, setLoadingLgas] = useState(false);
-  const [manualMode, setManualMode] = useState(false); // whether user has manually selected from dropdowns
+  const [manualMode, setManualMode] = useState(false);
 
-  // Load map
+  // Load map & places library
   const { isLoaded } = useJsApiLoader({
     id: 'location-picker',
     googleMapsApiKey: apiKey,
@@ -88,7 +113,6 @@ export function LocationPickerModal({
         setLoadingStates(false);
         return;
       }
-      // Deduplicate states
       const unique = (data as any[]).filter(
         (v: any, i: number, a: any[]) =>
           a.findIndex((t: any) => t.state_id === v.state_id) === i
@@ -123,7 +147,7 @@ export function LocationPickerModal({
     fetchLgas();
   }, [selectedStateId]);
 
-  // When LGA is selected, move map to that LGA's coordinates
+  // When LGA is selected from dropdown
   const handleLgaSelect = useCallback(
     (lgaId: number) => {
       setSelectedLgaId(lgaId);
@@ -158,6 +182,9 @@ export function LocationPickerModal({
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        // Update blue dot
+        setUserPosition(loc);
+        // If still at default, move the draggable pin to user location
         if (currentLat === defaultCenter.lat && currentLng === defaultCenter.lng) {
           setSelectedLat(loc.lat);
           setSelectedLng(loc.lng);
@@ -168,12 +195,11 @@ export function LocationPickerModal({
       () => setGettingCurrentLocation(false),
       { enableHighAccuracy: true, timeout: 10000 }
     );
-  }, [isOpen, isLoaded, manualMode]);
+  }, [isOpen, isLoaded, manualMode, currentLat, currentLng]);
 
   // Fetch LGA details when marker is moved (for manual pin drag or click)
   useEffect(() => {
     if (!selectedLat || !selectedLng) return;
-    // Only auto‑fetch if we haven't manually selected an LGA from dropdown, or after a pin move
     const fetchDetails = async () => {
       setLoadingLocation(true);
       try {
@@ -189,14 +215,7 @@ export function LocationPickerModal({
             lga_name: d.lga_name,
             state_name: d.state_name,
           });
-          // If the user dragged the pin, clear manual mode so the dropdowns can be updated?
-          // We'll leave manualMode as is; but if they drag, we want to reflect new LGA in info.
-          if (manualMode) {
-            // Update area string only, don't change dropdowns
-            setArea(`${d.lga_name}, ${d.state_name}`);
-          } else {
-            setArea(`${d.lga_name}, ${d.state_name}`);
-          }
+          setArea(`${d.lga_name}, ${d.state_name}`);
         }
       } catch (err) {
         console.error(err);
@@ -216,6 +235,7 @@ export function LocationPickerModal({
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        setUserPosition(loc);
         setSelectedLat(loc.lat);
         setSelectedLng(loc.lng);
         if (mapRef.current) {
@@ -224,7 +244,7 @@ export function LocationPickerModal({
         }
         setGettingCurrentLocation(false);
         toast.success('Map centered on your location');
-        setManualMode(false); // allow auto LGA detection after GPS
+        setManualMode(false);
       },
       () => {
         toast.error('Unable to get location');
@@ -233,6 +253,29 @@ export function LocationPickerModal({
       { enableHighAccuracy: true, timeout: 10000 }
     );
   };
+
+  // ----- Places Autocomplete handler -----
+  const onPlaceSelected = useCallback(() => {
+    const place = autocompleteRef.current?.getPlace();
+    if (!place || !place.geometry?.location) {
+      toast.error('Please select a location from the suggestions');
+      return;
+    }
+    const lat = place.geometry.location.lat();
+    const lng = place.geometry.location.lng();
+    setSelectedLat(lat);
+    setSelectedLng(lng);
+    if (mapRef.current) {
+      mapRef.current.setCenter({ lat, lng });
+      mapRef.current.setZoom(16);
+    }
+    setManualMode(false); // let the LGA detection run
+    // Optionally clear the dropdowns to avoid confusion
+    setSelectedStateId(null);
+    setSelectedLgaId(null);
+    // Clear the search input
+    if (searchInputRef.current) searchInputRef.current.value = '';
+  }, []);
 
   const handleConfirm = () => {
     if (!lgaInfo) {
@@ -273,9 +316,36 @@ export function LocationPickerModal({
           </button>
         </div>
 
-        {/* Location selectors */}
+        {/* Search + State/LGA selectors */}
         <div className="p-4 border-b bg-gray-50/50">
-          <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+          <div className="flex flex-col sm:flex-row gap-3 items-start">
+            {/* Places search input */}
+            <div className="flex-1 w-full">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Search for a place</label>
+              {isLoaded && (
+                <Autocomplete
+                  onLoad={(autocomplete) => (autocompleteRef.current = autocomplete)}
+                  onPlaceChanged={onPlaceSelected}
+                  options={{
+                    componentRestrictions: { country: 'ng' },
+                    fields: ['geometry', 'name', 'address_components'],
+                    types: ['geocode'],
+                  }}
+                >
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <input
+                      ref={searchInputRef}
+                      type="text"
+                      placeholder="e.g. Lagos, Ikeja, or an address..."
+                      className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    />
+                  </div>
+                </Autocomplete>
+              )}
+            </div>
+
+            {/* State dropdown */}
             <div className="flex-1 w-full">
               <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
               <div className="relative">
@@ -286,7 +356,7 @@ export function LocationPickerModal({
                   onChange={(e) => {
                     const id = e.target.value ? Number(e.target.value) : null;
                     setSelectedStateId(id);
-                    setSelectedLgaId(null); // reset LGA
+                    setSelectedLgaId(null);
                     setLgas([]);
                     setLgaInfo(null);
                   }}
@@ -302,6 +372,7 @@ export function LocationPickerModal({
               </div>
             </div>
 
+            {/* LGA dropdown */}
             <div className="flex-1 w-full">
               <label className="block text-sm font-medium text-gray-700 mb-1">LGA</label>
               <div className="relative">
@@ -325,6 +396,7 @@ export function LocationPickerModal({
               </div>
             </div>
 
+            {/* Use my location button */}
             <button
               onClick={handleUseCurrentLocation}
               disabled={gettingCurrentLocation}
@@ -353,7 +425,7 @@ export function LocationPickerModal({
               if (e.latLng) {
                 setSelectedLat(e.latLng.lat());
                 setSelectedLng(e.latLng.lng());
-                setManualMode(false); // allow LGA to update from pin move
+                setManualMode(false);
               }
             }}
             options={{
@@ -363,6 +435,10 @@ export function LocationPickerModal({
               zoomControl: false,
             }}
           >
+            {/* Blue GPS dot (pulsing) */}
+            {userPosition && <UserLocationOverlay position={userPosition} />}
+
+            {/* Draggable green pin */}
             <Marker
               position={{ lat: selectedLat, lng: selectedLng }}
               draggable={true}
@@ -381,7 +457,7 @@ export function LocationPickerModal({
             />
           </GoogleMap>
 
-          {/* Location info overlay – moved to top‑right to avoid covering Google logo */}
+          {/* Location info overlay */}
           <div className="absolute top-4 right-4 bg-white/95 backdrop-blur-sm rounded-lg shadow-lg p-3 max-w-[250px] z-10">
             {loadingLocation ? (
               <div className="flex items-center gap-2 text-sm text-gray-500">
@@ -408,7 +484,7 @@ export function LocationPickerModal({
             )}
           </div>
 
-          {/* Loading spinner for current location */}
+          {/* Getting location spinner */}
           {gettingCurrentLocation && (
             <div className="absolute top-4 left-4 bg-white/90 rounded-lg shadow p-2 flex items-center gap-2 z-10">
               <Loader2 className="h-4 w-4 animate-spin text-primary-600" />
@@ -420,7 +496,7 @@ export function LocationPickerModal({
         {/* Bottom actions */}
         <div className="p-4 border-t flex justify-between items-center gap-3 flex-wrap">
           <p className="text-xs text-gray-500 hidden sm:block">
-            Select State → LGA, then drag the pin to your exact spot
+            Search for a place, or use the dropdowns and drag the pin
           </p>
           <div className="flex gap-3 ml-auto">
             <button
