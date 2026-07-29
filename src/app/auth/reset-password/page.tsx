@@ -1,61 +1,42 @@
-// src/app/auth/reset-password/page.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
-import { db } from '@/lib/supabase-any';
 import toast from 'react-hot-toast';
 import { Mail, Lock, ArrowLeft, Eye, EyeOff, CheckCircle, Send, Loader2 } from 'lucide-react';
 
 export default function ResetPassword() {
   const router = useRouter();
+  const [step, setStep] = useState<'email' | 'otp' | 'success'>('email');
   const [email, setEmail] = useState('');
+  const [otp, setOtp] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [isResetMode, setIsResetMode] = useState(false);
-  const [emailSent, setEmailSent] = useState(false);
-  const [sessionReady, setSessionReady] = useState(false);
 
-  // Check if the URL contains a recovery token
-  useEffect(() => {
-    const hash = window.location.hash;
-    if (hash && hash.includes('type=recovery')) {
-      setIsResetMode(true);
-
-      // Let Supabase pick up the token from the hash
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        if (session) {
-          setSessionReady(true);
-        } else {
-          toast.error('Reset link expired or invalid.');
-          router.push('/auth/signin');
-        }
-      });
-    }
-  }, [router]);
-
-  const handleRequestReset = async (e: React.FormEvent) => {
+  // Step 1: Request OTP
+  const handleRequestOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/auth/reset-password`,
+      const { error } = await supabase.functions.invoke('request-password-otp', {
+        body: { email },
       });
       if (error) throw error;
-      setEmailSent(true);
-      toast.success('Reset link sent to your email');
+      setStep('otp');
+      toast.success('Code sent to your email');
     } catch (error: any) {
-      toast.error(error.message);
+      toast.error(error.message || 'Failed to send code');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleUpdatePassword = async (e: React.FormEvent) => {
+  // Step 2: Verify OTP and set new password
+  const handleVerifyAndReset = async (e: React.FormEvent) => {
     e.preventDefault();
     if (password !== confirmPassword) {
       toast.error('Passwords do not match');
@@ -67,112 +48,87 @@ export default function ResetPassword() {
     }
     setLoading(true);
     try {
-      const { error } = await supabase.auth.updateUser({ password });
+      const { error } = await supabase.functions.invoke('verify-password-otp', {
+        body: {
+          email,
+          otp,
+          newPassword: password,
+        },
+      });
       if (error) throw error;
-
-      // Mark profile as having a password
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        await db.from('profiles').update({ has_password: true }).eq('id', user.id);
-      }
-
-      toast.success('Password updated! Please sign in.');
-      await supabase.auth.signOut();
-      router.push('/auth/signin');
+      setStep('success');
+      toast.success('Password updated!');
     } catch (error: any) {
-      toast.error(error.message);
+      toast.error(error.message || 'Invalid or expired code');
     } finally {
       setLoading(false);
     }
   };
 
-  // Show spinner while session is being retrieved
-  if (isResetMode && !sessionReady) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 via-white to-emerald-50">
-        <Loader2 className="h-10 w-10 animate-spin text-primary-600" />
-      </div>
-    );
-  }
+  const handleGoToSignIn = () => {
+    router.push('/auth/signin');
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-emerald-50 flex items-center justify-center px-4 py-6">
-      {/* Back button */}
       <Link
         href="/auth/signin"
         className="absolute top-6 left-6 z-20 p-2 bg-white/80 backdrop-blur-sm rounded-full text-gray-600 hover:text-primary-600 hover:bg-white shadow-sm transition"
-        aria-label="Back to sign in"
       >
         <ArrowLeft className="h-5 w-5" />
       </Link>
 
       <div className="w-full max-w-sm">
-        {!isResetMode ? (
-          <>
-            {!emailSent ? (
-              <form onSubmit={handleRequestReset} className="space-y-4">
-                <h2 className="text-2xl font-bold text-gray-900 text-center mb-1">Reset Your Password</h2>
-                <p className="text-sm text-gray-500 text-center mb-5">
-                  Enter your email and we'll send you a reset link.
-                </p>
+        {step === 'email' && (
+          <form onSubmit={handleRequestOtp} className="space-y-4">
+            <h2 className="text-2xl font-bold text-gray-900 text-center mb-1">Reset Your Password</h2>
+            <p className="text-sm text-gray-500 text-center mb-5">Enter your email to receive a reset code.</p>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                  <div className="relative">
-                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                    <input
-                      type="email"
-                      required
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:bg-white transition"
-                      placeholder="you@example.com"
-                    />
-                  </div>
-                </div>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full bg-primary-600 text-white py-3 rounded-xl hover:bg-primary-700 disabled:opacity-50 transition font-semibold shadow-lg shadow-primary-600/20 flex items-center justify-center gap-2"
-                >
-                  <Send className="h-5 w-5" />
-                  Send Reset Link
-                </button>
-                <p className="text-sm text-center text-gray-500">
-                  Remember your password?{' '}
-                  <Link href="/auth/signin" className="text-primary-600 hover:underline font-semibold">
-                    Sign in
-                  </Link>
-                </p>
-              </form>
-            ) : (
-              <div className="text-center space-y-5">
-                <div className="bg-green-50 rounded-full p-3 w-16 h-16 mx-auto flex items-center justify-center">
-                  <CheckCircle className="h-8 w-8 text-green-600" />
-                </div>
-                <h2 className="text-2xl font-bold text-gray-900">Check your email</h2>
-                <p className="text-sm text-gray-600">
-                  We've sent a password reset link to <span className="font-medium">{email}</span>.
-                </p>
-                <p className="text-xs text-gray-500">
-                  Didn't receive it? Check spam or{' '}
-                  <button onClick={() => setEmailSent(false)} className="text-primary-600 hover:underline">
-                    try again
-                  </button>
-                </p>
-                <Link
-                  href="/auth/signin"
-                  className="block w-full bg-primary-600 text-white py-3 rounded-xl hover:bg-primary-700 transition font-semibold"
-                >
-                  Back to Sign In
-                </Link>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+              <div className="relative">
+                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:bg-white transition"
+                  placeholder="you@example.com"
+                />
               </div>
-            )}
-          </>
-        ) : (
-          <form onSubmit={handleUpdatePassword} className="space-y-4">
-            <h2 className="text-2xl font-bold text-gray-900 text-center mb-1">Set New Password</h2>
-            <p className="text-sm text-gray-500 text-center mb-5">Choose a new, strong password.</p>
+            </div>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-primary-600 text-white py-3 rounded-xl hover:bg-primary-700 disabled:opacity-50 transition font-semibold shadow-lg shadow-primary-600/20 flex items-center justify-center gap-2"
+            >
+              <Send className="h-5 w-5" />
+              Send Code
+            </button>
+          </form>
+        )}
+
+        {step === 'otp' && (
+          <form onSubmit={handleVerifyAndReset} className="space-y-4">
+            <h2 className="text-2xl font-bold text-gray-900 text-center mb-1">Check Your Email</h2>
+            <p className="text-sm text-gray-500 text-center mb-5">
+              Enter the code sent to <strong>{email}</strong> and create a new password.
+            </p>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">6‑Digit Code</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                required
+                value={otp}
+                onChange={(e) => setOtp(e.target.value)}
+                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:bg-white transition text-center text-2xl tracking-widest"
+                maxLength={6}
+                placeholder="000000"
+              />
+            </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
@@ -216,17 +172,38 @@ export default function ResetPassword() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-primary-600 text-white py-3 rounded-xl hover:bg-primary-700 disabled:opacity-50 transition font-semibold shadow-lg shadow-primary-600/20"
+              className="w-full bg-primary-600 text-white py-3 rounded-xl hover:bg-primary-700 disabled:opacity-50 transition font-semibold shadow-lg shadow-primary-600/20 flex items-center justify-center gap-2"
             >
-              Update Password
+              {loading && <Loader2 className="h-5 w-5 animate-spin" />}
+              Reset Password
             </button>
 
-            <p className="text-sm text-center text-gray-500">
-              <Link href="/auth/signin" className="text-primary-600 hover:underline font-semibold">
-                Back to Sign In
-              </Link>
-            </p>
+            <button
+              type="button"
+              onClick={() => setStep('email')}
+              className="text-sm text-center text-primary-600 hover:underline w-full"
+            >
+              ← Try a different email
+            </button>
           </form>
+        )}
+
+        {step === 'success' && (
+          <div className="text-center space-y-5">
+            <div className="bg-green-50 rounded-full p-3 w-16 h-16 mx-auto flex items-center justify-center">
+              <CheckCircle className="h-8 w-8 text-green-600" />
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900">Password Updated</h2>
+            <p className="text-sm text-gray-600">
+              You can now sign in with your new password.
+            </p>
+            <button
+              onClick={handleGoToSignIn}
+              className="w-full bg-primary-600 text-white py-3 rounded-xl hover:bg-primary-700 transition font-semibold"
+            >
+              Go to Sign In
+            </button>
+          </div>
         )}
       </div>
     </div>
