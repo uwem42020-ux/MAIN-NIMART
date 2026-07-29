@@ -3,7 +3,6 @@ import { createClient } from '@supabase/supabase-js';
 
 export async function GET() {
   try {
-    // Check if env vars exist first
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -11,18 +10,25 @@ export async function GET() {
       return NextResponse.json({
         error: 'Missing env vars',
         hasUrl: !!supabaseUrl,
-        hasKey: !!serviceKey,
-        keyPrefix: serviceKey ? serviceKey.substring(0, 15) + '...' : 'missing'
+        hasKey: !!serviceKey
       }, { status: 500 });
     }
+
+    // Extract project reference from URL
+    const projectRef = supabaseUrl.match(/https:\/\/(.+)\.supabase\.co/)?.[1] || 'unknown';
 
     const supabaseAdmin = createClient(supabaseUrl, serviceKey, {
       auth: { persistSession: false }
     });
 
-    // Replace with YOUR email for testing
-    const testEmail = 'uwem42020@gmail.com';
+    const testEmail = 'your-actual-email@example.com';
     
+    // Try to get project config to verify connection
+    const { data: settings, error: settingsError } = await supabaseAdmin
+      .rpc('get_project_settings')
+      .maybeSingle();
+    
+    // Try OTP
     const { data, error } = await supabaseAdmin.auth.signInWithOtp({
       email: testEmail,
       options: { shouldCreateUser: true },
@@ -30,16 +36,19 @@ export async function GET() {
 
     return NextResponse.json({
       success: !error,
-      error: error ? error.message : null,
-      errorDetails: error ? JSON.stringify(error) : null,
-      hasData: !!data
+      error: error ? JSON.stringify(error) : null,
+      errorMessage: error?.message,
+      errorStatus: error?.status,
+      hasData: !!data,
+      projectRef,
+      urlUsed: supabaseUrl,
+      keyPrefix: serviceKey.substring(0, 15) + '...',
     });
 
   } catch (err) {
     return NextResponse.json({
       error: 'Exception caught',
       message: err instanceof Error ? err.message : String(err),
-      type: typeof err
     }, { status: 500 });
   }
 }
