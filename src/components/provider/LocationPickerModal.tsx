@@ -41,7 +41,6 @@ export function LocationPickerModal({
   const [area, setArea] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [gettingLocation, setGettingLocation] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
 
   const { isLoaded } = useJsApiLoader({
     id: 'location-picker',
@@ -179,8 +178,6 @@ export function LocationPickerModal({
               ref={searchInputRef}
               type="text"
               placeholder="Search address, landmark, or area..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm"
             />
           </div>
