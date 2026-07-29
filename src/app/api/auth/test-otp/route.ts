@@ -1,32 +1,33 @@
 // src/app/api/auth/test-otp/route.ts
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 
 export async function GET() {
   try {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-    const supabaseAdmin = createClient(supabaseUrl!, serviceKey!, {
-      auth: { persistSession: false }
-    });
-
     const testEmail = 'your-actual-email@example.com';
     
-    // Try sending a magic link instead (no OTP)
-    const { data, error } = await supabaseAdmin.auth.signInWithOtp({
-      email: testEmail,
-      options: { 
-        shouldCreateUser: true,
+    // Direct API call to Supabase auth endpoint
+    const response = await fetch(`${supabaseUrl}/auth/v1/otp`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': serviceKey!,
+        'Authorization': `Bearer ${serviceKey}`
       },
+      body: JSON.stringify({
+        email: testEmail,
+        create_user: true
+      })
     });
 
+    const responseData = await response.json();
+
     return NextResponse.json({
-      success: !error,
-      errorMessage: error?.message,
-      errorStatus: error?.status,
-      hasData: !!data,
-      note: 'This sends magic link by default if OTP is not explicitly configured'
+      status: response.status,
+      statusText: response.statusText,
+      responseData,
     });
 
   } catch (err) {
