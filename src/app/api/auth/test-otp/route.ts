@@ -3,28 +3,31 @@ import { NextResponse } from 'next/server';
 
 export async function GET() {
   try {
-    const apiKey = process.env.RESEND_API_KEY;
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    const testEmail = 'uwem42020@gmail.com';
     
-    const response = await fetch('https://api.resend.com/emails', {
+    // Direct API call to Supabase auth endpoint
+    const response = await fetch(`${supabaseUrl}/auth/v1/otp`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
+        'apikey': serviceKey!,
+        'Authorization': `Bearer ${serviceKey}`
       },
       body: JSON.stringify({
-        from: 'Nimart <info@nimart.ng>',
-        to: 'uwem42020@gmail.com',
-        subject: 'Test from Vercel',
-        html: '<p>If you see this, Resend API key works!</p>',
-      }),
+        email: testEmail,
+        create_user: true
+      })
     });
 
-    const data = await response.json();
+    const responseData = await response.json();
 
     return NextResponse.json({
-      resendStatus: response.status,
-      resendResponse: data,
-      keyUsed: apiKey ? apiKey.substring(0, 10) + '...' : 'MISSING',
+      status: response.status,
+      statusText: response.statusText,
+      responseData,
     });
 
   } catch (err) {
