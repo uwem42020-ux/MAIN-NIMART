@@ -2,6 +2,7 @@
 import '@/styles/globals.css';
 import { Providers } from '@/components/Providers';
 import { createServerSupabase } from '@/lib/supabase-server';
+import { GoogleOneTap } from '@/components/common/GoogleOneTap';
 
 export const metadata = {
   title: "Nimart - Nigeria's Trusted Service Marketplace",
@@ -29,9 +30,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <meta httpEquiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
         <meta httpEquiv="Pragma" content="no-cache" />
         <meta httpEquiv="Expires" content="0" />
+        <script src="https://accounts.google.com/gsi/client" async defer></script>
       </head>
       <body className="min-h-screen bg-gray-50 flex flex-col">
         <Providers initialUser={user} initialProfile={initialProfile}>
+          <GoogleOneTap />
           {children}
         </Providers>
       </body>
