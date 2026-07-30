@@ -1,48 +1,35 @@
 // src/app/api/auth/test-otp/route.ts
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 
 export async function GET() {
   try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-    if (!supabaseUrl || !serviceKey) {
-      return NextResponse.json({
-        error: 'Missing env vars',
-        hasUrl: !!supabaseUrl,
-        hasKey: !!serviceKey
-      }, { status: 500 });
-    }
-
-    const projectRef = supabaseUrl.match(/https:\/\/(.+)\.supabase\.co/)?.[1] || 'unknown';
-
-    const supabaseAdmin = createClient(supabaseUrl, serviceKey, {
-      auth: { persistSession: false }
-    });
-
-    const testEmail = 'your-actual-email@example.com';
+    const apiKey = process.env.RESEND_API_KEY;
     
-    const { data, error } = await supabaseAdmin.auth.signInWithOtp({
-      email: testEmail,
-      options: { shouldCreateUser: false },
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: 'Nimart <info@nimart.ng>',
+        to: 'uwem42020@gmail.com',
+        subject: 'Test from Vercel',
+        html: '<p>If you see this, Resend API key works!</p>',
+      }),
     });
+
+    const data = await response.json();
 
     return NextResponse.json({
-      success: !error,
-      error: error ? JSON.stringify(error) : null,
-      errorMessage: error?.message,
-      errorStatus: error?.status,
-      hasData: !!data,
-      projectRef,
-      urlUsed: supabaseUrl,
-      keyPrefix: serviceKey.substring(0, 15) + '...',
+      resendStatus: response.status,
+      resendResponse: data,
+      keyUsed: apiKey ? apiKey.substring(0, 10) + '...' : 'MISSING',
     });
 
   } catch (err) {
     return NextResponse.json({
-      error: 'Exception caught',
-      message: err instanceof Error ? err.message : String(err),
+      error: String(err),
     }, { status: 500 });
   }
 }
