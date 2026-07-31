@@ -98,7 +98,7 @@ export function HomeClient({ initialProviders, initialPopularCombos, initialTopP
   const { data: featuredProviders, isLoading } = useQuery({
     queryKey: ['featured-providers', userLat, userLng, stateFilter, lgaFilter],
     queryFn: async () => {
-      const { data, error } = await db.rpc('get_featured_providers', { limit_count: 50 });
+      const { data, error } = await db.rpc('get_featured_providers', { limit_count: 25 });
       if (error || !data) {
         return cachedProvidersRef.current.length > 0 ? cachedProvidersRef.current : [] as ProviderWithProfile[];
       }
