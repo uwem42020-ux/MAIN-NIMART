@@ -4,7 +4,7 @@
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { db } from '@/lib/supabase-any';
-import { TrendingUp } from 'lucide-react';
+import { MapPin } from 'lucide-react';
 import { useRef } from 'react';
 
 const categoryIcons: Record<string, string> = {
@@ -72,8 +72,6 @@ const categoryIcons: Record<string, string> = {
   'cross-border': '/auto/cross border trade.png',
 };
 
-const defaultIcon = '/auto/vehicle.png';
-
 export function PopularServicesSlider({ initialCombos = [] }: { initialCombos?: { cat: string; lga: string; lgaId: number; count: number }[] }) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -121,57 +119,67 @@ export function PopularServicesSlider({ initialCombos = [] }: { initialCombos?: 
     staleTime: 1000 * 60 * 30,
   });
 
-  const colorSchemes = [
-    { bg: 'bg-purple-50', border: 'border-purple-200', text: 'text-purple-700', subtext: 'text-purple-600' },
-    { bg: 'bg-green-50', border: 'border-green-200', text: 'text-green-700', subtext: 'text-green-600' },
-    { bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-700', subtext: 'text-blue-600' },
-    { bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-700', subtext: 'text-amber-600' },
-    { bg: 'bg-rose-50', border: 'border-rose-200', text: 'text-rose-700', subtext: 'text-rose-600' },
-    { bg: 'bg-cyan-50', border: 'border-cyan-200', text: 'text-cyan-700', subtext: 'text-cyan-600' },
-    { bg: 'bg-indigo-50', border: 'border-indigo-200', text: 'text-indigo-700', subtext: 'text-indigo-600' },
-    { bg: 'bg-teal-50', border: 'border-teal-200', text: 'text-teal-700', subtext: 'text-teal-600' },
-  ];
-
   if (!combos || combos.length === 0) return null;
 
   return (
     <section className="py-6">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary-500 to-green-500 flex items-center justify-center shadow-md shadow-primary-500/20">
-            <TrendingUp className="h-4 w-4 text-white" />
+        <div className="flex items-center gap-2 mb-4">
+          <div className="w-8 h-8 flex items-center justify-center">
+            <img src="/top.png" alt="" className="h-7 w-7 object-contain animate-gentle-float" />
           </div>
           <h2 className="text-lg font-bold text-gray-900">Popular Services Near You</h2>
         </div>
 
-        <div className="flex gap-3 overflow-x-auto hide-scrollbar pb-2 snap-x snap-mandatory">
+        <style>{`
+          @keyframes gentle-float {
+            0%, 100% { transform: translateY(0); opacity: 0.7; }
+            50% { transform: translateY(-6px); opacity: 1; }
+          }
+          .animate-gentle-float {
+            animation: gentle-float 2.5s ease-in-out infinite;
+          }
+        `}</style>
+
+        <div
+          ref={scrollRef}
+          className="flex gap-3 overflow-x-auto hide-scrollbar pb-2 snap-x snap-mandatory -mx-4 px-4"
+        >
           {combos.map((combo, idx) => {
-            const colors = colorSchemes[idx % colorSchemes.length];
-            const iconSrc = categoryIcons[combo.cat] || defaultIcon;
-            const displayName = combo.cat.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+            const iconSrc = categoryIcons[combo.cat] || '/auto/vehicle.png';
+            const displayName = combo.cat
+              .split('-')
+              .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+              .join(' ');
 
             return (
               <Link
-                key={idx}
+                key={`${combo.cat}-${combo.lgaId}`}
                 href={`/services/${combo.cat}/in/${combo.lgaId}`}
-                className="flex-shrink-0 w-[75%] sm:w-[45%] lg:w-auto snap-start"
+                className="flex-shrink-0 w-[200px] snap-start group"
               >
-                <div className={`flex items-center gap-4 p-4 rounded-xl border ${colors.bg} ${colors.border}`}>
-                  <img
-                    src={iconSrc}
-                    alt={displayName}
-                    className="h-10 w-10 flex-shrink-0 object-contain"
-                    width={40}
-                    height={40}
-                  />
-                  <div>
-                    <h3 className={`font-semibold text-sm ${colors.text} line-clamp-1`}>
-                      {displayName}
-                    </h3>
-                    <p className={`text-xs ${colors.subtext} mt-0.5`}>
-                      {combo.lga} · {combo.count} provider{combo.count !== 1 ? 's' : ''}
-                    </p>
+                <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 hover:shadow-md hover:border-primary-200 transition-all duration-200 h-full flex flex-col items-center text-center">
+                  <div className="w-14 h-14 rounded-2xl bg-gray-50 flex items-center justify-center mb-3 group-hover:bg-primary-50 transition-colors">
+                    <img
+                      src={iconSrc}
+                      alt={displayName}
+                      className="w-9 h-9 object-contain"
+                      width={36}
+                      height={36}
+                    />
                   </div>
+
+                  <h3 className="font-semibold text-sm text-gray-900 mb-1 line-clamp-1">
+                    {displayName}
+                  </h3>
+
+                  <div className="flex items-center gap-1 text-xs text-gray-500 mt-auto">
+                    <MapPin className="h-3 w-3 flex-shrink-0" />
+                    <span className="truncate">{combo.lga}</span>
+                  </div>
+                  <p className="text-xs font-medium text-primary-600 mt-0.5">
+                    {combo.count} provider{combo.count !== 1 ? 's' : ''}
+                  </p>
                 </div>
               </Link>
             );
