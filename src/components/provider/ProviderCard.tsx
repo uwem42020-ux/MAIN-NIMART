@@ -1,17 +1,19 @@
+// src/components/provider/ProviderCard.tsx
+'use client';
+
 import { memo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { MapPin, Star, Briefcase, Clock } from 'lucide-react';
-import { OptimizedImage } from '../common/OptimizedImage';
-import { formatDistance } from '../../lib/distance';
-import { cn } from '../../lib/utils';
-import type { Database } from '../../types/database';
+import { formatDistance } from '@/lib/distance';
+import { cn } from '@/lib/utils';
+import type { Database } from '@/types/database';
 import { formatDistanceToNow } from 'date-fns';
-import { useAuth } from '../../contexts/AuthContext';
-import { useLocationStore } from '../../stores/locationStore';
+import { useAuth } from '@/contexts/AuthContext';
+import { useLocationStore } from '@/stores/locationStore';
 import toast from 'react-hot-toast';
 import { useQueryClient } from '@tanstack/react-query';
-import { fetchProviderProfile } from '../../lib/queries';
+import { fetchProviderProfile } from '@/lib/queries';
 
 type ProviderRow = Database['public']['Tables']['providers']['Row'];
 type ProfileRow = Database['public']['Tables']['profiles']['Row'];
@@ -49,11 +51,19 @@ const statusRingColor: Record<string, string> = {
   away: 'bg-red-500',
 };
 
+function getOptimizedUrl(url: string | null | undefined): string | undefined {
+  if (!url) return undefined;
+  if (url.startsWith('/')) return url;
+  return `${url}?width=400&height=400&quality=55&resize=cover`;
+}
+
 export const ProviderCard = memo(function ProviderCard({ provider, className }: ProviderCardProps) {
   const { user } = useAuth();
   const router = useRouter();
   const { permissionGranted, setPermissionDenied } = useLocationStore();
   const queryClient = useQueryClient();
+
+  const imageSrc = getOptimizedUrl(provider.profile?.avatar_url);
 
   const locationString = provider.profile?.lga_name
     ? `${provider.profile.lga_name}${provider.profile?.state_name ? `, ${provider.profile.state_name}` : ''}`
@@ -120,18 +130,10 @@ export const ProviderCard = memo(function ProviderCard({ provider, className }: 
     return null;
   };
 
-  // Prefetch route + data on hover
   const handleMouseEnter = () => {
-    // Prefetch the route HTML
-    const preloadLink = document.createElement('link');
-    preloadLink.rel = 'prefetch';
-    preloadLink.href = `/provider/${provider.id}`;
-    document.head.appendChild(preloadLink);
-
-    // Prefetch profile data (cast to any if signature differs)
     queryClient.prefetchQuery({
       queryKey: ['provider', provider.id],
-      queryFn: () => (fetchProviderProfile as any)(provider.id),
+      queryFn: () => fetchProviderProfile(provider.id),
       staleTime: 1000 * 60 * 2,
     });
   };
@@ -149,27 +151,15 @@ export const ProviderCard = memo(function ProviderCard({ provider, className }: 
         onMouseEnter={handleMouseEnter}
         className="block relative w-full overflow-hidden bg-gray-100"
       >
-        <div className="relative w-full" style={{ paddingBottom: '100%' }}>
-          {provider.profile?.avatar_url ? (
-            <OptimizedImage
-              src={provider.profile.avatar_url}
-              alt={provider.business_name || provider.profile.full_name || 'Provider'}
-              className="absolute inset-0 w-full h-full object-cover"
-              width={300}
-              height={300}
-            />
-          ) : (
-            <div className="absolute inset-0 w-full h-full">
-              <img
-                src="/profile.png"
-                alt="Placeholder"
-                className="w-full h-full object-cover"
-                width={300}
-                height={300}
-              />
-              <div className="absolute inset-0 bg-black/30" />
-            </div>
-          )}
+        <div className="relative w-full aspect-square bg-gray-200 overflow-hidden">
+          <img
+            src={imageSrc || '/profile.png'}
+            alt={provider.business_name || provider.profile?.full_name || 'Provider'}
+            className="absolute inset-0 w-full h-full object-cover"
+            onError={(e) => {
+              e.currentTarget.src = '/profile.png';
+            }}
+          />
         </div>
 
         {provider.profile?.is_verified && (

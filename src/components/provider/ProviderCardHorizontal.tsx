@@ -5,7 +5,6 @@ import { memo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { MapPin, Star, Briefcase, Clock } from 'lucide-react';
-import { OptimizedImage } from '@/components/common/OptimizedImage';
 import { formatDistance } from '@/lib/distance';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
@@ -51,6 +50,12 @@ const statusRingColor: Record<string, string> = {
   away: 'bg-red-500',
 };
 
+function getOptimizedUrl(url: string | null | undefined): string | undefined {
+  if (!url) return undefined;
+  if (url.startsWith('/')) return url;
+  return `${url}?width=200&height=200&quality=50&resize=cover`;
+}
+
 export const ProviderCardHorizontal = memo(function ProviderCardHorizontal({
   provider,
   className,
@@ -79,6 +84,8 @@ export const ProviderCardHorizontal = memo(function ProviderCardHorizontal({
   const isBoosted = provider.boost_until ? new Date(provider.boost_until) > new Date() : false;
   const isVerified = provider.profile?.is_verified || false;
 
+  const imageSrc = getOptimizedUrl(provider.profile?.avatar_url);
+
   const handleBook = () => {
     if (provider.status === 'away') return;
     if (!user) {
@@ -88,15 +95,7 @@ export const ProviderCardHorizontal = memo(function ProviderCardHorizontal({
     router.push(`/provider/${provider.id}?book=true`);
   };
 
-  // Prefetch route + data on hover
   const handleMouseEnter = () => {
-    // Prefetch the route HTML
-    const preloadLink = document.createElement('link');
-    preloadLink.rel = 'prefetch';
-    preloadLink.href = `/provider/${provider.id}`;
-    document.head.appendChild(preloadLink);
-
-    // Prefetch profile data
     queryClient.prefetchQuery({
       queryKey: ['provider', provider.id],
       queryFn: () => fetchProviderProfile(provider.id),
@@ -113,32 +112,19 @@ export const ProviderCardHorizontal = memo(function ProviderCardHorizontal({
         className
       )}
     >
-      {/* Image area */}
       <Link
         href={`/provider/${provider.id}`}
         onMouseEnter={handleMouseEnter}
         className="w-28 sm:w-32 flex-shrink-0 relative bg-gray-100 overflow-hidden"
       >
-        {provider.profile?.avatar_url ? (
-          <OptimizedImage
-            src={provider.profile.avatar_url}
-            alt={provider.business_name || provider.profile.full_name || 'Provider'}
-            className="w-full h-full object-cover"
-            width={128}
-            height={128}
-          />
-        ) : (
-          <div className="w-full h-full relative">
-            <img
-              src="/profile.png"
-              alt="Placeholder"
-              className="w-full h-full object-cover"
-              width={128}
-              height={128}
-            />
-            <div className="absolute inset-0 bg-black/30" />
-          </div>
-        )}
+        <img
+          src={imageSrc || '/profile.png'}
+          alt={provider.business_name || provider.profile?.full_name || 'Provider'}
+          className="absolute inset-0 w-full h-full object-cover"
+          onError={(e) => {
+            e.currentTarget.src = '/profile.png';
+          }}
+        />
 
         <div className="absolute top-2 left-2 z-10">
           <FavoriteButton providerId={provider.id} size="sm" />
@@ -160,7 +146,6 @@ export const ProviderCardHorizontal = memo(function ProviderCardHorizontal({
         )}
       </Link>
 
-      {/* Details */}
       <div className="flex-1 p-3 sm:p-4 flex flex-col justify-between">
         <div className="flex items-center gap-1.5 mb-1">
           <div className="relative flex-shrink-0">

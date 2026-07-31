@@ -10,7 +10,8 @@ import { db } from '@/lib/supabase-any';
 import { ProviderStatusToggle } from '@/components/provider/ProviderStatusToggle';
 import {
   Calendar, Star, Settings, Image, Package, Shield, Coins,
-  TrendingUp, Zap, Tag, Users, Copy, Share2, ChevronRight
+  TrendingUp, Zap, Tag, Users, Copy, Share2,
+  MessageCircle, Eye, UserCheck,
 } from 'lucide-react';
 import { NimartSpinner } from '@/components/common/NimartSpinner';
 import toast from 'react-hot-toast';
@@ -43,6 +44,7 @@ export default function ProviderDashboard() {
   const { user, profile } = useAuth();
 
   const [providerData, setProviderData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<DashboardStats>({
     totalBookings: 0,
     pendingBookings: 0,
@@ -70,110 +72,69 @@ export default function ProviderDashboard() {
 
   useEffect(() => {
     if (!user) return;
-    fetchProviderData();
-    fetchStats();
-    checkVerificationStatus();
-    fetchReferralStats();
+    fetchAllData();
   }, [user]);
 
-  useEffect(() => {
-    if (!user) return;
-    fetchCoinData();
-  }, [user]);
+  async function fetchAllData() {
+    setLoading(true);
+    try {
+      const [providerRes, bookingsRes, reviewsRes, verificationRes, referralsRes] = await Promise.all([
+        db.from('providers').select('*').eq('id', user!.id).single(),
+        db.from('bookings').select('*').eq('provider_id', user!.id),
+        db.from('reviews').select('rating').eq('provider_id', user!.id),
+        db.from('verification_documents').select('status').eq('provider_id', user!.id).eq('status', 'pending').limit(1),
+        db.from('referrals').select('*', { count: 'exact', head: false }).eq('referrer_id', user!.id),
+      ]);
 
-  async function fetchCoinData() {
-    const { data } = await db
-      .from('providers')
-      .select('coin_balance')
-      .eq('id', user!.id)
-      .single();
-    if (data) setCoinBalance((data as any).coin_balance || 0);
-  }
+      const provider = providerRes.data as any;
+      const bookings = (bookingsRes.data || []) as any[];
+      const reviews = (reviewsRes.data || []) as any[];
+      const pendingVerification = (verificationRes.data || []) as any[];
 
-  async function fetchProviderData() {
-    const { data: provider } = await db
-      .from('providers')
-      .select('*')
-      .eq('id', user!.id)
-      .single();
-    const { data: profileData } = await db
-      .from('profiles')
-      .select('*')
-      .eq('id', user!.id)
-      .single();
+      // Fetch profile
+      const { data: profileData } = await db.from('profiles').select('*').eq('id', user!.id).single();
 
-    const combined = { ...(provider as any), profile: profileData };
-    setProviderData(combined);
-    setIsVerified((profileData as any)?.is_verified || false);
+      setProviderData({ ...provider, profile: profileData });
+      setIsVerified((profileData as any)?.is_verified || false);
+      setHasPendingVerification(pendingVerification.length > 0);
+      setCoinBalance(provider?.coin_balance || 0);
 
-    if (provider && !(provider as any).referral_code) {
-      const name = (provider as any).business_name || (profileData as any)?.full_name || 'Provider';
-      const code = await generateUniqueReferralCode(name);
-      await db.from('providers').update({ referral_code: code }).eq('id', user!.id);
-      setReferralCode(code);
-    } else if ((provider as any)?.referral_code) {
-      setReferralCode((provider as any).referral_code);
+      // Stats
+      setStats({
+        totalBookings: bookings.length,
+        pendingBookings: bookings.filter((b: any) => b.status === 'pending').length,
+        completedBookings: bookings.filter((b: any) => b.status === 'completed').length,
+        averageRating: reviews.length
+          ? reviews.reduce((acc: number, r: any) => acc + r.rating, 0) / reviews.length
+          : 0,
+        reviewCount: reviews.length,
+      });
+
+      // Referral code
+      if (provider && !provider.referral_code) {
+        const name = provider.business_name || (profileData as any)?.full_name || 'Provider';
+        const code = await generateUniqueReferralCode(name);
+        await db.from('providers').update({ referral_code: code }).eq('id', user!.id);
+        setReferralCode(code);
+      } else if (provider?.referral_code) {
+        setReferralCode(provider.referral_code);
+      }
+
+      // Referral stats
+      const refs = (referralsRes.data || []) as any[];
+      setReferralStats({
+        total: refs.length,
+        pending: refs.filter((r: any) => r.status === 'pending').length,
+        awarded: refs.filter((r: any) => r.status === 'awarded').length,
+      });
+
+      // Redirect if profile incomplete
+      if (provider && profileData && (!(profileData as any)?.lga_id || !provider.business_name)) {
+        router.push('/provider/setup');
+      }
+    } finally {
+      setLoading(false);
     }
-
-    if (combined && (!combined.profile?.lga_id || !combined.business_name)) {
-      router.push('/provider/setup');
-    }
-  }
-
-  async function fetchStats() {
-    const { data: bookings } = await db
-      .from('bookings')
-      .select('*')
-      .eq('provider_id', user!.id);
-    const totalCount = (bookings as any[])?.length || 0;
-    const pendingCount = (bookings as any[])?.filter((b: any) => b.status === 'pending').length || 0;
-    const completedCount = (bookings as any[])?.filter((b: any) => b.status === 'completed').length || 0;
-    const { data: reviews } = await db
-      .from('reviews')
-      .select('rating')
-      .eq('provider_id', user!.id);
-    const avgRating = (reviews as any[])?.length
-      ? (reviews as any[]).reduce((acc: number, r: any) => acc + r.rating, 0) / (reviews as any[]).length
-      : 0;
-    setStats({
-      totalBookings: totalCount,
-      pendingBookings: pendingCount,
-      completedBookings: completedCount,
-      averageRating: avgRating,
-      reviewCount: (reviews as any[])?.length || 0,
-    });
-  }
-
-  async function checkVerificationStatus() {
-    const { data } = await db
-      .from('verification_documents')
-      .select('status')
-      .eq('provider_id', user!.id)
-      .eq('status', 'pending')
-      .limit(1);
-    setHasPendingVerification(data && (data as any[]).length > 0);
-  }
-
-  async function fetchReferralStats() {
-    const { count: total } = await db
-      .from('referrals')
-      .select('*', { count: 'exact', head: true })
-      .eq('referrer_id', user!.id);
-    const { count: pending } = await db
-      .from('referrals')
-      .select('*', { count: 'exact', head: true })
-      .eq('referrer_id', user!.id)
-      .eq('status', 'pending');
-    const { count: awarded } = await db
-      .from('referrals')
-      .select('*', { count: 'exact', head: true })
-      .eq('referrer_id', user!.id)
-      .eq('status', 'awarded');
-    setReferralStats({
-      total: total || 0,
-      pending: pending || 0,
-      awarded: awarded || 0,
-    });
   }
 
   const handleBoost = async () => {
@@ -204,7 +165,7 @@ export default function ProviderDashboard() {
       setCoinBalance(prev => prev - cost);
       toast.success(`Profile boosted for ${duration} days!`);
       setShowBoostModal(false);
-      fetchCoinData();
+      fetchAllData();
     } catch (error: any) {
       toast.error(error.message);
     } finally {
@@ -239,7 +200,7 @@ export default function ProviderDashboard() {
       setCoinBalance(prev => prev - cost);
       toast.success('Top placement activated for 7 days!');
       setShowTopPlacementModal(false);
-      fetchCoinData();
+      fetchAllData();
     } catch (error: any) {
       toast.error(error.message);
     } finally {
@@ -260,7 +221,7 @@ export default function ProviderDashboard() {
       setCoinBalance(prev => prev - cost);
       toast.success('Extra category added!');
       setShowExtraCategoryModal(false);
-      fetchCoinData();
+      fetchAllData();
     } catch (error: any) {
       toast.error(error.message);
     } finally {
@@ -285,7 +246,6 @@ export default function ProviderDashboard() {
     }
   };
 
-  // Guard: if user is not yet loaded, show spinner
   if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -294,261 +254,306 @@ export default function ProviderDashboard() {
     );
   }
 
+  if (loading) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="animate-pulse space-y-6">
+          <div className="h-8 bg-gray-200 rounded-lg w-48" />
+          <div className="h-24 bg-gray-200 rounded-2xl" />
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {[1, 2, 3, 4].map(i => <div key={i} className="h-28 bg-gray-200 rounded-2xl" />)}
+          </div>
+          <div className="grid grid-cols-5 gap-4">
+            {[1, 2, 3, 4, 5].map(i => <div key={i} className="h-24 bg-gray-200 rounded-2xl" />)}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+          <p className="text-sm text-gray-500 mt-0.5">Welcome back, {providerData?.business_name || profile?.full_name || 'Provider'}</p>
+        </div>
         {providerData && (
           <div className="flex items-center gap-3">
-            <span className="text-sm text-gray-600 font-medium">Select availability status:</span>
+            <span className="text-sm text-gray-500">Status:</span>
             <ProviderStatusToggle
               providerId={user.id}
               initialStatus={providerData.status}
-              onStatusChange={() => fetchProviderData()}
+              onStatusChange={() => fetchAllData()}
             />
           </div>
         )}
       </div>
 
-      {/* Verification Banners */}
+      {/* Verification Banner */}
       {!isVerified && !hasPendingVerification && (
-        <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 mb-6 flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="bg-blue-50 rounded-2xl p-4 sm:p-5 mb-6 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <Shield className="h-6 w-6 text-blue-600" />
+            <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+              <Shield className="h-5 w-5 text-blue-600" />
+            </div>
             <div>
-              <p className="font-medium text-blue-800">Get verified to build trust</p>
-              <p className="text-sm text-blue-600">Verified providers get more bookings</p>
+              <p className="font-semibold text-blue-800">Get verified to build trust</p>
+              <p className="text-sm text-blue-600">Verified providers get 3x more bookings</p>
             </div>
           </div>
-          <Link href="/provider/verification" className="bg-blue-600 text-white px-4 py-2 rounded-xl hover:bg-blue-700 text-sm font-medium w-full sm:w-auto text-center">
+          <Link href="/provider/verification" className="bg-blue-600 text-white px-5 py-2.5 rounded-xl hover:bg-blue-700 text-sm font-semibold w-full sm:w-auto text-center transition">
             Get Verified
           </Link>
         </div>
       )}
 
       {hasPendingVerification && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-4 mb-6 flex items-center gap-3">
-          <Shield className="h-6 w-6 text-yellow-600" />
+        <div className="bg-amber-50 rounded-2xl p-4 sm:p-5 mb-6 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+            <Shield className="h-5 w-5 text-amber-600" />
+          </div>
           <div>
-            <p className="font-medium text-yellow-800">Verification in progress</p>
-            <p className="text-sm text-yellow-600">We're reviewing your documents. This usually takes 24-48 hours.</p>
+            <p className="font-semibold text-amber-800">Verification in progress</p>
+            <p className="text-sm text-amber-600">We're reviewing your documents. This usually takes 24-48 hours.</p>
           </div>
         </div>
       )}
 
       {isVerified && (
-        <div className="bg-green-50 border border-green-200 rounded-2xl p-4 mb-6 flex items-center gap-3">
-          <img src="/verify.png" alt="Verified" className="h-8 w-8" />
+        <div className="bg-green-50 rounded-2xl p-4 sm:p-5 mb-6 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center flex-shrink-0 shadow-sm">
+            <img src="/verify.png" alt="Verified" className="h-7 w-7" />
+          </div>
           <div>
-            <p className="font-medium text-green-800">Your account is verified!</p>
-            <p className="text-sm text-green-600">The verified badge appears on your profile.</p>
+            <p className="font-semibold text-green-800">Your account is verified!</p>
+            <p className="text-sm text-green-600">The verified badge appears on your profile and builds customer trust.</p>
           </div>
         </div>
       )}
 
-      {/* Nicoin Balance Card */}
-      <div className="bg-gradient-to-r from-yellow-400 to-amber-500 rounded-2xl shadow-lg p-6 mb-8 text-white">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium opacity-90">Your Nicoin</p>
-            <p className="text-3xl font-bold">
-              <img src="/coin.svg" alt="Nicoin" className="h-6 w-6 inline-block mr-1" />
-              {coinBalance.toLocaleString()}
-            </p>
+      {/* Quick Actions — Moved up */}
+      <div className="mb-8">
+        <h2 className="text-base font-semibold text-gray-900 mb-3">Quick Actions</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          <Link href="/provider/bookings" className="group bg-white rounded-2xl p-4 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 text-center">
+            <div className="w-11 h-11 rounded-xl bg-primary-50 flex items-center justify-center mx-auto mb-2 group-hover:bg-primary-100 transition">
+              <Calendar className="h-5 w-5 text-primary-600" />
+            </div>
+            <h3 className="font-semibold text-sm text-gray-900">Bookings</h3>
+            {stats.pendingBookings > 0 && (
+              <span className="inline-block mt-1 text-xs font-bold text-primary-600 bg-primary-50 px-2 py-0.5 rounded-full">
+                {stats.pendingBookings} pending
+              </span>
+            )}
+          </Link>
+
+          <Link href="/provider/messages" className="group bg-white rounded-2xl p-4 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 text-center">
+            <div className="w-11 h-11 rounded-xl bg-blue-50 flex items-center justify-center mx-auto mb-2 group-hover:bg-blue-100 transition">
+              <MessageCircle className="h-5 w-5 text-blue-600" />
+            </div>
+            <h3 className="font-semibold text-sm text-gray-900">Messages</h3>
+          </Link>
+
+          <Link href="/provider/portfolio" className="group bg-white rounded-2xl p-4 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 text-center">
+            <div className="w-11 h-11 rounded-xl bg-purple-50 flex items-center justify-center mx-auto mb-2 group-hover:bg-purple-100 transition">
+              <Image className="h-5 w-5 text-purple-600" />
+            </div>
+            <h3 className="font-semibold text-sm text-gray-900">Portfolio</h3>
+          </Link>
+
+          <Link href="/provider/services" className="group bg-white rounded-2xl p-4 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 text-center">
+            <div className="w-11 h-11 rounded-xl bg-amber-50 flex items-center justify-center mx-auto mb-2 group-hover:bg-amber-100 transition">
+              <Package className="h-5 w-5 text-amber-600" />
+            </div>
+            <h3 className="font-semibold text-sm text-gray-900">Services</h3>
+          </Link>
+
+          {isVerified ? (
+            <div className="group bg-white rounded-2xl p-4 text-center opacity-60 cursor-not-allowed">
+              <div className="w-11 h-11 rounded-xl bg-green-50 flex items-center justify-center mx-auto mb-2">
+                <UserCheck className="h-5 w-5 text-green-600" />
+              </div>
+              <h3 className="font-semibold text-sm text-gray-900">Verified</h3>
+              <span className="inline-block mt-1 text-xs font-medium text-green-600 bg-green-50 px-2 py-0.5 rounded-full">✓ Done</span>
+            </div>
+          ) : (
+            <Link href="/provider/verification" className="group bg-white rounded-2xl p-4 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 text-center">
+              <div className="w-11 h-11 rounded-xl bg-green-50 flex items-center justify-center mx-auto mb-2 group-hover:bg-green-100 transition">
+                <Shield className="h-5 w-5 text-green-600" />
+              </div>
+              <h3 className="font-semibold text-sm text-gray-900">Get Verified</h3>
+              <span className="inline-block mt-1 text-xs font-medium text-green-600">Earn trust</span>
+            </Link>
+          )}
+        </div>
+      </div>
+
+      {/* Nicoin Balance + Stats Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-8">
+        {/* Nicoin Card */}
+        <div className="lg:col-span-1 bg-gradient-to-br from-amber-400 to-orange-500 rounded-2xl p-5 text-white shadow-lg">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-medium text-white/80">Nicoin Balance</p>
+            <Coins className="h-5 w-5 text-white/60" />
           </div>
-          <Link href="/provider/payment" className="bg-white/20 text-white px-4 py-2 rounded-xl hover:bg-white/30 text-sm font-medium">
-            Manage Coins →
+          <p className="text-3xl font-bold mb-1">
+            <img src="/coin.svg" alt="" className="h-6 w-6 inline-block mr-1 -mt-1" />
+            {coinBalance.toLocaleString()}
+          </p>
+          <Link href="/provider/payment" className="inline-flex items-center gap-1 text-sm text-white/80 hover:text-white font-medium transition mt-1">
+            Buy more → 
           </Link>
         </div>
-      </div>
 
-      {/* Quick Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <div className="bg-white rounded-2xl shadow-sm border p-4">
-          <Calendar className="h-6 w-6 text-primary-600 mb-2" />
-          <p className="text-lg font-bold">{stats.totalBookings}</p>
-          <p className="text-xs text-gray-500">Total Bookings</p>
-        </div>
-        <div className="bg-white rounded-2xl shadow-sm border p-4">
-          <Calendar className="h-6 w-6 text-yellow-600 mb-2" />
-          <p className="text-lg font-bold">{stats.pendingBookings}</p>
-          <p className="text-xs text-gray-500">Pending</p>
-        </div>
-        <div className="bg-white rounded-2xl shadow-sm border p-4">
-          <Calendar className="h-6 w-6 text-green-600 mb-2" />
-          <p className="text-lg font-bold">{stats.completedBookings}</p>
-          <p className="text-xs text-gray-500">Completed</p>
-        </div>
-        <div className="bg-white rounded-2xl shadow-sm border p-4">
-          <Star className="h-6 w-6 text-yellow-400 mb-2" />
-          <p className="text-lg font-bold">{stats.averageRating.toFixed(1)} <span className="text-xs text-gray-400">({stats.reviewCount})</span></p>
-          <p className="text-xs text-gray-500">Rating</p>
+        {/* Stats */}
+        <div className="lg:col-span-2 grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            { icon: Calendar, color: 'text-primary-600', bg: 'bg-primary-50', label: 'Total Bookings', value: stats.totalBookings },
+            { icon: Eye, color: 'text-amber-600', bg: 'bg-amber-50', label: 'Pending', value: stats.pendingBookings },
+            { icon: UserCheck, color: 'text-green-600', bg: 'bg-green-50', label: 'Completed', value: stats.completedBookings },
+            { icon: Star, color: 'text-yellow-600', bg: 'bg-yellow-50', label: 'Rating', value: `${stats.averageRating.toFixed(1)} (${stats.reviewCount})`, small: true },
+          ].map((item) => (
+            <div key={item.label} className="bg-white rounded-2xl p-4 shadow-sm">
+              <div className={`w-9 h-9 rounded-xl ${item.bg} flex items-center justify-center mb-2`}>
+                <item.icon className={`h-4 w-4 ${item.color}`} />
+              </div>
+              <p className={`${item.small ? 'text-base' : 'text-xl'} font-bold text-gray-900`}>{item.value}</p>
+              <p className="text-xs text-gray-500">{item.label}</p>
+            </div>
+          ))}
         </div>
       </div>
-
-      {/* Setup Checklist */}
-      {providerData && (!providerData.profile?.lga_id || !providerData.business_name) && (
-        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-8 rounded-r-xl">
-          <div className="flex">
-            <Settings className="h-5 w-5 text-yellow-400 mr-2" />
-            <p className="text-sm text-yellow-700">
-              Complete your profile to appear in searches. <Link href="/provider/setup" className="font-medium underline">Complete Setup</Link>
-            </p>
-          </div>
-        </div>
-      )}
 
       {/* Boost Cards */}
-      <h2 className="text-lg font-semibold text-gray-900 mb-4">Boost Your Visibility</h2>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+      <h2 className="text-base font-semibold text-gray-900 mb-3">Boost Your Visibility</h2>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
         {/* Standard Boost */}
-        <div className="bg-white rounded-2xl shadow-sm border p-5">
-          <TrendingUp className="h-6 w-6 text-primary-600 mb-2" />
-          <h3 className="font-semibold">Standard Boost</h3>
-          <p className="text-sm text-gray-500 mb-3">7 days at top</p>
-          <p className="text-lg font-bold mb-4">{STANDARD_BOOST_COST.toLocaleString()} Nicoin</p>
+        <div className="bg-white rounded-2xl shadow-sm p-5 hover:shadow-md transition-shadow">
+          <div className="w-10 h-10 rounded-xl bg-primary-50 flex items-center justify-center mb-3">
+            <TrendingUp className="h-5 w-5 text-primary-600" />
+          </div>
+          <h3 className="font-semibold text-gray-900">Standard Boost</h3>
+          <p className="text-sm text-gray-500 mb-3">7 days at top of search</p>
+          <p className="text-lg font-bold text-gray-900 mb-4">
+            <img src="/coin.svg" alt="" className="h-4 w-4 inline-block mr-1" />
+            {STANDARD_BOOST_COST.toLocaleString()}
+          </p>
           <button
             onClick={() => { setBoostType('standard'); setShowBoostModal(true); }}
             disabled={coinBalance < STANDARD_BOOST_COST}
-            className="w-full bg-primary-600 text-white py-2.5 rounded-xl hover:bg-primary-700 disabled:opacity-50 transition font-medium text-sm"
+            className="w-full bg-primary-600 text-white py-2.5 rounded-xl hover:bg-primary-700 disabled:opacity-40 disabled:cursor-not-allowed transition font-medium text-sm"
           >
-            Boost Now
+            {coinBalance < STANDARD_BOOST_COST ? 'Not enough coins' : 'Boost Now'}
           </button>
         </div>
 
         {/* Premium Boost */}
-        <div className="bg-white rounded-2xl shadow-sm border p-5 ring-2 ring-amber-200">
-          <Zap className="h-6 w-6 text-amber-500 mb-2" />
-          <h3 className="font-semibold">Premium Boost</h3>
-          <p className="text-sm text-gray-500 mb-3">30 days at top</p>
-          <p className="text-lg font-bold mb-4">{PREMIUM_BOOST_COST.toLocaleString()} Nicoin</p>
+        <div className="bg-white rounded-2xl shadow-sm p-5 hover:shadow-md transition-shadow ring-1 ring-amber-200">
+          <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center mb-3">
+            <Zap className="h-5 w-5 text-amber-500" />
+          </div>
+          <h3 className="font-semibold text-gray-900">Premium Boost</h3>
+          <p className="text-sm text-gray-500 mb-3">30 days at top · Best value</p>
+          <p className="text-lg font-bold text-gray-900 mb-4">
+            <img src="/coin.svg" alt="" className="h-4 w-4 inline-block mr-1" />
+            {PREMIUM_BOOST_COST.toLocaleString()}
+          </p>
           <button
             onClick={() => { setBoostType('premium'); setShowBoostModal(true); }}
             disabled={coinBalance < PREMIUM_BOOST_COST}
-            className="w-full bg-amber-500 text-white py-2.5 rounded-xl hover:bg-amber-600 disabled:opacity-50 transition font-medium text-sm"
+            className="w-full bg-amber-500 text-white py-2.5 rounded-xl hover:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed transition font-medium text-sm"
           >
-            Boost 1 Month
+            {coinBalance < PREMIUM_BOOST_COST ? 'Not enough coins' : 'Boost 1 Month'}
           </button>
         </div>
 
         {/* Top Placement */}
-        <div className="bg-white rounded-2xl shadow-sm border p-5">
-          <Tag className="h-6 w-6 text-purple-600 mb-2" />
-          <h3 className="font-semibold">Top Placement</h3>
+        <div className="bg-white rounded-2xl shadow-sm p-5 hover:shadow-md transition-shadow">
+          <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center mb-3">
+            <Tag className="h-5 w-5 text-purple-600" />
+          </div>
+          <h3 className="font-semibold text-gray-900">Top Placement</h3>
           <p className="text-sm text-gray-500 mb-3">Guaranteed top‑3 for 7 days</p>
-          <p className="text-lg font-bold mb-4">{TOP_PLACEMENT_COST.toLocaleString()} Nicoin</p>
+          <p className="text-lg font-bold text-gray-900 mb-4">
+            <img src="/coin.svg" alt="" className="h-4 w-4 inline-block mr-1" />
+            {TOP_PLACEMENT_COST.toLocaleString()}
+          </p>
           <button
             onClick={() => setShowTopPlacementModal(true)}
             disabled={coinBalance < TOP_PLACEMENT_COST}
-            className="w-full bg-purple-600 text-white py-2.5 rounded-xl hover:bg-purple-700 disabled:opacity-50 transition font-medium text-sm"
+            className="w-full bg-purple-600 text-white py-2.5 rounded-xl hover:bg-purple-700 disabled:opacity-40 disabled:cursor-not-allowed transition font-medium text-sm"
           >
-            Get Top Spot
+            {coinBalance < TOP_PLACEMENT_COST ? 'Not enough coins' : 'Get Top Spot'}
           </button>
         </div>
       </div>
 
       {/* Extra Category */}
-      <div className="mb-8">
-        <button
-          onClick={() => setShowExtraCategoryModal(true)}
-          className="inline-flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-xl text-sm font-medium hover:bg-gray-50"
-        >
-          <Package className="h-4 w-4" /> Add Extra Category ({EXTRA_CATEGORY_COST.toLocaleString()} Nicoin)
-        </button>
-      </div>
+      <button
+        onClick={() => setShowExtraCategoryModal(true)}
+        className="inline-flex items-center gap-2 px-5 py-2.5 bg-white rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 shadow-sm transition mb-8"
+      >
+        <Package className="h-4 w-4 text-gray-500" />
+        Add Extra Category ({EXTRA_CATEGORY_COST.toLocaleString()} Nicoin)
+      </button>
 
-      {/* Your Referrals Widget */}
-      <div className="bg-white rounded-2xl shadow-sm border p-6 mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+      {/* Referrals */}
+      <div className="bg-white rounded-2xl shadow-sm p-5 sm:p-6 mb-8">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-10 h-10 rounded-xl bg-primary-50 flex items-center justify-center">
             <Users className="h-5 w-5 text-primary-600" />
-            Your Referrals
-          </h2>
+          </div>
+          <div>
+            <h2 className="font-semibold text-gray-900">Your Referrals</h2>
+            <p className="text-sm text-gray-500">Earn {REFERRAL_BONUS} Nicoin per referral</p>
+          </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
-          <div>
-            <p className="text-sm text-gray-500 mb-1">Your Referral Code</p>
-            <div className="flex items-center gap-2">
-              <code className="text-2xl font-bold text-primary-600 bg-primary-50 px-4 py-2 rounded-lg">
-                {referralCode || '—'}
-              </code>
-              <button
-                onClick={copyReferralLink}
-                className="p-2 text-gray-500 hover:text-primary-600 rounded-full hover:bg-gray-100 transition"
-                title="Copy referral link"
-              >
-                <Copy className="h-5 w-5" />
-              </button>
-              <button
-                onClick={shareReferralLink}
-                className="p-2 text-gray-500 hover:text-primary-600 rounded-full hover:bg-gray-100 transition"
-                title="Share"
-              >
-                <Share2 className="h-5 w-5" />
-              </button>
-            </div>
-            <p className="text-xs text-gray-400 mt-1">
-              Share your link and earn {REFERRAL_BONUS} Nicoin for every new provider who completes their first booking.
-            </p>
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <code className="text-xl sm:text-2xl font-bold text-primary-600 bg-primary-50 px-4 py-2 rounded-xl tracking-wider">
+              {referralCode || '—'}
+            </code>
+            <button onClick={copyReferralLink} className="p-2.5 text-gray-400 hover:text-primary-600 rounded-xl hover:bg-gray-100 transition" title="Copy link">
+              <Copy className="h-5 w-5" />
+            </button>
+            <button onClick={shareReferralLink} className="p-2.5 text-gray-400 hover:text-primary-600 rounded-xl hover:bg-gray-100 transition" title="Share">
+              <Share2 className="h-5 w-5" />
+            </button>
           </div>
 
           <div className="flex gap-6">
             <div className="text-center">
-              <p className="text-2xl font-bold text-gray-900">{referralStats.total}</p>
+              <p className="text-xl font-bold text-gray-900">{referralStats.total}</p>
               <p className="text-xs text-gray-500">Total</p>
             </div>
             <div className="text-center">
-              <p className="text-2xl font-bold text-yellow-600">{referralStats.pending}</p>
+              <p className="text-xl font-bold text-amber-600">{referralStats.pending}</p>
               <p className="text-xs text-gray-500">Pending</p>
             </div>
             <div className="text-center">
-              <p className="text-2xl font-bold text-green-600">{referralStats.awarded}</p>
+              <p className="text-xl font-bold text-green-600">{referralStats.awarded}</p>
               <p className="text-xs text-gray-500">Awarded</p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Quick Actions */}
-      <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-        <Link href="/provider/bookings" className="bg-white rounded-2xl shadow-sm border p-4 hover:shadow-md transition text-center">
-          <Calendar className="h-8 w-8 text-primary-600 mx-auto mb-2" />
-          <h3 className="font-semibold text-sm">Bookings</h3>
-        </Link>
-        <Link href="/provider/portfolio" className="bg-white rounded-2xl shadow-sm border p-4 hover:shadow-md transition text-center">
-          <Image className="h-8 w-8 text-primary-600 mx-auto mb-2" />
-          <h3 className="font-semibold text-sm">Portfolio</h3>
-        </Link>
-        <Link href="/provider/services" className="bg-white rounded-2xl shadow-sm border p-4 hover:shadow-md transition text-center">
-          <Package className="h-8 w-8 text-primary-600 mx-auto mb-2" />
-          <h3 className="font-semibold text-sm">Services</h3>
-        </Link>
-        <Link href="/provider/verification" className="bg-white rounded-2xl shadow-sm border p-4 hover:shadow-md transition text-center">
-          <Shield className="h-8 w-8 text-primary-600 mx-auto mb-2" />
-          <h3 className="font-semibold text-sm">Get Verified</h3>
-        </Link>
-        <Link href="/provider/profile" className="bg-white rounded-2xl shadow-sm border p-4 hover:shadow-md transition text-center">
-          <Settings className="h-8 w-8 text-primary-600 mx-auto mb-2" />
-          <h3 className="font-semibold text-sm">Settings</h3>
-        </Link>
-      </div>
-
       {/* Modals */}
       {showBoostModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
             <h3 className="text-lg font-semibold mb-2">
               Activate {boostType === 'standard' ? 'Standard' : 'Premium'} Boost
             </h3>
-            <p className="text-sm text-gray-600 mb-4">
-              {boostType === 'standard' ? STANDARD_BOOST_COST.toLocaleString() : PREMIUM_BOOST_COST.toLocaleString()} Nicoin will be deducted. Your profile will appear at the top for {boostType === 'standard' ? '7 days' : '30 days'}.
+            <p className="text-sm text-gray-500 mb-5">
+              {boostType === 'standard' ? STANDARD_BOOST_COST.toLocaleString() : PREMIUM_BOOST_COST.toLocaleString()} Nicoin will be deducted. Your profile will appear at the top for {boostType === 'standard' ? '7' : '30'} days.
             </p>
             <div className="flex gap-3">
-              <button onClick={() => setShowBoostModal(false)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
-              <button onClick={handleBoost} disabled={boostLoading} className="flex-1 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 disabled:opacity-50">
+              <button onClick={() => setShowBoostModal(false)} className="flex-1 px-4 py-2.5 bg-gray-100 rounded-xl hover:bg-gray-200 font-medium text-sm transition">Cancel</button>
+              <button onClick={handleBoost} disabled={boostLoading} className="flex-1 bg-primary-600 text-white px-4 py-2.5 rounded-xl hover:bg-primary-700 disabled:opacity-50 font-medium text-sm transition">
                 {boostLoading ? 'Activating...' : 'Confirm'}
               </button>
             </div>
@@ -557,15 +562,15 @@ export default function ProviderDashboard() {
       )}
 
       {showTopPlacementModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
             <h3 className="text-lg font-semibold mb-2">Activate Top Placement</h3>
-            <p className="text-sm text-gray-600 mb-4">
+            <p className="text-sm text-gray-500 mb-5">
               {TOP_PLACEMENT_COST.toLocaleString()} Nicoin will be deducted. You'll appear in the Top Providers slider for 7 days.
             </p>
             <div className="flex gap-3">
-              <button onClick={() => setShowTopPlacementModal(false)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
-              <button onClick={handleTopPlacement} disabled={boostLoading} className="flex-1 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 disabled:opacity-50">
+              <button onClick={() => setShowTopPlacementModal(false)} className="flex-1 px-4 py-2.5 bg-gray-100 rounded-xl hover:bg-gray-200 font-medium text-sm transition">Cancel</button>
+              <button onClick={handleTopPlacement} disabled={boostLoading} className="flex-1 bg-purple-600 text-white px-4 py-2.5 rounded-xl hover:bg-purple-700 disabled:opacity-50 font-medium text-sm transition">
                 {boostLoading ? 'Activating...' : 'Confirm'}
               </button>
             </div>
@@ -574,16 +579,16 @@ export default function ProviderDashboard() {
       )}
 
       {showExtraCategoryModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
             <h3 className="text-lg font-semibold mb-2">Add Extra Category</h3>
-            <p className="text-sm text-gray-600 mb-4">
-              {EXTRA_CATEGORY_COST.toLocaleString()} Nicoin per category. Pick one to add to your profile.
+            <p className="text-sm text-gray-500 mb-4">
+              {EXTRA_CATEGORY_COST.toLocaleString()} Nicoin per category.
             </p>
             <select
               value={extraCategorySlug}
               onChange={(e) => setExtraCategorySlug(e.target.value)}
-              className="w-full px-3 py-2 border rounded-lg mb-4"
+              className="w-full px-4 py-3 bg-gray-50 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 mb-4"
             >
               <option value="">Select category</option>
               {CATEGORIES.map((cat) => (
@@ -591,8 +596,8 @@ export default function ProviderDashboard() {
               ))}
             </select>
             <div className="flex gap-3">
-              <button onClick={() => setShowExtraCategoryModal(false)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
-              <button onClick={handleExtraCategory} disabled={boostLoading || !extraCategorySlug} className="flex-1 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 disabled:opacity-50">
+              <button onClick={() => setShowExtraCategoryModal(false)} className="flex-1 px-4 py-2.5 bg-gray-100 rounded-xl hover:bg-gray-200 font-medium text-sm transition">Cancel</button>
+              <button onClick={handleExtraCategory} disabled={boostLoading || !extraCategorySlug} className="flex-1 bg-primary-600 text-white px-4 py-2.5 rounded-xl hover:bg-primary-700 disabled:opacity-50 font-medium text-sm transition">
                 {boostLoading ? 'Adding...' : 'Add Category'}
               </button>
             </div>

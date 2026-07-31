@@ -31,7 +31,7 @@
 }
 
 /* ================================================================
-   Montserrat Font – Local Hosting (unchanged)
+   Montserrat Font – Local Hosting
    ================================================================ */
 @font-face {
   font-family: 'Montserrat';
@@ -65,20 +65,13 @@
   font-display: swap;
 }
 
-@font-face {
-  font-family: 'Montserrat';
-  src: url('/fonts/montserrat/Montserrat-ExtraBold.woff2') format('woff2');
-  font-weight: 800;
-  font-style: normal;
-  font-display: swap;
-}
-
 /* ================================================================
    Base Styles
    ================================================================ */
 @layer base {
   html {
     @apply antialiased;
+    scroll-behavior: smooth;
   }
 
   body {
@@ -109,24 +102,9 @@
   p {
     @apply font-normal;
   }
-}
 
-/* ================================================================
-   Component Classes
-   ================================================================ */
-@layer components {
-  .line-clamp-2 {
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-
-  .line-clamp-3 {
-    display: -webkit-box;
-    -webkit-line-clamp: 3;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
+  *:focus-visible {
+    @apply outline-2 outline-primary-500 outline-offset-2;
   }
 }
 
@@ -183,7 +161,7 @@
 }
 
 /* ================================================================
-   Leaflet Overrides (unchanged)
+   Leaflet Overrides
    ================================================================ */
 .leaflet-container {
   width: 100%;

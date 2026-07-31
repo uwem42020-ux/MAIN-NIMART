@@ -5,7 +5,6 @@ import { memo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { MapPin, Star, Briefcase, Clock } from 'lucide-react';
-import { OptimizedImage } from '@/components/common/OptimizedImage';
 import { formatDistance } from '@/lib/distance';
 import { cn } from '@/lib/utils';
 import type { Database } from '@/types/database';
@@ -54,6 +53,12 @@ const statusRingColor: Record<string, string> = {
   away: 'bg-red-500',
 };
 
+function getOptimizedUrl(url: string | null | undefined): string | undefined {
+  if (!url) return undefined;
+  if (url.startsWith('/')) return url;
+  return `${url}?width=400&height=533&quality=55&resize=cover`;
+}
+
 export const ProviderCardPortrait = memo(function ProviderCardPortrait({
   provider,
   className,
@@ -67,6 +72,8 @@ export const ProviderCardPortrait = memo(function ProviderCardPortrait({
   const isBoosted = provider.boost_until ? new Date(provider.boost_until) > new Date() : false;
   const isVerified = provider.profile?.is_verified || false;
 
+  const imageSrc = getOptimizedUrl(provider.profile?.avatar_url);
+
   const handleBookNow = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -77,6 +84,12 @@ export const ProviderCardPortrait = memo(function ProviderCardPortrait({
       return;
     }
     router.push(`/provider/${provider.id}?book=true`);
+  };
+
+  const handleNotifyWhenAvailable = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    toast.success("We'll notify you when they're back!");
   };
 
   const handleEnableLocation = (e: React.MouseEvent) => {
@@ -115,11 +128,6 @@ export const ProviderCardPortrait = memo(function ProviderCardPortrait({
   };
 
   const handleMouseEnter = () => {
-    const preloadLink = document.createElement('link');
-    preloadLink.rel = 'prefetch';
-    preloadLink.href = `/provider/${provider.id}`;
-    document.head.appendChild(preloadLink);
-
     queryClient.prefetchQuery({
       queryKey: ['provider', provider.id],
       queryFn: () => fetchProviderProfile(provider.id),
@@ -153,28 +161,19 @@ export const ProviderCardPortrait = memo(function ProviderCardPortrait({
       <Link
         href={`/provider/${provider.id}`}
         onMouseEnter={handleMouseEnter}
-        className="block relative w-full bg-gray-100"
+        className="block relative w-full"
       >
-        <div className="relative overflow-hidden bg-gray-200 w-full aspect-[4/5]">
-          {provider.profile?.avatar_url ? (
-            <OptimizedImage
-              src={provider.profile.avatar_url}
-              alt={provider.business_name || provider.profile.full_name || 'Provider'}
-              className="w-full h-full object-cover"
-              width={400}
-              height={500}
-              loading={imageLoading}
-              fetchpriority={imageLoading === 'eager' ? 'high' : 'auto'}
-            />
-          ) : (
-            <img
-              src="/profile.png"
-              alt="Placeholder"
-              className="w-full h-full object-cover"
-              width={400}
-              height={500}
-            />
-          )}
+        <div className="relative w-full aspect-[3/4] bg-gray-200 overflow-hidden">
+          <img
+            src={imageSrc || '/profile.png'}
+            alt={provider.business_name || provider.profile?.full_name || 'Provider'}
+            className="absolute inset-0 w-full h-full object-cover"
+            loading={imageLoading}
+            {...(imageLoading === 'eager' ? { fetchPriority: 'high' } : {})}
+            onError={(e) => {
+              e.currentTarget.src = '/profile.png';
+            }}
+          />
         </div>
 
         <div className="absolute top-2 left-2 z-10">
@@ -269,8 +268,11 @@ export const ProviderCardPortrait = memo(function ProviderCardPortrait({
         </div>
 
         {provider.status === 'away' ? (
-          <button disabled className="w-full bg-gray-300 text-gray-500 text-sm font-medium py-2 rounded-lg cursor-not-allowed">
-            Not Available
+          <button
+            onClick={handleNotifyWhenAvailable}
+            className="w-full bg-amber-50 border border-amber-200 text-amber-700 text-sm font-medium py-2 rounded-lg hover:bg-amber-100 transition-colors"
+          >
+            🔔 Notify When Available
           </button>
         ) : (
           <button

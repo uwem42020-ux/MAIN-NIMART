@@ -32,10 +32,11 @@ import {
   List,
   Maximize2,
   ExternalLink,
+  Search,
+  Compass,
 } from 'lucide-react';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
-import { OptimizedImage } from '@/components/common/OptimizedImage';
 import { cn } from '@/lib/utils';
 import type { Database } from '@/types/database';
 import { formatDistanceToNow } from 'date-fns';
@@ -101,6 +102,13 @@ const priceTypeLabels: Record<string, string> = {
   negotiable: 'Negotiable',
 };
 
+function getOptimizedUrl(url: string | null | undefined, width: number = 400, height?: number): string | undefined {
+  if (!url) return undefined;
+  if (url.startsWith('/')) return url;
+  const h = height || width;
+  return `${url}?width=${width}&height=${h}&quality=50&resize=cover`;
+}
+
 export function ProviderProfileClient({
   initialProvider,
 }: {
@@ -119,9 +127,6 @@ export function ProviderProfileClient({
   const [showReportModal, setShowReportModal] = useState(false);
   const [reportReason, setReportReason] = useState('');
   const [submittingReport, setSubmittingReport] = useState(false);
-  const [currentImageIndex, setCurrentImageIndex] = useState(0);
-  const touchStartX = useRef<number | null>(null);
-  const touchEndX = useRef<number | null>(null);
   const [similarViewMode, setSimilarViewMode] = useState<'grid' | 'list'>('grid');
   const queryClient = useQueryClient();
 
@@ -129,7 +134,7 @@ export function ProviderProfileClient({
   const [coverModalOpen, setCoverModalOpen] = useState(false);
   const [showFullDescription, setShowFullDescription] = useState(false);
 
-  const { data: provider, isLoading, refetch } = useQuery({
+  const { data: provider, refetch } = useQuery({
     queryKey: ['provider', id],
     queryFn: async () => {
       const [
@@ -375,7 +380,6 @@ export function ProviderProfileClient({
 
   const submitReview = async () => {
     if (!user) { toast.error('Please sign in to leave a review'); router.push('/auth/signin'); return; }
-    const bookingId = searchParams.get('bookingId');
     setSubmittingReview(true);
     try {
       const { data: existingReview } = await db
@@ -388,7 +392,6 @@ export function ProviderProfileClient({
       const { error } = await db.from('reviews').insert([{
         reviewer_id: user.id,
         provider_id: id!,
-        booking_id: bookingId || null,
         rating: reviewRating,
         content: reviewContent || null,
       }]);
@@ -418,23 +421,6 @@ export function ProviderProfileClient({
     finally { setSubmittingReport(false); }
   };
 
-  const handleTouchStart = (e: React.TouchEvent) => { touchStartX.current = e.touches[0].clientX; };
-  const handleTouchMove = (e: React.TouchEvent) => { touchEndX.current = e.touches[0].clientX; };
-  const handleTouchEnd = () => {
-    if (!touchStartX.current || !touchEndX.current || !provider?.portfolio_images?.length) return;
-    const diff = touchStartX.current - touchEndX.current;
-    const threshold = 50;
-    if (Math.abs(diff) > threshold) {
-      if (diff > 0 && currentImageIndex < provider.portfolio_images.length - 1) {
-        setCurrentImageIndex(prev => prev + 1);
-      } else if (diff < 0 && currentImageIndex > 0) {
-        setCurrentImageIndex(prev => prev - 1);
-      }
-    }
-    touchStartX.current = null;
-    touchEndX.current = null;
-  };
-
   const avgRating = provider?.reviews?.length
     ? provider.reviews.reduce((acc, r) => acc + r.rating, 0) / provider.reviews.length
     : 0;
@@ -444,7 +430,7 @@ export function ProviderProfileClient({
     : 'Recently';
 
   const locationString = provider?.profile?.lga_name
-? `${provider.profile.lga_name}, ${(provider.profile as any)?.state_name || ''}`
+    ? `${provider.profile.lga_name}, ${(provider.profile as any)?.state_name || ''}`
     : 'Location not set';
 
   const joinedYear = provider?.created_at
@@ -457,7 +443,6 @@ export function ProviderProfileClient({
     .join(' ') || 'Provider';
 
   const lgaName = provider?.profile?.lga_name || 'your area';
-  const stateName = (provider?.profile as any)?.state_name || 'Nigeria';
   const providerName = provider?.business_name || provider?.profile?.full_name || 'Provider';
   const providerLgaId = provider?.profile?.lga_id;
 
@@ -474,82 +459,73 @@ export function ProviderProfileClient({
   ];
 
   const Card = ({ children, className }: { children: React.ReactNode; className?: string }) => (
-    <div className={cn('bg-white rounded-2xl shadow-sm border border-gray-100 p-6', className)}>
+    <div className={cn('bg-white rounded-2xl shadow-sm border border-gray-100 p-5 sm:p-6', className)}>
       {children}
     </div>
   );
 
-  // Related links section component (used in both mobile and desktop)
+  const avatarSrc = getOptimizedUrl(provider?.profile?.avatar_url, 200);
+  const coverSrc = provider?.profile?.cover_photo
+    ? `${provider.profile.cover_photo}?width=1200&quality=50&resize=cover`
+    : undefined;
+
   const RelatedServicesSection = () => (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-6">
       <h2 className="text-base sm:text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-        <ExternalLink className="h-4 w-4 sm:h-5 sm:w-5 text-primary-600" />
+        <Compass className="h-4 w-4 sm:h-5 sm:w-5 text-primary-600" />
         Explore More
       </h2>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-2 sm:gap-3">
         {provider?.selected_category_slug && providerLgaId && (
           <Link
             href={`/services/${provider.selected_category_slug}/in/${providerLgaId}`}
-            className="flex items-center justify-between p-3 bg-primary-50 rounded-xl hover:bg-primary-100 transition group"
+            className="flex flex-col items-center justify-center p-3 sm:p-4 bg-primary-50 rounded-xl hover:bg-primary-100 transition text-center group border border-primary-100"
           >
-            <div>
-              <p className="text-sm font-semibold text-primary-700">More {categoryName} in {lgaName}</p>
-              <p className="text-xs text-primary-600/70">See all {categoryName.toLowerCase()} near you</p>
-            </div>
-            <ArrowRight className="h-4 w-4 text-primary-600 group-hover:translate-x-1 transition-transform" />
+            <Search className="h-4 w-4 sm:h-5 sm:w-5 text-primary-600 mb-1" />
+            <p className="text-xs sm:text-sm font-semibold text-primary-700">More {categoryName} in {lgaName}</p>
+            <p className="text-[10px] sm:text-xs text-primary-600/60 mt-0.5">See all near you</p>
           </Link>
         )}
         {providerLgaId && (
           <Link
             href={`/search?lga=${providerLgaId}`}
-            className="flex items-center justify-between p-3 bg-green-50 rounded-xl hover:bg-green-100 transition group"
+            className="flex flex-col items-center justify-center p-3 sm:p-4 bg-green-50 rounded-xl hover:bg-green-100 transition text-center group border border-green-100"
           >
-            <div>
-              <p className="text-sm font-semibold text-green-700">Other services in {lgaName}</p>
-              <p className="text-xs text-green-600/70">Browse all providers in your area</p>
-            </div>
-            <ArrowRight className="h-4 w-4 text-green-600 group-hover:translate-x-1 transition-transform" />
+            <MapPin className="h-4 w-4 sm:h-5 sm:w-5 text-green-600 mb-1" />
+            <p className="text-xs sm:text-sm font-semibold text-green-700">Services in {lgaName}</p>
+            <p className="text-[10px] sm:text-xs text-green-600/60 mt-0.5">Browse all providers</p>
           </Link>
         )}
         {provider?.selected_category_slug && (
           <Link
             href={`/search?category=${provider.selected_category_slug}`}
-            className="flex items-center justify-between p-3 bg-amber-50 rounded-xl hover:bg-amber-100 transition group"
+            className="flex flex-col items-center justify-center p-3 sm:p-4 bg-amber-50 rounded-xl hover:bg-amber-100 transition text-center group border border-amber-100"
           >
-            <div>
-              <p className="text-sm font-semibold text-amber-700">{categoryName} in other areas</p>
-              <p className="text-xs text-amber-600/70">Find {categoryName.toLowerCase()} across Nigeria</p>
-            </div>
-            <ArrowRight className="h-4 w-4 text-amber-600 group-hover:translate-x-1 transition-transform" />
+            <Compass className="h-4 w-4 sm:h-5 sm:w-5 text-amber-600 mb-1" />
+            <p className="text-xs sm:text-sm font-semibold text-amber-700">{categoryName} elsewhere</p>
+            <p className="text-[10px] sm:text-xs text-amber-600/60 mt-0.5">Across Nigeria</p>
           </Link>
         )}
         <Link
           href="/search"
-          className="flex items-center justify-between p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition group"
+          className="flex flex-col items-center justify-center p-3 sm:p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition text-center group border border-gray-100"
         >
-          <div>
-            <p className="text-sm font-semibold text-gray-700">All services</p>
-            <p className="text-xs text-gray-500">Browse all categories and providers</p>
-          </div>
-          <ArrowRight className="h-4 w-4 text-gray-600 group-hover:translate-x-1 transition-transform" />
+          <ExternalLink className="h-4 w-4 sm:h-5 sm:w-5 text-gray-600 mb-1" />
+          <p className="text-xs sm:text-sm font-semibold text-gray-700">All Services</p>
+          <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5">Browse categories</p>
         </Link>
       </div>
     </div>
   );
 
   return (
-    <div className="max-w-7xl mx-auto px-0 sm:px-4 sm:px-6 lg:px-8 py-0 sm:py-8">
+    <div className="max-w-7xl mx-auto px-0 sm:px-4 lg:px-8 py-0 sm:py-8">
       {/* ========== MOBILE LAYOUT ========== */}
       <div className="block md:hidden">
         <div className="relative h-48 sm:h-52 bg-gray-100 overflow-hidden">
-          {provider?.profile?.cover_photo ? (
+          {coverSrc ? (
             <button onClick={() => setCoverModalOpen(true)} className="w-full h-full relative group">
-              <img
-                src={provider.profile.cover_photo}
-                alt="Cover"
-                className="w-full h-full object-cover"
-                loading="eager"
-              />
+              <img src={coverSrc} alt="Cover" className="w-full h-full object-cover" loading="eager" />
               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
                 <Maximize2 className="h-6 w-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
               </div>
@@ -557,10 +533,7 @@ export function ProviderProfileClient({
           ) : (
             <div className="w-full h-full bg-gradient-to-r from-primary-100 to-green-100" />
           )}
-          <button
-            onClick={() => router.back()}
-            className="absolute top-4 left-4 z-10 bg-white/20 backdrop-blur-md text-white p-2 rounded-full border border-white/30 shadow-lg"
-          >
+          <button onClick={() => router.back()} className="absolute top-4 left-4 z-10 bg-white/20 backdrop-blur-md text-white p-2 rounded-full border border-white/30 shadow-lg">
             <ArrowLeft className="h-5 w-5" />
           </button>
         </div>
@@ -568,33 +541,19 @@ export function ProviderProfileClient({
         <div className="relative flex justify-center -mt-14 mb-4 px-4">
           <div className="relative">
             <div className="w-28 h-28 rounded-full border-4 border-white shadow-xl overflow-hidden bg-white">
-              {provider?.profile?.avatar_url ? (
+              {avatarSrc ? (
                 <button onClick={() => setAvatarModalOpen(true)} className="w-full h-full relative group">
-                  <OptimizedImage
-                    src={provider.profile.avatar_url}
-                    alt={providerName}
-                    className="w-full h-full object-cover"
-                    width={224}
-                    height={224}
-                    loading="eager"
-                    fetchpriority="high"
-                  />
+                  <img src={avatarSrc} alt={providerName} className="w-full h-full object-cover" loading="eager" fetchPriority="high" />
                   <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
                     <Maximize2 className="h-6 w-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
                   </div>
                 </button>
               ) : (
-                <div className="w-full h-full flex items-center justify-center text-4xl font-bold text-primary-600 bg-primary-50">
-                  {(providerName || 'P')[0]}
-                </div>
+                <div className="w-full h-full flex items-center justify-center text-4xl font-bold text-primary-600 bg-primary-50">{(providerName || 'P')[0]}</div>
               )}
             </div>
             <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-0.5 shadow-md">
-              <img
-                src={statusIconMap[provider?.status || 'available'] || '/active.svg'}
-                alt={provider?.status}
-                className="h-6 w-6"
-              />
+              <img src={statusIconMap[provider?.status || 'available'] || '/active.svg'} alt={provider?.status} className="h-6 w-6" />
             </div>
           </div>
         </div>
@@ -603,23 +562,21 @@ export function ProviderProfileClient({
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 text-center">
             <h1 className="text-xl font-bold text-gray-900">{providerName}</h1>
             <p className="text-sm font-medium text-primary-600 mt-0.5">{categoryName}</p>
-            {provider?.description && (
+            {shortDescription && (
               <p className="text-sm text-gray-500 mt-2 leading-relaxed break-words">
                 {shortDescription}
-                {provider.description.length > 150 && (
+                {provider.description && provider.description.length > 150 && (
                   <button onClick={() => setShowFullDescription(true)} className="text-primary-600 hover:underline ml-1 font-medium">See more</button>
                 )}
               </p>
             )}
             <div className="flex justify-center mt-3 items-center gap-2">
               <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-50 text-green-700 text-xs font-semibold rounded-full">
-                <span className="h-2 w-2 rounded-full bg-green-500" />
-                {statusLabel[provider?.status || 'available'] || 'Active now'}
+                <span className="h-2 w-2 rounded-full bg-green-500" />{statusLabel[provider?.status || 'available'] || 'Active now'}
               </span>
               {provider?.profile?.is_verified && (
                 <span className="inline-flex items-center gap-1 px-3 py-1 bg-white text-green-700 text-xs font-semibold rounded-full border border-green-400">
-                  <img src="/verify.png" alt="Verified" className="h-3.5 w-3.5" />
-                  Verified
+                  <img src="/verify.png" alt="Verified" className="h-3.5 w-3.5" />Verified
                 </span>
               )}
             </div>
@@ -628,90 +585,52 @@ export function ProviderProfileClient({
 
         <div className="px-2 mb-6">
           <div className="flex flex-nowrap gap-1 justify-center">
-            <button onClick={() => requireAuth(() => setShowBookingModal(true))} className="flex-shrink-0 flex flex-col items-center justify-center gap-1 px-2 py-1.5 bg-primary-600 text-white text-[10px] font-semibold rounded-xl w-14 shadow-md shadow-primary-600/20">
-              <Calendar className="h-4 w-4" /><span>Book</span>
-            </button>
-            <button onClick={() => requireAuth(openChat)} className="flex-shrink-0 flex flex-col items-center justify-center gap-1 px-2 py-1.5 border border-gray-200 bg-white text-gray-700 text-[10px] font-semibold rounded-xl w-14 shadow-sm">
-              <MessageCircle className="h-4 w-4" /><span>Message</span>
-            </button>
-            <button onClick={() => requireAuth(() => setShowReportModal(true))} className="flex-shrink-0 flex flex-col items-center justify-center gap-1 px-2 py-1.5 border border-red-200 bg-red-50 text-red-600 text-[10px] font-semibold rounded-xl w-14 shadow-sm">
-              <Flag className="h-4 w-4" /><span>Report</span>
-            </button>
-            <button onClick={shareProviderLink} className="flex-shrink-0 flex flex-col items-center justify-center gap-1 px-2 py-1.5 border border-gray-200 bg-white text-gray-700 text-[10px] font-semibold rounded-xl w-14 shadow-sm">
-              <Share2 className="h-4 w-4" /><span>Share</span>
-            </button>
+            <button onClick={() => requireAuth(() => setShowBookingModal(true))} className="flex-shrink-0 flex flex-col items-center justify-center gap-1 px-2 py-1.5 bg-primary-600 text-white text-[10px] font-semibold rounded-xl w-14 shadow-md shadow-primary-600/20"><Calendar className="h-4 w-4" /><span>Book</span></button>
+            <button onClick={() => requireAuth(openChat)} className="flex-shrink-0 flex flex-col items-center justify-center gap-1 px-2 py-1.5 border border-gray-200 bg-white text-gray-700 text-[10px] font-semibold rounded-xl w-14 shadow-sm"><MessageCircle className="h-4 w-4" /><span>Message</span></button>
+            <button onClick={() => requireAuth(() => setShowReportModal(true))} className="flex-shrink-0 flex flex-col items-center justify-center gap-1 px-2 py-1.5 border border-red-200 bg-red-50 text-red-600 text-[10px] font-semibold rounded-xl w-14 shadow-sm"><Flag className="h-4 w-4" /><span>Report</span></button>
+            <button onClick={shareProviderLink} className="flex-shrink-0 flex flex-col items-center justify-center gap-1 px-2 py-1.5 border border-gray-200 bg-white text-gray-700 text-[10px] font-semibold rounded-xl w-14 shadow-sm"><Share2 className="h-4 w-4" /><span>Share</span></button>
             {!showPhone ? (
-              <button onClick={() => requireAuth(() => setShowPhone(true))} className="flex-shrink-0 flex flex-col items-center justify-center gap-1 px-2 py-1.5 border border-primary-200 bg-primary-50 text-primary-700 text-[10px] font-semibold rounded-xl w-14 shadow-sm">
-                <Phone className="h-4 w-4" /><span>Contact</span>
-              </button>
+              <button onClick={() => requireAuth(() => setShowPhone(true))} className="flex-shrink-0 flex flex-col items-center justify-center gap-1 px-2 py-1.5 border border-primary-200 bg-primary-50 text-primary-700 text-[10px] font-semibold rounded-xl w-14 shadow-sm"><Phone className="h-4 w-4" /><span>Contact</span></button>
             ) : (
-              <a href={`tel:${provider?.profile?.phone || ''}`} className="flex-shrink-0 flex flex-col items-center justify-center gap-1 px-2 py-1.5 bg-primary-50 text-primary-700 text-[10px] font-semibold rounded-xl w-14 shadow-sm">
-                <Phone className="h-4 w-4" /><span className="truncate max-w-[50px]">{provider?.profile?.phone || 'No phone'}</span>
-              </a>
+              <a href={`tel:${provider?.profile?.phone || ''}`} className="flex-shrink-0 flex flex-col items-center justify-center gap-1 px-2 py-1.5 bg-primary-50 text-primary-700 text-[10px] font-semibold rounded-xl w-14 shadow-sm"><Phone className="h-4 w-4" /><span className="truncate max-w-[50px]">{provider?.profile?.phone || 'No phone'}</span></a>
             )}
-            <div className="flex-shrink-0 flex flex-col items-center justify-center w-14">
-              <FavoriteButton providerId={id!} size="md" />
-            </div>
+            <div className="flex-shrink-0 flex flex-col items-center justify-center w-14"><FavoriteButton providerId={id!} size="md" /></div>
           </div>
         </div>
 
         <div className="px-4 mb-6">
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
             <div className="flex flex-wrap gap-2">
-              <span className="inline-flex items-center gap-1.5 bg-gray-50 rounded-full px-3 py-1.5 text-xs font-medium text-gray-700 border border-gray-200">
-                <MapPin className="h-3.5 w-3.5 text-primary-500" /> {locationString}
-              </span>
-              <span className="inline-flex items-center gap-1.5 bg-gray-50 rounded-full px-3 py-1.5 text-xs font-medium text-gray-700 border border-gray-200">
-                <Star className="h-3.5 w-3.5 text-yellow-500 fill-yellow-500" /> {avgRating.toFixed(1)} ({provider?.reviews?.length || 0})
-              </span>
-              <span className="inline-flex items-center gap-1.5 bg-gray-50 rounded-full px-3 py-1.5 text-xs font-medium text-gray-700 border border-gray-200">
-                <Calendar className="h-3.5 w-3.5 text-gray-400" /> {provider?.completedBookings} bookings
-              </span>
-              <span className="inline-flex items-center gap-1.5 bg-gray-50 rounded-full px-3 py-1.5 text-xs font-medium text-gray-700 border border-gray-200">
-                <Clock className="h-3.5 w-3.5 text-gray-400" /> {lastSeen}
-              </span>
-              {joinedYear && (
-                <span className="inline-flex items-center gap-1.5 bg-gray-50 rounded-full px-3 py-1.5 text-xs font-medium text-gray-700 border border-gray-200">
-                  <User className="h-3.5 w-3.5 text-gray-400" /> Joined {joinedYear}
-                </span>
-              )}
+              <span className="inline-flex items-center gap-1.5 bg-gray-50 rounded-full px-3 py-1.5 text-xs font-medium text-gray-700 border border-gray-200"><MapPin className="h-3.5 w-3.5 text-primary-500" />{locationString}</span>
+              <span className="inline-flex items-center gap-1.5 bg-gray-50 rounded-full px-3 py-1.5 text-xs font-medium text-gray-700 border border-gray-200"><Star className="h-3.5 w-3.5 text-yellow-500 fill-yellow-500" />{avgRating.toFixed(1)} ({provider?.reviews?.length || 0})</span>
+              <span className="inline-flex items-center gap-1.5 bg-gray-50 rounded-full px-3 py-1.5 text-xs font-medium text-gray-700 border border-gray-200"><Calendar className="h-3.5 w-3.5 text-gray-400" />{provider?.completedBookings} bookings</span>
+              <span className="inline-flex items-center gap-1.5 bg-gray-50 rounded-full px-3 py-1.5 text-xs font-medium text-gray-700 border border-gray-200"><Clock className="h-3.5 w-3.5 text-gray-400" />{lastSeen}</span>
+              {joinedYear && <span className="inline-flex items-center gap-1.5 bg-gray-50 rounded-full px-3 py-1.5 text-xs font-medium text-gray-700 border border-gray-200"><User className="h-3.5 w-3.5 text-gray-400" />Joined {joinedYear}</span>}
             </div>
           </div>
         </div>
 
         {provider?.portfolio_images?.length > 0 && (
           <div className="px-4 mb-6">
-            <h2 className="text-base font-bold text-gray-900 mb-3 flex items-center gap-2">
-              <span className="w-1 h-5 bg-gray-300 rounded-full"></span> Portfolio
-            </h2>
-            <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory hide-scrollbar pb-2"
-              onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
+            <h2 className="text-base font-bold text-gray-900 mb-3 flex items-center gap-2"><span className="w-1 h-5 bg-gray-300 rounded-full" />Portfolio</h2>
+            <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory hide-scrollbar pb-2">
               {provider.portfolio_images.map((image) => (
                 <Link key={image.id} href={`/provider/${id}/portfolio`} className="snap-start flex-shrink-0 w-40 h-40 rounded-2xl overflow-hidden bg-gray-100 shadow-md border border-gray-200/60">
-                  <OptimizedImage src={image.image_url} alt={image.title || 'Portfolio'} className="w-full h-full object-cover" width={320} height={320} />
+                  <img src={getOptimizedUrl(image.image_url, 256)} alt={image.title || 'Portfolio'} className="w-full h-full object-cover" loading="lazy" />
                 </Link>
               ))}
             </div>
-            <p className="text-xs text-gray-400 mt-2 text-center">Swipe to see more →</p>
           </div>
         )}
 
         {provider?.services?.length > 0 && (
           <div className="px-4 mb-6">
-            <h2 className="text-base font-bold text-gray-900 mb-3 flex items-center gap-2">
-              <span className="w-1 h-5 bg-gray-300 rounded-full"></span> Services
-            </h2>
+            <h2 className="text-base font-bold text-gray-900 mb-3 flex items-center gap-2"><span className="w-1 h-5 bg-gray-300 rounded-full" />Services</h2>
             <div className="space-y-3">
               {provider.services.map((service) => (
                 <div key={service.id} className="flex justify-between items-start bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-gray-900 text-sm">{service.name}</p>
-                    {service.description && <p className="text-xs text-gray-500 mt-1 break-words">{service.description}</p>}
-                  </div>
-                  <div className="text-right ml-3 flex-shrink-0">
-                    <p className="font-bold text-primary-600 text-sm">₦{service.price.toLocaleString()}</p>
-                    <p className="text-xs text-gray-400 font-medium">{priceTypeLabels[service.price_type]}</p>
-                  </div>
+                  <div className="flex-1 min-w-0"><p className="font-semibold text-gray-900 text-sm">{service.name}</p>{service.description && <p className="text-xs text-gray-500 mt-1 break-words">{service.description}</p>}</div>
+                  <div className="text-right ml-3 flex-shrink-0"><p className="font-bold text-primary-600 text-sm">₦{service.price.toLocaleString()}</p><p className="text-xs text-gray-400 font-medium">{priceTypeLabels[service.price_type]}</p></div>
                 </div>
               ))}
             </div>
@@ -723,37 +642,32 @@ export function ProviderProfileClient({
             <h2 className="text-base font-bold text-gray-900 mb-3">About</h2>
             {provider?.description && <p className="text-sm text-gray-600 mb-4 leading-relaxed break-words">{provider.description}</p>}
             <div className="flex flex-wrap gap-2">
-              {provider?.profile?.education && <span className="inline-flex items-center gap-1.5 bg-primary-50 text-primary-700 rounded-full px-3 py-1.5 text-xs font-medium border border-primary-200"><GraduationCap className="h-3.5 w-3.5" /> {provider.profile.education}</span>}
-              {provider?.profile?.languages && <span className="inline-flex items-center gap-1.5 bg-primary-50 text-primary-700 rounded-full px-3 py-1.5 text-xs font-medium border border-primary-200"><Languages className="h-3.5 w-3.5" /> {provider.profile.languages}</span>}
-              {provider?.profile?.gender && <span className="inline-flex items-center gap-1.5 bg-primary-50 text-primary-700 rounded-full px-3 py-1.5 text-xs font-medium border border-primary-200"><User className="h-3.5 w-3.5" /> {provider.profile.gender}</span>}
-              {provider?.profile?.age && <span className="inline-flex items-center gap-1.5 bg-primary-50 text-primary-700 rounded-full px-3 py-1.5 text-xs font-medium border border-primary-200"><Calendar className="h-3.5 w-3.5" /> {provider.profile.age} years</span>}
+              {provider?.profile?.education && <span className="inline-flex items-center gap-1.5 bg-primary-50 text-primary-700 rounded-full px-3 py-1.5 text-xs font-medium border border-primary-200"><GraduationCap className="h-3.5 w-3.5" />{provider.profile.education}</span>}
+              {provider?.profile?.languages && <span className="inline-flex items-center gap-1.5 bg-primary-50 text-primary-700 rounded-full px-3 py-1.5 text-xs font-medium border border-primary-200"><Languages className="h-3.5 w-3.5" />{provider.profile.languages}</span>}
+              {provider?.profile?.gender && <span className="inline-flex items-center gap-1.5 bg-primary-50 text-primary-700 rounded-full px-3 py-1.5 text-xs font-medium border border-primary-200"><User className="h-3.5 w-3.5" />{provider.profile.gender}</span>}
+              {provider?.profile?.age && <span className="inline-flex items-center gap-1.5 bg-primary-50 text-primary-700 rounded-full px-3 py-1.5 text-xs font-medium border border-primary-200"><Calendar className="h-3.5 w-3.5" />{provider.profile.age} years</span>}
             </div>
           </Card>
         </div>
 
-        <div className="px-4 mb-6">
-          <RelatedServicesSection />
-        </div>
+        <div className="px-4 mb-6"><RelatedServicesSection /></div>
 
         <div className="px-4 mb-8">
-          <Card>
-            <h2 className="text-base font-bold text-gray-900 mb-3 flex items-center gap-2">Reviews</h2>
-            <ReviewsList reviews={(provider?.reviews || []) as any} />
-          </Card>
+          <Card><h2 className="text-base font-bold text-gray-900 mb-3">Reviews</h2><ReviewsList reviews={(provider?.reviews || []) as any} /></Card>
         </div>
 
         {similarProviders && similarProviders.length > 0 && (
           <div className="px-4 pb-8">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-base font-bold text-gray-900 flex items-center gap-2"><span className="w-1 h-5 bg-gray-300 rounded-full"></span> Similar Providers</h2>
+              <h2 className="text-base font-bold text-gray-900 flex items-center gap-2"><span className="w-1 h-5 bg-gray-300 rounded-full" />Similar Providers</h2>
               <div className="flex border border-gray-200 rounded-xl overflow-hidden shadow-sm">
-                <button onClick={() => setSimilarViewMode('grid')} className={cn('p-1.5 text-gray-500 hover:text-primary-600', similarViewMode === 'grid' && 'bg-primary-50 text-primary-600')}><LayoutGrid className="h-4 w-4" /></button>
-                <button onClick={() => setSimilarViewMode('list')} className={cn('p-1.5 text-gray-500 hover:text-primary-600', similarViewMode === 'list' && 'bg-primary-50 text-primary-600')}><List className="h-4 w-4" /></button>
+                <button onClick={() => setSimilarViewMode('grid')} className={cn('p-1.5', similarViewMode === 'grid' && 'bg-primary-50 text-primary-600')}><LayoutGrid className="h-4 w-4" /></button>
+                <button onClick={() => setSimilarViewMode('list')} className={cn('p-1.5', similarViewMode === 'list' && 'bg-primary-50 text-primary-600')}><List className="h-4 w-4" /></button>
               </div>
             </div>
             {similarViewMode === 'grid' ? (
-              <div className="columns-2 gap-3">
-                {similarProviders.map((p: any) => <div key={p.id} className="mb-3 break-inside-avoid"><ProviderCardPortrait provider={p} /></div>)}
+              <div className="grid grid-cols-2 gap-3">
+                {similarProviders.map((p: any) => <ProviderCardPortrait key={p.id} provider={p} />)}
               </div>
             ) : (
               <div className="flex flex-col gap-3">
@@ -767,20 +681,13 @@ export function ProviderProfileClient({
       {/* ========== DESKTOP LAYOUT ========== */}
       <div className="hidden md:block">
         <Breadcrumbs items={breadcrumbItems} />
-        <button onClick={() => router.back()} className="mb-4 flex items-center text-sm text-gray-600 hover:text-primary-600 transition-colors font-medium">
-          <ArrowLeft className="h-4 w-4 mr-1" /> Back to results
-        </button>
+        <button onClick={() => router.back()} className="mb-4 flex items-center text-sm text-gray-600 hover:text-primary-600 transition-colors font-medium"><ArrowLeft className="h-4 w-4 mr-1" />Back to results</button>
 
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-6">
           <div className="relative h-56 bg-gray-100 overflow-hidden">
-            {provider?.profile?.cover_photo ? (
+            {coverSrc ? (
               <button onClick={() => setCoverModalOpen(true)} className="w-full h-full relative group">
-                <img
-                  src={provider.profile.cover_photo}
-                  alt="Cover"
-                  className="w-full h-full object-cover"
-                  loading="eager"
-                />
+                <img src={coverSrc} alt="Cover" className="w-full h-full object-cover" loading="eager" />
                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
                   <Maximize2 className="h-6 w-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
                 </div>
@@ -793,9 +700,9 @@ export function ProviderProfileClient({
           <div className="px-6 sm:px-8 pt-6 pb-4">
             <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4">
               <div className="relative w-32 h-32 rounded-full border-4 border-white shadow-xl overflow-hidden bg-white flex-shrink-0 -mt-16">
-                {provider?.profile?.avatar_url ? (
+                {avatarSrc ? (
                   <button onClick={() => setAvatarModalOpen(true)} className="w-full h-full relative group">
-                    <OptimizedImage src={provider.profile.avatar_url} alt={providerName} className="w-full h-full object-cover" width={256} height={256} loading="eager" fetchpriority="high" />
+                    <img src={avatarSrc} alt={providerName} className="w-full h-full object-cover" loading="eager" fetchPriority="high" />
                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
                       <Maximize2 className="h-6 w-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
                     </div>
@@ -808,37 +715,29 @@ export function ProviderProfileClient({
               <div className="flex-1 text-center sm:text-left">
                 <div className="flex items-center justify-center sm:justify-start gap-3 mb-1 flex-wrap">
                   <h1 className="text-2xl font-bold text-gray-900">{providerName}</h1>
-                  <span className="inline-flex items-center gap-1.5 bg-green-50 text-green-700 text-xs font-semibold px-3 py-1 rounded-full border border-green-200">
-                    <span className="h-2 w-2 rounded-full bg-green-500" />
-                    {statusLabel[provider?.status || 'available'] || 'Available for Booking'}
-                  </span>
-                  {provider?.profile?.is_verified && (
-                    <span className="inline-flex items-center gap-1 px-3 py-1 bg-white text-green-700 text-xs font-semibold rounded-full border border-green-400">
-                      <img src="/verify.png" alt="Verified" className="h-3.5 w-3.5" />
-                      Verified
-                    </span>
-                  )}
+                  <span className="inline-flex items-center gap-1.5 bg-green-50 text-green-700 text-xs font-semibold px-3 py-1 rounded-full border border-green-200"><span className="h-2 w-2 rounded-full bg-green-500" />{statusLabel[provider?.status || 'available'] || 'Available for Booking'}</span>
+                  {provider?.profile?.is_verified && <span className="inline-flex items-center gap-1 px-3 py-1 bg-white text-green-700 text-xs font-semibold rounded-full border border-green-400"><img src="/verify.png" alt="Verified" className="h-3.5 w-3.5" />Verified</span>}
                 </div>
                 <p className="text-sm font-medium text-primary-600">{categoryName}</p>
-                {provider?.description && (
+                {shortDescription && (
                   <p className="text-sm text-gray-500 mt-2 max-w-2xl leading-relaxed">
                     {shortDescription}
-                    {provider.description.length > 150 && (
+                    {provider.description && provider.description.length > 150 && (
                       <button onClick={() => setShowFullDescription(true)} className="text-primary-600 hover:underline ml-1 font-medium">See more</button>
                     )}
                   </p>
                 )}
               </div>
 
-              <div className="flex flex-wrap gap-2 mt-0 sm:mt-0">
-                <button onClick={() => requireAuth(() => setShowBookingModal(true))} className="flex items-center gap-2 px-5 py-2.5 bg-primary-600 text-white text-sm font-semibold rounded-xl hover:bg-primary-700 shadow-md shadow-primary-600/20 transition-all"><Calendar className="h-5 w-5" /> Book</button>
-                <button onClick={() => requireAuth(openChat)} className="flex items-center gap-2 px-5 py-2.5 border border-gray-200 bg-white text-gray-700 text-sm font-semibold rounded-xl hover:bg-gray-50 shadow-sm transition-all"><MessageCircle className="h-5 w-5" /> Message</button>
-                <button onClick={() => requireAuth(() => setShowReportModal(true))} className="flex items-center gap-2 px-5 py-2.5 border border-red-200 bg-red-50 text-red-600 text-sm font-semibold rounded-xl hover:bg-red-100 shadow-sm transition-all"><Flag className="h-5 w-5" /> Report</button>
-                <button onClick={shareProviderLink} className="flex items-center gap-2 px-5 py-2.5 border border-gray-200 bg-white text-gray-700 text-sm font-semibold rounded-xl hover:bg-gray-50 shadow-sm transition-all"><Share2 className="h-5 w-5" /> Share</button>
+              <div className="flex flex-wrap gap-2">
+                <button onClick={() => requireAuth(() => setShowBookingModal(true))} className="flex items-center gap-2 px-5 py-2.5 bg-primary-600 text-white text-sm font-semibold rounded-xl hover:bg-primary-700 shadow-md shadow-primary-600/20 transition-all"><Calendar className="h-5 w-5" />Book</button>
+                <button onClick={() => requireAuth(openChat)} className="flex items-center gap-2 px-5 py-2.5 border border-gray-200 bg-white text-gray-700 text-sm font-semibold rounded-xl hover:bg-gray-50 shadow-sm transition-all"><MessageCircle className="h-5 w-5" />Message</button>
+                <button onClick={() => requireAuth(() => setShowReportModal(true))} className="flex items-center gap-2 px-5 py-2.5 border border-red-200 bg-red-50 text-red-600 text-sm font-semibold rounded-xl hover:bg-red-100 shadow-sm transition-all"><Flag className="h-5 w-5" />Report</button>
+                <button onClick={shareProviderLink} className="flex items-center gap-2 px-5 py-2.5 border border-gray-200 bg-white text-gray-700 text-sm font-semibold rounded-xl hover:bg-gray-50 shadow-sm transition-all"><Share2 className="h-5 w-5" />Share</button>
                 {!showPhone ? (
-                  <button onClick={() => requireAuth(() => setShowPhone(true))} className="flex items-center gap-2 px-5 py-2.5 border border-primary-200 bg-primary-50 text-primary-700 text-sm font-semibold rounded-xl hover:bg-primary-100 shadow-sm transition-all"><Phone className="h-5 w-5" /> Contact</button>
+                  <button onClick={() => requireAuth(() => setShowPhone(true))} className="flex items-center gap-2 px-5 py-2.5 border border-primary-200 bg-primary-50 text-primary-700 text-sm font-semibold rounded-xl hover:bg-primary-100 shadow-sm transition-all"><Phone className="h-5 w-5" />Contact</button>
                 ) : (
-                  <a href={`tel:${provider?.profile?.phone || ''}`} className="flex items-center gap-2 px-5 py-2.5 border border-primary-200 bg-primary-50 text-primary-700 text-sm font-semibold rounded-xl hover:bg-primary-100 shadow-sm transition-all"><Phone className="h-5 w-5" /> {provider?.profile?.phone || 'No phone'}</a>
+                  <a href={`tel:${provider?.profile?.phone || ''}`} className="flex items-center gap-2 px-5 py-2.5 border border-primary-200 bg-primary-50 text-primary-700 text-sm font-semibold rounded-xl hover:bg-primary-100 shadow-sm transition-all"><Phone className="h-5 w-5" />{provider?.profile?.phone || 'No phone'}</a>
                 )}
                 <div className="flex items-center"><FavoriteButton providerId={id!} size="md" className="border border-gray-200 rounded-xl p-2 hover:bg-gray-50" /></div>
               </div>
@@ -846,7 +745,7 @@ export function ProviderProfileClient({
           </div>
 
           <div className="mx-6 border-t border-gray-100 pt-4 pb-4">
-            <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600">
+            <div className="flex flex-wrap items-center gap-3 text-sm text-gray-600">
               <div className="flex items-center gap-1.5 bg-gray-50 rounded-lg px-3 py-1.5 border border-gray-100"><MapPin className="h-4 w-4 text-primary-500" /><span>{locationString}</span></div>
               <div className="flex items-center gap-1.5 bg-gray-50 rounded-lg px-3 py-1.5 border border-gray-100"><Star className="h-4 w-4 text-yellow-500 fill-yellow-500" /><span>{avgRating.toFixed(1)} ({provider?.reviews?.length || 0} reviews)</span></div>
               <div className="flex items-center gap-1.5 bg-gray-50 rounded-lg px-3 py-1.5 border border-gray-100"><Calendar className="h-4 w-4 text-gray-400" /><span>{provider?.completedBookings} bookings</span></div>
@@ -863,18 +762,12 @@ export function ProviderProfileClient({
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
           {provider?.services?.length > 0 && (
             <Card>
-              <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2"><Package className="h-5 w-5 text-primary-600" /> Services & Pricing</h2>
+              <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2"><Package className="h-5 w-5 text-primary-600" />Services & Pricing</h2>
               <div className="space-y-4">
                 {provider.services.map((service) => (
                   <div key={service.id} className="flex justify-between items-start p-3 bg-gray-50 rounded-xl border border-gray-100">
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-gray-900">{service.name}</p>
-                      {service.description && <p className="text-sm text-gray-500 mt-1 break-words">{service.description}</p>}
-                    </div>
-                    <div className="text-right ml-4 flex-shrink-0">
-                      <p className="font-bold text-primary-600">₦{service.price.toLocaleString()}</p>
-                      <p className="text-xs text-gray-400 font-medium">{priceTypeLabels[service.price_type]}</p>
-                    </div>
+                    <div className="flex-1 min-w-0"><p className="font-semibold text-gray-900">{service.name}</p>{service.description && <p className="text-sm text-gray-500 mt-1 break-words">{service.description}</p>}</div>
+                    <div className="text-right ml-4 flex-shrink-0"><p className="font-bold text-primary-600">₦{service.price.toLocaleString()}</p><p className="text-xs text-gray-400 font-medium">{priceTypeLabels[service.price_type]}</p></div>
                   </div>
                 ))}
               </div>
@@ -883,11 +776,11 @@ export function ProviderProfileClient({
 
           {provider?.portfolio_images?.length > 0 && (
             <Card>
-              <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2"><Package className="h-5 w-5 text-primary-600" /> Portfolio</h2>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-                {provider.portfolio_images.map((image, idx) => (
+              <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2"><Package className="h-5 w-5 text-primary-600" />Portfolio</h2>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {provider.portfolio_images.map((image) => (
                   <Link key={image.id} href={`/provider/${id}/portfolio`} className="overflow-hidden rounded-lg hover:opacity-90 transition-opacity">
-                    <OptimizedImage src={image.image_url} alt={image.title || 'Portfolio'} className="w-full aspect-square object-cover" width={600} height={600} />
+                    <img src={getOptimizedUrl(image.image_url, 300)} alt={image.title || 'Portfolio'} className="w-full aspect-square object-cover" loading="lazy" />
                   </Link>
                 ))}
               </div>
@@ -900,80 +793,59 @@ export function ProviderProfileClient({
             <h2 className="text-lg font-bold text-gray-900 mb-4">About</h2>
             {provider?.description && <p className="text-sm text-gray-600 mb-4 leading-relaxed">{provider.description}</p>}
             <div className="flex flex-wrap gap-2">
-              {provider?.profile?.education && <span className="inline-flex items-center gap-1.5 bg-primary-50 text-primary-700 rounded-full px-3 py-1.5 text-xs font-medium border border-primary-200"><GraduationCap className="h-4 w-4" /> {provider.profile.education}</span>}
-              {provider?.profile?.languages && <span className="inline-flex items-center gap-1.5 bg-primary-50 text-primary-700 rounded-full px-3 py-1.5 text-xs font-medium border border-primary-200"><Languages className="h-4 w-4" /> {provider.profile.languages}</span>}
-              {provider?.profile?.gender && <span className="inline-flex items-center gap-1.5 bg-primary-50 text-primary-700 rounded-full px-3 py-1.5 text-xs font-medium border border-primary-200"><User className="h-4 w-4" /> {provider.profile.gender}</span>}
-              {provider?.profile?.age && <span className="inline-flex items-center gap-1.5 bg-primary-50 text-primary-700 rounded-full px-3 py-1.5 text-xs font-medium border border-primary-200"><Calendar className="h-4 w-4" /> {provider.profile.age} years</span>}
+              {provider?.profile?.education && <span className="inline-flex items-center gap-1.5 bg-primary-50 text-primary-700 rounded-full px-3 py-1.5 text-xs font-medium border border-primary-200"><GraduationCap className="h-4 w-4" />{provider.profile.education}</span>}
+              {provider?.profile?.languages && <span className="inline-flex items-center gap-1.5 bg-primary-50 text-primary-700 rounded-full px-3 py-1.5 text-xs font-medium border border-primary-200"><Languages className="h-4 w-4" />{provider.profile.languages}</span>}
+              {provider?.profile?.gender && <span className="inline-flex items-center gap-1.5 bg-primary-50 text-primary-700 rounded-full px-3 py-1.5 text-xs font-medium border border-primary-200"><User className="h-4 w-4" />{provider.profile.gender}</span>}
+              {provider?.profile?.age && <span className="inline-flex items-center gap-1.5 bg-primary-50 text-primary-700 rounded-full px-3 py-1.5 text-xs font-medium border border-primary-200"><Calendar className="h-4 w-4" />{provider.profile.age} years</span>}
             </div>
           </Card>
-          <Card>
-            <h2 className="text-lg font-bold text-gray-900 mb-4">Reviews</h2>
-            <ReviewsList reviews={(provider?.reviews || []) as any} />
-          </Card>
+          <Card><h2 className="text-lg font-bold text-gray-900 mb-4">Reviews</h2><ReviewsList reviews={(provider?.reviews || []) as any} /></Card>
         </div>
 
-        <div className="mb-8">
-          <RelatedServicesSection />
-        </div>
+        <div className="mb-8"><RelatedServicesSection /></div>
 
         {similarProviders && similarProviders.length > 0 && (
           <div className="mt-8 mb-8">
             <div className="flex items-center justify-between mb-5">
-              <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2"><span className="w-1 h-6 bg-gray-300 rounded-full"></span> Similar Providers</h2>
-              <Link href={`/search?category=${encodeURIComponent(provider?.selected_category_slug || '')}`} className="text-sm font-medium text-primary-600 hover:text-primary-700 flex items-center gap-1 bg-primary-50 px-3 py-1.5 rounded-lg hover:bg-primary-100 transition-colors">
-                View all <ArrowRight className="h-4 w-4" />
-              </Link>
+              <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2"><span className="w-1 h-6 bg-gray-300 rounded-full" />Similar Providers</h2>
+              <Link href={`/search?category=${encodeURIComponent(provider?.selected_category_slug || '')}`} className="text-sm font-medium text-primary-600 hover:text-primary-700 flex items-center gap-1 bg-primary-50 px-3 py-1.5 rounded-lg hover:bg-primary-100 transition-colors">View all <ArrowRight className="h-4 w-4" /></Link>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {similarProviders.map((p: any) => (
-                <ProviderCardPortrait key={p.id} provider={p} />
-              ))}
+              {similarProviders.map((p: any) => <ProviderCardPortrait key={p.id} provider={p} />)}
             </div>
           </div>
         )}
       </div>
 
-      {avatarModalOpen && provider?.profile?.avatar_url && (
+      {avatarModalOpen && avatarSrc && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={() => setAvatarModalOpen(false)}>
-          <button className="absolute top-4 right-4 text-white" onClick={() => setAvatarModalOpen(false)}>
-            <X className="h-8 w-8" />
-          </button>
-          <img src={provider.profile.avatar_url} alt={providerName} className="max-w-full max-h-full object-contain rounded-lg" onClick={(e) => e.stopPropagation()} />
+          <button className="absolute top-4 right-4 text-white" onClick={() => setAvatarModalOpen(false)}><X className="h-8 w-8" /></button>
+          <img src={provider?.profile?.avatar_url!} alt={providerName} className="max-w-full max-h-full object-contain rounded-lg" onClick={(e) => e.stopPropagation()} />
         </div>
       )}
 
-      {coverModalOpen && provider?.profile?.cover_photo && (
+      {coverModalOpen && coverSrc && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={() => setCoverModalOpen(false)}>
-          <button className="absolute top-4 right-4 text-white" onClick={() => setCoverModalOpen(false)}>
-            <X className="h-8 w-8" />
-          </button>
-          <img src={provider.profile.cover_photo} alt={`${providerName} cover`} className="max-w-full max-h-full object-contain rounded-lg" onClick={(e) => e.stopPropagation()} />
+          <button className="absolute top-4 right-4 text-white" onClick={() => setCoverModalOpen(false)}><X className="h-8 w-8" /></button>
+          <img src={provider?.profile?.cover_photo!} alt={`${providerName} cover`} className="max-w-full max-h-full object-contain rounded-lg" onClick={(e) => e.stopPropagation()} />
         </div>
       )}
 
       {showFullDescription && provider?.description && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setShowFullDescription(false)}>
           <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[80vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold">About {providerName}</h3>
-              <button onClick={() => setShowFullDescription(false)}><X className="h-5 w-5" /></button>
-            </div>
+            <div className="flex items-center justify-between mb-4"><h3 className="text-lg font-bold">About {providerName}</h3><button onClick={() => setShowFullDescription(false)}><X className="h-5 w-5" /></button></div>
             <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap break-words">{provider.description}</p>
           </div>
         </div>
       )}
 
-      {showBookingModal && (
-        <BookingFormModal isOpen={showBookingModal} onClose={() => setShowBookingModal(false)} providerId={id} providerName={providerName} providerVerified={provider?.profile?.is_verified || false} />
-      )}
+      {showBookingModal && <BookingFormModal isOpen={showBookingModal} onClose={() => setShowBookingModal(false)} providerId={id} providerName={providerName} providerVerified={provider?.profile?.is_verified || false} />}
 
       {showReviewModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
-            <div className="flex items-center justify-between p-4 border-b">
-              <h2 className="text-lg font-semibold">Leave a Review</h2>
-              <button onClick={() => setShowReviewModal(false)} className="p-1 hover:bg-gray-100 rounded"><X className="h-5 w-5" /></button>
-            </div>
+            <div className="flex items-center justify-between p-4 border-b"><h2 className="text-lg font-semibold">Leave a Review</h2><button onClick={() => setShowReviewModal(false)} className="p-1 hover:bg-gray-100 rounded"><X className="h-5 w-5" /></button></div>
             <div className="p-4 space-y-4">
               <div><label className="block text-sm font-medium mb-2">Rating</label><div className="flex gap-1">{[1,2,3,4,5].map(star => <button key={star} type="button" onClick={() => setReviewRating(star)}><Star className={cn('h-8 w-8', star <= reviewRating ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300')} /></button>)}</div></div>
               <div><label className="block text-sm font-medium mb-1">Your Review (optional)</label><textarea value={reviewContent} onChange={(e) => setReviewContent(e.target.value)} rows={4} className="w-full px-3 py-2 border rounded-lg" placeholder="Share your experience..." /></div>
@@ -986,10 +858,7 @@ export function ProviderProfileClient({
       {showReportModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
-            <div className="flex items-center justify-between p-4 border-b">
-              <h2 className="text-lg font-semibold">Report Provider</h2>
-              <button onClick={() => setShowReportModal(false)} className="p-1 hover:bg-gray-100 rounded"><X className="h-5 w-5" /></button>
-            </div>
+            <div className="flex items-center justify-between p-4 border-b"><h2 className="text-lg font-semibold">Report Provider</h2><button onClick={() => setShowReportModal(false)} className="p-1 hover:bg-gray-100 rounded"><X className="h-5 w-5" /></button></div>
             <div className="p-4 space-y-4">
               <p className="text-sm text-gray-600">Please let us know why you're reporting this provider.</p>
               <textarea value={reportReason} onChange={(e) => setReportReason(e.target.value)} rows={4} className="w-full px-3 py-2 border rounded-lg" placeholder="e.g., Fake profile, inappropriate content, etc." />
