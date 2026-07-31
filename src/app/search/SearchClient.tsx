@@ -237,7 +237,7 @@ export function SearchClient({ initialProviders, searchParams: initialSearchPara
         }
       }
 
-      query = query.limit(50);
+      // No limit — show all matching providers
       const { data: providersData, error } = await query;
       if (error) throw error;
       if (!(providersData as any[])?.length) return [] as ProviderWithProfile[];
@@ -350,13 +350,11 @@ export function SearchClient({ initialProviders, searchParams: initialSearchPara
     staleTime: 1000 * 60 * 2,
   });
 
-  // Format a category slug for display
   const formatCategoryName = (slug?: string) =>
     slug ? slug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') : '';
 
   return (
     <div className="max-w-7xl mx-auto px-0 sm:px-4 lg:px-8 py-6">
-      {/* Mobile filter button */}
       <div className="px-4 sm:px-0 mb-4">
         <button
           className="lg:hidden flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg"
@@ -366,7 +364,6 @@ export function SearchClient({ initialProviders, searchParams: initialSearchPara
         </button>
       </div>
 
-      {/* Sidebar overlay for mobile */}
       {mobileSidebarOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
           <div className="absolute inset-0 bg-black/30" onClick={() => setMobileSidebarOpen(false)} />
@@ -383,14 +380,11 @@ export function SearchClient({ initialProviders, searchParams: initialSearchPara
       )}
 
       <div className="flex flex-col lg:flex-row gap-6">
-        {/* Desktop sidebar */}
         <aside className="hidden lg:block lg:w-64 flex-shrink-0">
           <EnhancedFilterSidebar />
         </aside>
 
-        {/* Main content */}
         <main className="flex-1 min-w-0 px-4 sm:px-0">
-          {/* Search bar with autocomplete */}
           <div className="mb-5 relative">
             <form onSubmit={handleSearchSubmit} className="relative">
               <div className="relative">
@@ -427,7 +421,6 @@ export function SearchClient({ initialProviders, searchParams: initialSearchPara
               <button type="submit" className="hidden">Search</button>
             </form>
 
-            {/* Suggestions dropdown */}
             {showSuggestions && debouncedSearchTerm && suggestions.length > 0 && (
               <div
                 ref={suggestionsRef}
@@ -452,7 +445,6 @@ export function SearchClient({ initialProviders, searchParams: initialSearchPara
             )}
           </div>
 
-          {/* Toolbar */}
           <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
             <h1 className="text-xl font-bold text-gray-900 truncate">
               {keyword ? `"${keyword}"` : tier ? `${tier} Services` : category ? formatCategoryName(category) : 'Recommended'}
@@ -483,7 +475,6 @@ export function SearchClient({ initialProviders, searchParams: initialSearchPara
             </div>
           </div>
 
-          {/* Results */}
           {isLoading ? (
             <ProviderGridSkeleton />
           ) : !providers || providers.length === 0 ? (
@@ -518,7 +509,6 @@ export function SearchClient({ initialProviders, searchParams: initialSearchPara
             </div>
           ) : (
             <>
-              {/* Mobile: 2‑column grid */}
               <div className="block sm:hidden">
                 <div className="columns-2 gap-2">
                   {providers.map((provider) => (
@@ -529,7 +519,6 @@ export function SearchClient({ initialProviders, searchParams: initialSearchPara
                 </div>
               </div>
 
-              {/* Tablet/Desktop: grid or list */}
               <div className="hidden sm:block">
                 {viewMode === 'grid' ? (
                   <div className="columns-2 md:columns-3 lg:columns-4 gap-4">
