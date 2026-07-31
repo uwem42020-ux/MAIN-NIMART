@@ -8,7 +8,6 @@ import { useNotifications } from '@/contexts/NotificationContext';
 import { cn } from '@/lib/utils';
 import { CalendarDays } from 'lucide-react';
 
-// Solid SVG icons (message, bell, home, map)
 const SolidHomeIcon = ({ className }: { className?: string }) => (
   <svg className={className} viewBox="0 0 24 24" fill="currentColor">
     <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" />
@@ -52,7 +51,6 @@ export function MobileBottomNav() {
   const [tierPanelOpen, setTierPanelOpen] = useState(false);
   const footerObserverRef = useRef<IntersectionObserver | null>(null);
 
-  // Listen for tier panel open/close
   useEffect(() => {
     const handlePanelOpen = () => setTierPanelOpen(true);
     const handlePanelClose = () => setTierPanelOpen(false);
@@ -64,7 +62,6 @@ export function MobileBottomNav() {
     };
   }, []);
 
-  // Only hide when the large footer is visible AND we are on the homepage
   useEffect(() => {
     const footer = document.querySelector('footer');
     if (!footer || !isHomePage) {
@@ -84,13 +81,11 @@ export function MobileBottomNav() {
     return profile.role === 'provider' ? `/provider/${roleSuffix}` : `/customer/${roleSuffix}`;
   };
 
-  // Compute badge visibility (same logic as Header)
   const isOnMessagesPage = pathname.includes('/messages');
   const showMessagesBadge = !isOnMessagesPage && counts.messages > 0;
   const showBookingsBadge = counts.bookings > 0;
   const showSystemBadge = counts.system > 0;
 
-  // Navigate and mark as seen — instant response, no setTimeout
   const navigate = (path: string, markAsSeen?: () => Promise<void>) => {
     router.replace(path);
     if (markAsSeen) markAsSeen().catch(console.error);
@@ -116,8 +111,8 @@ export function MobileBottomNav() {
       onClick: () => navigate(getLink('messages'), markMessagesAsSeen),
     },
     {
-      id: 'alerts',
-      label: 'Alerts',
+      id: 'notifications',
+      label: 'Notifications',
       icon: <SolidBellIcon className="w-6 h-6" />,
       onClick: () => navigate('/notifications', markSystemAsSeen),
     },
@@ -135,7 +130,7 @@ export function MobileBottomNav() {
     <div
       className={cn(
         'md:hidden fixed bottom-0 left-0 right-0 z-50',
-        'bg-white/90 backdrop-blur-md border-t border-gray-200/50',
+        'bg-white/95 backdrop-blur-md border-t border-gray-100',
         'transition-all duration-300 ease-out',
         'pb-[env(safe-area-inset-bottom)] pt-1',
         visible ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0'
@@ -148,7 +143,7 @@ export function MobileBottomNav() {
             active = pathname === '/' || pathname === '/search';
           } else if (item.id === 'map') {
             active = pathname.startsWith('/map');
-          } else if (item.id === 'alerts') {
+          } else if (item.id === 'notifications') {
             active = pathname.startsWith('/notifications');
           } else {
             const basePath = profile?.role === 'provider' ? `/provider/${item.id}` : `/customer/${item.id}`;
@@ -157,7 +152,7 @@ export function MobileBottomNav() {
 
           const badge = item.id === 'bookings' && showBookingsBadge ? counts.bookings
                      : item.id === 'messages' && showMessagesBadge ? counts.messages
-                     : item.id === 'alerts' && showSystemBadge ? counts.system
+                     : item.id === 'notifications' && showSystemBadge ? counts.system
                      : null;
 
           return (
@@ -167,10 +162,10 @@ export function MobileBottomNav() {
               aria-label={item.label}
               className={cn(
                 'relative flex flex-col items-center justify-center flex-1 py-1',
-                'transition-colors duration-200 active:scale-90',
+                'transition-all duration-200 active:scale-90',
                 active
                   ? 'text-primary-600'
-                  : 'text-gray-500 hover:text-primary-600'
+                  : 'text-gray-400 hover:text-gray-600'
               )}
             >
               <div className="relative">
