@@ -22,7 +22,15 @@ export function GoogleOneTap() {
           token: response.credential,
         });
 
-        if (error) throw error;
+        if (error) {
+          console.error('One Tap error:', error.message);
+          // Fallback to regular OAuth if One Tap fails
+          await supabase.auth.signInWithOAuth({
+            provider: 'google',
+            options: { redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback` },
+          });
+          return;
+        }
 
         toast.success('Welcome back!');
         router.refresh();
