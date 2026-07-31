@@ -15,7 +15,6 @@ interface MobileCategoryPanelProps {
   onClose: () => void;
 }
 
-// 🖼️ Category custom PNGs (unchanged)
 const categoryPngMap: Record<string, string> = {
   'vehicle-mechanics': '/auto/vehicle.png',
   'roadside-emergencies': '/auto/emergencies.png',
@@ -81,9 +80,7 @@ const categoryPngMap: Record<string, string> = {
   'cross-border': '/auto/cross border trade.png',
 };
 
-// 🖼️ Subcategory custom PNGs – loads from /autolast/
 const subcategoryPngMap: Record<number, string> = {
-  // Vehicle Mechanics
   101: '/autolast/general motor machanic.png',
   102: '/autolast/Mercedes-Benz.png',
   103: '/autolast/toyota.png',
@@ -99,8 +96,6 @@ const subcategoryPngMap: Record<number, string> = {
   113: '/autolast/car computer.png',
   114: '/autolast/car computer.png',
   115: '/autolast/village machanic.png',
-
-  // Roadside Emergencies
   201: '/autolast/vehicle towing.png',
   202: '/autolast/trailer services.png',
   203: '/autolast/battary rescure.png',
@@ -109,8 +104,6 @@ const subcategoryPngMap: Record<number, string> = {
   206: '/autolast/lockout service.png',
   207: '/autolast/accident rescue.png',
   208: '/autolast/vehicle extrication.png',
-
-  // Auto Repair Specialists
   301: '/autolast/air condition repair.png',
   302: '/autolast/radiator and cooling system.png',
   303: '/autolast/brake system specialist.png',
@@ -123,8 +116,6 @@ const subcategoryPngMap: Record<number, string> = {
   310: '/autolast/car seat repair.png',
   311: '/autolast/windscreen repair.png',
   312: '/autolast/car key programming.png',
-
-  // Auto Maintenance & Services
   401: '/autolast/oil change and lubrication.png',
   402: '/autolast/car wash and detailing.png',
   403: '/autolast/car polishing.png',
@@ -135,8 +126,6 @@ const subcategoryPngMap: Record<number, string> = {
   409: '/autolast/wiper blade replacement.png',
   410: '/autolast/light replacement.png',
   411: '/autolast/pre travel vehicle inspection.png',
-
-  // Auto Parts & Accessories
   501: '/autolast/original spare part.png',
   502: '/autolast/kumbo parts dealer.png',
   503: '/autolast/auto parts import.png',
@@ -146,31 +135,24 @@ const subcategoryPngMap: Record<number, string> = {
   507: '/autolast/car lighting.png',
   508: '/autolast/car battaries distributio.png',
   509: '/autolast/engine oil lubricate dealer.png',
-
-  // Commercial Vehicles
   601: '/autolast/truck and trailer machanic.png',
   602: '/autolast/public transport mechanic.png',
   603: '/autolast/heavy duty equipment repair.png',
   604: '/autolast/forkleft repair and maintenace.png',
   605: '/autolast/generator machanic.png',
   606: '/autolast/tipper and truck services.png',
-
-  // Official Vehicle Services
   701: '/autolast/FRSC services.png',
   702: '/autolast/vehicle license agent.png',
   703: '/autolast/driver license processing.png',
   704: '/autolast/vehicle verification agent.png',
   705: '/autolast/customer clearance agent.png',
   706: '/autolast/insurance assessors.png',
-
-  // Plumbing & Water
   801: '/autolast/general plumbers.png',
   802: '/autolast/borehole drilling and installation.png',
   803: '/autolast/well digging services.png',
   804: '/autolast/water heater and installation.png',
 };
 
-// 🧠 Parent-category fallback Lucide icons
 const parentCategoryIcons: Record<string, React.ReactNode> = {
   'vehicle-mechanics': <Wrench className="h-5 w-5" />,
   'roadside-emergencies': <Truck className="h-5 w-5" />,
@@ -236,15 +218,12 @@ const parentCategoryIcons: Record<string, React.ReactNode> = {
   'cross-border': <Plane className="h-5 w-5" />,
 };
 
-// Helper: returns subcategory icon – with explicit width/height
-const getSubcategoryIcon = (sub: { slug?: string; id: number; name: string }, parentCategorySlug: string) => {
+const getSubcategoryIcon = (sub: { id: number; name: string }, parentCategorySlug: string) => {
   const png = subcategoryPngMap[sub.id];
   if (png) return <img src={png} alt={sub.name} className="w-9 h-9 object-contain" width={36} height={36} />;
-
   if (parentCategorySlug && parentCategoryIcons[parentCategorySlug]) {
     return parentCategoryIcons[parentCategorySlug];
   }
-
   return <Tag className="h-5 w-5 text-gray-500" />;
 };
 
@@ -261,19 +240,17 @@ export function MobileCategoryPanel({
 
   useEffect(() => {
     window.dispatchEvent(new Event('tierPanelOpened'));
-    return () => { window.dispatchEvent(new Event('tierPanelClosed')); };
-  }, []);
-
-  useEffect(() => {
     document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = ''; };
+    return () => {
+      window.dispatchEvent(new Event('tierPanelClosed'));
+      document.body.style.overflow = '';
+    };
   }, []);
 
   const categories = CATEGORIES.filter(c => c.tier_slug === tierSlug);
   const currentCategory = selectedCategory ? categories.find(c => c.slug === selectedCategory) : null;
   const subs = currentCategory ? SUBCATEGORIES.filter(s => s.category_slug === currentCategory.slug) : [];
 
-  // Helper: returns category icon with explicit width/height
   const getCategoryIcon = (slug: string, name: string) => {
     const png = categoryPngMap[slug];
     return png ? (
@@ -287,12 +264,19 @@ export function MobileCategoryPanel({
 
   return (
     <div className="fixed inset-0 z-50 flex justify-center items-end">
-      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
 
-      <div ref={panelRef} className="relative w-full max-h-[70vh] bg-white/95 backdrop-blur-md rounded-t-2xl shadow-xl overflow-hidden flex flex-col" style={{ touchAction: 'pan-y' }}>
-        <div className="sticky top-0 bg-primary-50/80 backdrop-blur-md border-b border-primary-100 flex items-center justify-between px-4 py-3 z-10">
+      <div
+        ref={panelRef}
+        className="relative w-full bg-white rounded-t-2xl shadow-xl overflow-hidden flex flex-col animate-slide-up"
+        style={{ maxHeight: '75vh', paddingBottom: 'env(safe-area-inset-bottom)' }}
+      >
+        <div className="sticky top-0 bg-white border-b border-gray-100 flex items-center justify-between px-4 py-3.5 z-10">
           {selectedCategory ? (
-            <button onClick={() => setSelectedCategory(null)} className="flex items-center gap-1 text-sm text-primary-600 font-medium">
+            <button
+              onClick={() => setSelectedCategory(null)}
+              className="flex items-center gap-1.5 text-sm text-primary-600 font-semibold"
+            >
               <ChevronLeft className="h-5 w-5" />
               {currentCategory?.name}
             </button>
@@ -301,19 +285,21 @@ export function MobileCategoryPanel({
               {tierIcon ? (
                 <img src={tierIcon} alt={tierName} className="w-9 h-9 object-contain" width={36} height={36} />
               ) : (
-                <div className="w-9 h-9 rounded-full bg-primary-100 flex items-center justify-center text-primary-600 text-sm font-bold">{tierName.charAt(0)}</div>
+                <div className="w-9 h-9 rounded-full bg-primary-100 flex items-center justify-center text-primary-600 text-sm font-bold">
+                  {tierName.charAt(0)}
+                </div>
               )}
-              <h3 className="font-semibold text-gray-900">{tierName}</h3>
+              <h3 className="font-semibold text-gray-900 text-base">{tierName}</h3>
             </div>
           )}
-          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-full">
-            <X className="h-5 w-5 text-gray-500" />
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition">
+            <X className="h-5 w-5 text-gray-400" />
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-4 py-2">
+        <div className="overflow-y-auto px-4 py-4" style={{ maxHeight: 'calc(75vh - 60px)' }}>
           {!selectedCategory ? (
-            <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-3 gap-4">
               {categories.map(cat => {
                 const catCount = providerCounts[cat.slug] || 0;
                 const hasSubs = SUBCATEGORIES.some(s => s.category_slug === cat.slug);
@@ -322,27 +308,44 @@ export function MobileCategoryPanel({
                   else { window.location.href = `/search?category=${cat.slug}`; onClose(); }
                 };
                 return (
-                  <button key={cat.slug} onClick={handleClick} className="flex flex-col items-center justify-center p-2 group">
-                    <div className="w-14 h-14 rounded-full bg-primary-50 flex items-center justify-center mb-1 group-hover:bg-primary-100 transition-colors">
+                  <button
+                    key={cat.slug}
+                    onClick={handleClick}
+                    className="flex flex-col items-center p-3 rounded-xl hover:bg-gray-50 active:scale-95 transition-all"
+                  >
+                    <div className="w-14 h-14 rounded-2xl bg-gray-50 flex items-center justify-center mb-2">
                       {getCategoryIcon(cat.slug, cat.name)}
                     </div>
-                    <span className="text-[11px] font-medium text-gray-700 text-center leading-tight line-clamp-2">{cat.name}</span>
-                    <span className="text-xs text-gray-400">{catCount} provider{catCount !== 1 ? 's' : ''}</span>
+                    <span className="text-xs font-medium text-gray-800 text-center leading-tight line-clamp-2">
+                      {cat.name}
+                    </span>
+                    <span className="text-[11px] text-gray-400 mt-0.5">
+                      {catCount} provider{catCount !== 1 ? 's' : ''}
+                    </span>
                   </button>
                 );
               })}
             </div>
           ) : (
-            <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-3 gap-4">
               {subs.map(sub => {
                 const subCount = subcategoryCounts[sub.id] || 0;
                 return (
-                  <Link key={sub.id} href={`/search?subcategory=${sub.id}`} onClick={onClose} className="flex flex-col items-center justify-center p-2 group">
-                    <div className="w-14 h-14 rounded-full bg-primary-50 flex items-center justify-center mb-1 group-hover:bg-primary-100 transition-colors">
+                  <Link
+                    key={sub.id}
+                    href={`/search?subcategory=${sub.id}`}
+                    onClick={onClose}
+                    className="flex flex-col items-center p-3 rounded-xl hover:bg-gray-50 active:scale-95 transition-all"
+                  >
+                    <div className="w-14 h-14 rounded-2xl bg-gray-50 flex items-center justify-center mb-2">
                       {getSubcategoryIcon(sub, currentCategory?.slug || '')}
                     </div>
-                    <span className="text-[11px] font-medium text-gray-700 text-center leading-tight line-clamp-2">{sub.name}</span>
-                    <span className="text-xs text-gray-400">{subCount} provider{subCount !== 1 ? 's' : ''}</span>
+                    <span className="text-xs font-medium text-gray-800 text-center leading-tight line-clamp-2">
+                      {sub.name}
+                    </span>
+                    <span className="text-[11px] text-gray-400 mt-0.5">
+                      {subCount} provider{subCount !== 1 ? 's' : ''}
+                    </span>
                   </Link>
                 );
               })}
