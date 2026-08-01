@@ -7,7 +7,7 @@ import { db } from '@/lib/supabase-any';
 import { MapPin } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLocationStore } from '@/stores/locationStore';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
 
 const categoryIcons: Record<string, string> = {
@@ -94,6 +94,9 @@ export function PopularServicesSlider({ initialCombos = [] }: { initialCombos?: 
   const { lat, lng } = useLocationStore();
   const [gpsState, setGpsState] = useState<string | null>(null);
 
+  // Keep last known data so section never disappears
+  const [persistedCombos, setPersistedCombos] = useState(initialCombos);
+
   useEffect(() => {
     if (lat && lng && !profile?.state_name) {
       reverseGeocodeState(lat, lng).then(state => {
@@ -102,7 +105,6 @@ export function PopularServicesSlider({ initialCombos = [] }: { initialCombos?: 
     }
   }, [lat, lng, profile?.state_name]);
 
-  // Priority: profile state > GPS state > null (all Nigeria)
   const userState = profile?.state_name || gpsState || null;
 
   const { data: combos } = useQuery({
@@ -164,13 +166,20 @@ export function PopularServicesSlider({ initialCombos = [] }: { initialCombos?: 
         .sort((a, b) => b.count - a.count)
         .slice(0, 8);
     },
-    // 🔑 Only use server data if there's no location filter
     initialData: userState ? undefined : initialCombos,
     staleTime: 1000 * 60 * 30,
   });
 
-  // Show nothing while loading for a specific state (avoids flashing wrong data)
-  if (!combos || combos.length === 0) return null;
+  // Persist data so section never disappears
+  useEffect(() => {
+    if (combos && combos.length > 0) {
+      setPersistedCombos(combos);
+    }
+  }, [combos]);
+
+  const displayCombos = combos && combos.length > 0 ? combos : persistedCombos;
+
+  if (!displayCombos || displayCombos.length === 0) return null;
 
   return (
     <section className="py-6">
@@ -186,16 +195,11 @@ export function PopularServicesSlider({ initialCombos = [] }: { initialCombos?: 
         <div className="flex items-center gap-3 mb-5">
           <img src="/top.png" alt="" className="h-7 w-7 object-contain animate-gentle-float flex-shrink-0" />
           <div
-            className={cn(
-              'px-4 py-1.5 rounded-full text-sm font-semibold',
-              userState
-                ? 'text-white shadow-md'
-                : 'bg-gray-100 text-gray-700'
-            )}
-            style={userState ? {
+            className="px-4 py-1.5 rounded-full text-sm font-semibold text-white shadow-md"
+            style={{
               background: 'linear-gradient(to left, #597400, #98BC00)',
               boxShadow: '0 4px 12px rgba(89, 116, 0, 0.25)',
-            } : undefined}
+            }}
           >
             Popular Services {userState ? `in ${userState}` : 'in Nigeria'}
           </div>
@@ -203,7 +207,7 @@ export function PopularServicesSlider({ initialCombos = [] }: { initialCombos?: 
 
         {/* Mobile */}
         <div className="flex gap-3 overflow-x-auto hide-scrollbar pb-2 snap-x snap-mandatory sm:hidden pl-2">
-          {combos.map((combo) => {
+          {displayCombos.map((combo) => {
             const iconSrc = categoryIcons[combo.cat] || '/auto/vehicle.png';
             const displayName = combo.cat.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
             return (
@@ -228,7 +232,7 @@ export function PopularServicesSlider({ initialCombos = [] }: { initialCombos?: 
 
         {/* Desktop */}
         <div className="hidden sm:grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-          {combos.map((combo) => {
+          {displayCombos.map((combo) => {
             const iconSrc = categoryIcons[combo.cat] || '/auto/vehicle.png';
             const displayName = combo.cat.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
             return (
