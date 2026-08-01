@@ -360,8 +360,9 @@ export function HomeClient({ initialProviders, initialPopularCombos, initialTopP
             Connect with professionals near you
           </p>
           <div className="bg-white/80 backdrop-blur-md rounded-lg shadow-sm border border-gray-200/50 p-4 max-w-3xl mx-auto">
-            <div className="flex flex-col sm:flex-row justify-center md:justify-start gap-3">
-              <div className="flex flex-row gap-3 flex-1">
+            <div className="flex flex-col gap-3">
+              {/* Row 1: Location + Find Providers (mobile: side by side) */}
+              <div className="flex flex-row gap-3">
                 <div className="relative flex-1">
                   <button
                     ref={locationButtonRef}
@@ -386,6 +387,17 @@ export function HomeClient({ initialProviders, initialPopularCombos, initialTopP
                     />
                   )}
                 </div>
+                <button
+                  onClick={() => setRadarOpen(true)}
+                  className="flex sm:hidden items-center justify-center gap-2 bg-purple-50 border border-purple-200 text-purple-700 rounded-lg px-4 py-3 hover:bg-purple-100 transition font-medium text-sm flex-shrink-0"
+                >
+                  <Crosshair className="h-5 w-5" />
+                  <span>Find</span>
+                </button>
+              </div>
+
+              {/* Row 2: Search full width on mobile, desktop: search + Find Providers */}
+              <div className="flex flex-row gap-3">
                 <form
                   onSubmit={handleSearch}
                   className="flex bg-white rounded-lg overflow-hidden flex-1 border border-[#008751]/30"
@@ -403,14 +415,14 @@ export function HomeClient({ initialProviders, initialPopularCombos, initialTopP
                     <Search className="h-5 w-5" />
                   </button>
                 </form>
+                <button
+                  onClick={() => setRadarOpen(true)}
+                  className="hidden sm:flex items-center justify-center gap-2 bg-purple-50 border border-purple-200 text-purple-700 rounded-lg px-4 py-3 hover:bg-purple-100 transition font-medium text-sm flex-shrink-0"
+                >
+                  <Crosshair className="h-5 w-5 animate-spin" />
+                  <span>Find Providers</span>
+                </button>
               </div>
-              <button
-                onClick={() => setRadarOpen(true)}
-                className="flex items-center justify-center gap-2 bg-purple-50 border border-purple-200 text-purple-700 rounded-lg px-4 py-3 hover:bg-purple-100 transition font-medium text-sm flex-shrink-0"
-              >
-                <Crosshair className="h-5 w-5 animate-spin" />
-                <span>Find Providers</span>
-              </button>
             </div>
           </div>
         </div>
