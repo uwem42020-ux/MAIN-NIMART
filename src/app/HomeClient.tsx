@@ -98,7 +98,7 @@ export function HomeClient({ initialProviders, initialPopularCombos, initialTopP
   const { data: featuredProviders, isLoading } = useQuery({
     queryKey: ['featured-providers', userLat, userLng, stateFilter, lgaFilter],
     queryFn: async () => {
-      const { data, error } = await db.rpc('get_featured_providers', { limit_count: 25 });
+      const { data, error } = await db.rpc('get_featured_providers', { limit_count: 40 });
       if (error || !data) {
         return cachedProvidersRef.current.length > 0 ? cachedProvidersRef.current : [] as ProviderWithProfile[];
       }
@@ -183,7 +183,6 @@ export function HomeClient({ initialProviders, initialPopularCombos, initialTopP
     staleTime: 1000 * 60 * 5,
   });
 
-  // Accurate counts from ALL providers (not just the 25 shown)
   const { data: allProviderCounts } = useQuery({
     queryKey: ['provider-counts'],
     queryFn: async () => {
