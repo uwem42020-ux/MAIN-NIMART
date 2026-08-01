@@ -183,16 +183,25 @@ export function HomeClient({ initialProviders, initialPopularCombos, initialTopP
     staleTime: 1000 * 60 * 5,
   });
 
-  const providerCounts = useMemo(() => {
-    const providers = isClient ? featuredProviders : initialProviders;
-    const counts: Record<string, number> = {};
-    (providers ?? []).forEach(p => {
-      if (p.selected_category_slug) {
-        counts[p.selected_category_slug] = (counts[p.selected_category_slug] || 0) + 1;
-      }
-    });
-    return counts;
-  }, [isClient, featuredProviders, initialProviders]);
+  // Accurate counts from ALL providers (not just the 25 shown)
+  const { data: allProviderCounts } = useQuery({
+    queryKey: ['provider-counts'],
+    queryFn: async () => {
+      const { data, error } = await db.rpc('get_search_providers');
+      if (error || !data) return {};
+      const providers: any[] = Array.isArray(data) ? data : [];
+      const counts: Record<string, number> = {};
+      providers.forEach((p: any) => {
+        if (p.selected_category_slug) {
+          counts[p.selected_category_slug] = (counts[p.selected_category_slug] || 0) + 1;
+        }
+      });
+      return counts;
+    },
+    staleTime: 1000 * 60 * 10,
+  });
+
+  const providerCounts = allProviderCounts ?? {};
 
   const subcategoryCounts = useMemo(() => {
     const providers = isClient ? featuredProviders : initialProviders;
