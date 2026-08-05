@@ -18,11 +18,6 @@ const nextConfig: NextConfig = {
         destination: '/search',
         permanent: true,
       },
-      {
-        source: '/what-is-nimart',
-        destination: '/about-nimart-guide',
-        permanent: true,
-      },
     ];
   },
 };
