@@ -8,9 +8,9 @@ async function getLocationData(categorySlug: string, lgaId: string) {
     .from('lga_centers')
     .select('lga_name, state_name')
     .eq('lga_id', parseInt(lgaId))
-    .single();
+    .maybeSingle();
 
-  return lgaData as any;
+  return lgaData || { lga_name: 'your area', state_name: '' };
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ categorySlug: string; lgaId: string }> }): Promise<Metadata> {
