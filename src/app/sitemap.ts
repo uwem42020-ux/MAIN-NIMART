@@ -50,7 +50,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.6,
   }));
 
-  // Tier pages (e.g., /category/automotive, /category/home-property)
+  // Tier pages
   const tierUrls = TIERS.map((tier) => ({
     url: `${BASE_URL}/category/${tier.slug}`,
     lastModified: new Date(),
@@ -58,29 +58,29 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.6,
   }));
 
-  // ALL LGA-category combos (even empty ones — each page attracts "Be the first" traffic)
-  const { data: categories } = await db
+  // Only service pages with actual providers
+  const { data: activeCombos } = await db
     .from('providers')
-    .select('selected_category_slug')
+    .select('selected_category_slug, profiles!inner(lga_id)')
     .eq('is_available', true)
-    .not('selected_category_slug', 'is', null);
+    .not('selected_category_slug', 'is', null)
+    .not('profiles.lga_id', 'is', null);
 
-  const { data: lgas } = await db
-    .from('lga_centers')
-    .select('lga_id')
-    .not('lga_id', 'is', null);
+  const seen = new Set<string>();
+  const serviceLocationUrls: MetadataRoute.Sitemap[number][] = [];
 
-  const uniqueCategories = [...new Set(((categories || []) as any[]).map((c: any) => c.selected_category_slug))];
-  const uniqueLgas = [...new Set(((lgas || []) as any[]).map((l: any) => l.lga_id))];
-
-  const serviceLocationUrls = uniqueCategories.flatMap((catSlug: string) =>
-    uniqueLgas.map((lgaId: number) => ({
-      url: `${BASE_URL}/services/${catSlug}/in/${lgaId}`,
-      lastModified: new Date(),
-      changeFrequency: 'weekly' as const,
-      priority: 0.5,
-    }))
-  );
+  ((activeCombos || []) as any[]).forEach((p: any) => {
+    const key = `${p.selected_category_slug}||${p.profiles?.lga_id}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      serviceLocationUrls.push({
+        url: `${BASE_URL}/services/${p.selected_category_slug}/in/${p.profiles.lga_id}`,
+        lastModified: new Date(),
+        changeFrequency: 'weekly' as const,
+        priority: 0.5,
+      });
+    }
+  });
 
   return [...staticPages, ...providerUrls, ...blogUrls, ...tierUrls, ...serviceLocationUrls];
 }
