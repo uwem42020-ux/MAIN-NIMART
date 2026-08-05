@@ -58,29 +58,44 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.6,
   }));
 
-  // Only service pages with actual providers
-  const { data: activeCombos } = await db
+  // Only service pages with actual providers — get providers then join profiles separately
+  const { data: activeProviders } = await db
     .from('providers')
-    .select('selected_category_slug, profiles!inner(lga_id)')
+    .select('id, selected_category_slug')
     .eq('is_available', true)
-    .not('selected_category_slug', 'is', null)
-    .not('profiles.lga_id', 'is', null);
+    .not('selected_category_slug', 'is', null);
 
-  const seen = new Set<string>();
-  const serviceLocationUrls: MetadataRoute.Sitemap[number][] = [];
+  if (activeProviders && (activeProviders as any[]).length > 0) {
+    const providerIds = (activeProviders as any[]).map((p: any) => p.id);
 
-  ((activeCombos || []) as any[]).forEach((p: any) => {
-    const key = `${p.selected_category_slug}||${p.profiles?.lga_id}`;
-    if (!seen.has(key)) {
-      seen.add(key);
-      serviceLocationUrls.push({
-        url: `${BASE_URL}/services/${p.selected_category_slug}/in/${p.profiles.lga_id}`,
-        lastModified: new Date(),
-        changeFrequency: 'weekly' as const,
-        priority: 0.5,
-      });
-    }
-  });
+    const { data: profiles } = await db
+      .from('profiles')
+      .select('id, lga_id')
+      .in('id', providerIds)
+      .not('lga_id', 'is', null);
 
-  return [...staticPages, ...providerUrls, ...blogUrls, ...tierUrls, ...serviceLocationUrls];
+    const profileMap = new Map((profiles as any[])?.map((p: any) => [p.id, p.lga_id]) || []);
+
+    const seen = new Set<string>();
+    const serviceLocationUrls: MetadataRoute.Sitemap[number][] = [];
+
+    (activeProviders as any[]).forEach((p: any) => {
+      const lgaId = profileMap.get(p.id);
+      if (!lgaId) return;
+      const key = `${p.selected_category_slug}||${lgaId}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        serviceLocationUrls.push({
+          url: `${BASE_URL}/services/${p.selected_category_slug}/in/${lgaId}`,
+          lastModified: new Date(),
+          changeFrequency: 'weekly' as const,
+          priority: 0.5,
+        });
+      }
+    });
+
+    return [...staticPages, ...providerUrls, ...blogUrls, ...tierUrls, ...serviceLocationUrls];
+  }
+
+  return [...staticPages, ...providerUrls, ...blogUrls, ...tierUrls];
 }
