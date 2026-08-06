@@ -15,15 +15,24 @@ import { CategoryButtons } from '@/components/common/CategoryButtons';
 import { CategorySidebar } from '@/components/common/CategorySidebar';
 import { FindProvidersRadar } from '@/components/customer/FindProvidersRadar';
 import { PopularServicesSlider } from '@/components/home/PopularServicesSlider';
-import { MapPin, ChevronDown, Search, WifiOff, LayoutGrid, List, Crosshair } from 'lucide-react';
+import { MapPin, ChevronDown, Search, WifiOff, LayoutGrid, List, Crosshair, X } from 'lucide-react';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useLocationStore } from '@/stores/locationStore';
 import { useGeolocation } from '@/hooks/useGeolocation';
 import { useOffline } from '@/hooks/useOffline';
+import { useDebounce } from '@/hooks/useDebounce';
 import { ProviderGridSkeleton } from '@/components/skeletons/ProviderGridSkeleton';
 import { cn } from '@/lib/utils';
 import { useSmartSort } from '@/hooks/useSmartSort';
 import { fetchProviderProfile } from '@/lib/queries';
+
+interface Suggestion {
+  type: 'service' | 'provider';
+  text: string;
+  subtext?: string;
+  link: string;
+  image?: string;
+}
 
 interface HomeClientProps {
   initialProviders: ProviderWithProfile[];
@@ -46,9 +55,15 @@ export function HomeClient({ initialProviders, initialPopularCombos, initialTopP
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const searchInputRef = useRef<HTMLInputElement>(null);
   const locationButtonRef = useRef<HTMLButtonElement>(null);
+  const suggestionsRef = useRef<HTMLDivElement>(null);
   const autoLocationApplied = useRef(false);
   const isOffline = useOffline();
   const [mounted, setMounted] = useState(false);
+
+  const [searchInput, setSearchInput] = useState('');
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const debouncedSearchTerm = useDebounce(searchInput, 300);
 
   const cachedProvidersRef = useRef<ProviderWithProfile[]>(initialProviders);
 
@@ -68,6 +83,88 @@ export function HomeClient({ initialProviders, initialPopularCombos, initialTopP
     undefined,
     20
   );
+
+  // ── Autocomplete with images ──
+  useEffect(() => {
+    if (!debouncedSearchTerm || debouncedSearchTerm.length < 2) {
+      setSuggestions([]);
+      return;
+    }
+    const fetchSuggestions = async () => {
+      const term = debouncedSearchTerm.trim();
+      const pattern = `%${term}%`;
+
+      const [providerRes, serviceRes] = await Promise.all([
+        db.from('providers').select('id, business_name').ilike('business_name', pattern).limit(3),
+        db.from('provider_services').select('id, name, provider_id').ilike('name', pattern).limit(3),
+      ]);
+
+      const providerIds = ((providerRes.data || []) as any[]).map((p: any) => p.id);
+
+      const { data: profiles } = providerIds.length > 0
+        ? await db.from('profiles').select('id, avatar_url').in('id', providerIds)
+        : { data: [] };
+
+      const avatarMap = new Map((profiles as any[])?.map((p: any) => [p.id, p.avatar_url]) || []);
+
+      const newSuggestions: Suggestion[] = [];
+
+      (providerRes.data as any[])?.forEach((p: any) => {
+        if (p.business_name) {
+          newSuggestions.push({
+            type: 'provider',
+            text: p.business_name,
+            subtext: 'Provider',
+            link: `/provider/${p.id}`,
+            image: avatarMap.get(p.id) || undefined,
+          });
+        }
+      });
+
+      const serviceProviderIds = ((serviceRes.data || []) as any[]).map((s: any) => s.provider_id).filter(Boolean);
+      let serviceProvidersMap = new Map<string, string>();
+      if (serviceProviderIds.length > 0) {
+        const { data: spData } = await db.from('providers').select('id, business_name').in('id', serviceProviderIds);
+        (spData as any[])?.forEach((p: any) => serviceProvidersMap.set(p.id, p.business_name));
+      }
+
+      (serviceRes.data as any[])?.forEach((s: any) => {
+        newSuggestions.push({
+          type: 'service',
+          text: s.name,
+          subtext: serviceProvidersMap.get(s.provider_id) || 'Service',
+          link: `/search?q=${encodeURIComponent(s.name)}`,
+          image: undefined,
+        });
+      });
+
+      setSuggestions(newSuggestions.slice(0, 6));
+    };
+    fetchSuggestions();
+  }, [debouncedSearchTerm]);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        suggestionsRef.current && !suggestionsRef.current.contains(e.target as Node) &&
+        searchInputRef.current && !searchInputRef.current.contains(e.target as Node)
+      ) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleSuggestionClick = (suggestion: Suggestion) => {
+    if (suggestion.type === 'provider') {
+      router.push(suggestion.link);
+    } else {
+      router.push(`/search?q=${encodeURIComponent(suggestion.text)}`);
+      setSearchInput(suggestion.text);
+    }
+    setShowSuggestions(false);
+  };
 
   useEffect(() => {
     async function preloadLocations() {
@@ -260,8 +357,9 @@ export function HomeClient({ initialProviders, initialPopularCombos, initialTopP
 
   const handleSearch = (e?: React.FormEvent) => {
     e?.preventDefault();
-    const query = searchInputRef.current?.value.trim();
+    const query = searchInputRef.current?.value.trim() || searchInput.trim();
     router.push(query ? `/search?q=${encodeURIComponent(query)}` : '/search');
+    setShowSuggestions(false);
   };
 
   const locationName = lgaFilter
@@ -361,7 +459,7 @@ export function HomeClient({ initialProviders, initialPopularCombos, initialTopP
           </p>
           <div className="bg-white/80 backdrop-blur-md rounded-lg shadow-sm border border-gray-200/50 p-4 max-w-3xl mx-auto">
             <div className="flex flex-col gap-3">
-              {/* Row 1: Location + Find Providers (mobile: side by side) */}
+              {/* Row 1: Location + Find Providers */}
               <div className="flex flex-row gap-3">
                 <div className="relative flex-1">
                   <button
@@ -391,30 +489,68 @@ export function HomeClient({ initialProviders, initialPopularCombos, initialTopP
                   onClick={() => setRadarOpen(true)}
                   className="flex sm:hidden items-center justify-center gap-2 bg-purple-50 border border-purple-200 text-purple-700 rounded-lg px-4 py-3 hover:bg-purple-100 transition font-medium text-sm flex-shrink-0"
                 >
-                  <Crosshair className="h-5 w-5" />
+                  <Crosshair className="h-5 w-5 animate-spin" />
                   <span>Find</span>
                 </button>
               </div>
 
-              {/* Row 2: Search full width on mobile, desktop: search + Find Providers */}
+              {/* Row 2: Search with autocomplete */}
               <div className="flex flex-row gap-3">
-                <form
-                  onSubmit={handleSearch}
-                  className="flex bg-white rounded-lg overflow-hidden flex-1 border border-[#008751]/30"
-                >
-                  <input
-                    ref={searchInputRef}
-                    type="text"
-                    placeholder="I am looking for..."
-                    className="w-full px-3 py-3 text-gray-900 focus:outline-none text-sm"
-                  />
-                  <button
-                    type="submit"
-                    className="bg-[#008751] hover:bg-green-700 text-white px-3 transition flex items-center justify-center"
-                  >
-                    <Search className="h-5 w-5" />
-                  </button>
-                </form>
+                <div className="relative flex-1">
+                  <form onSubmit={handleSearch} className="flex bg-white rounded-lg overflow-hidden border border-[#008751]/30">
+                    <input
+                      ref={searchInputRef}
+                      type="text"
+                      value={searchInput}
+                      onChange={(e) => { setSearchInput(e.target.value); setShowSuggestions(true); }}
+                      onFocus={() => { if (suggestions.length > 0) setShowSuggestions(true); }}
+                      placeholder="Search services..."
+                      className="w-full px-3 py-3 text-gray-900 focus:outline-none text-sm"
+                    />
+                    {searchInput && (
+                      <button
+                        type="button"
+                        onClick={() => { setSearchInput(''); setSuggestions([]); }}
+                        className="text-gray-400 hover:text-gray-600 px-2"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    )}
+                    <button type="submit" className="bg-[#008751] hover:bg-green-700 text-white px-3 transition flex items-center justify-center">
+                      <Search className="h-5 w-5" />
+                    </button>
+                  </form>
+
+                  {/* Suggestions dropdown with images */}
+                  {showSuggestions && debouncedSearchTerm && suggestions.length > 0 && (
+                    <div ref={suggestionsRef} className="absolute z-20 mt-1 w-full bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+                      {suggestions.map((s, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => handleSuggestionClick(s)}
+                          className="w-full flex items-center px-4 py-3 hover:bg-gray-50 transition text-left border-b last:border-0"
+                        >
+                          {s.image ? (
+                            <img
+                              src={`${s.image}?width=32&height=32&quality=60&resize=cover`}
+                              alt=""
+                              className="w-8 h-8 rounded-full object-cover mr-3 flex-shrink-0 bg-gray-200"
+                              onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                            />
+                          ) : (
+                            <div className="w-8 h-8 rounded-full bg-primary-50 flex items-center justify-center mr-3 flex-shrink-0">
+                              <Search className="h-4 w-4 text-primary-500" />
+                            </div>
+                          )}
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">{s.text}</p>
+                            {s.subtext && <p className="text-xs text-gray-500">{s.subtext}</p>}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 <button
                   onClick={() => setRadarOpen(true)}
                   className="hidden sm:flex items-center justify-center gap-2 bg-purple-50 border border-purple-200 text-purple-700 rounded-lg px-4 py-3 hover:bg-purple-100 transition font-medium text-sm flex-shrink-0"

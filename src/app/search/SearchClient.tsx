@@ -25,10 +25,11 @@ import { cn } from '@/lib/utils';
 import type { ProviderWithProfile } from '@/components/provider/ProviderCardPortrait';
 
 interface Suggestion {
-  type: 'service' | 'provider' | 'category';
+  type: 'service' | 'provider';
   text: string;
   subtext?: string;
   link: string;
+  image?: string;
 }
 
 interface SearchClientProps {
@@ -81,7 +82,7 @@ export function SearchClient({ initialProviders, searchParams: initialSearchPara
     setSearchInput(keyword);
   }, [keyword]);
 
-  // Autocomplete
+  // ── Autocomplete with images ──
   useEffect(() => {
     if (!debouncedSearchTerm || debouncedSearchTerm.length < 2) {
       setSuggestions([]);
@@ -92,19 +93,18 @@ export function SearchClient({ initialProviders, searchParams: initialSearchPara
       const term = debouncedSearchTerm.trim();
       const pattern = `%${term}%`;
 
-      const providerPromise = db
-        .from('providers')
-        .select('id, business_name')
-        .ilike('business_name', pattern)
-        .limit(3);
+      const [providerRes, serviceRes] = await Promise.all([
+        db.from('providers').select('id, business_name').ilike('business_name', pattern).limit(3),
+        db.from('provider_services').select('id, name, provider_id').ilike('name', pattern).limit(3),
+      ]);
 
-      const servicePromise = db
-        .from('provider_services')
-        .select('id, name, provider:providers!inner(business_name)')
-        .ilike('name', pattern)
-        .limit(3);
+      const providerIds = ((providerRes.data || []) as any[]).map((p: any) => p.id);
 
-      const [providerRes, serviceRes] = await Promise.all([providerPromise, servicePromise]);
+      const { data: profiles } = providerIds.length > 0
+        ? await db.from('profiles').select('id, avatar_url').in('id', providerIds)
+        : { data: [] };
+
+      const avatarMap = new Map((profiles as any[])?.map((p: any) => [p.id, p.avatar_url]) || []);
 
       const newSuggestions: Suggestion[] = [];
 
@@ -115,24 +115,29 @@ export function SearchClient({ initialProviders, searchParams: initialSearchPara
             text: p.business_name,
             subtext: 'Provider',
             link: `/provider/${p.id}`,
+            image: avatarMap.get(p.id) || undefined,
           });
         }
       });
 
+      const serviceProviderIds = ((serviceRes.data || []) as any[]).map((s: any) => s.provider_id).filter(Boolean);
+      let serviceProvidersMap = new Map<string, string>();
+      if (serviceProviderIds.length > 0) {
+        const { data: spData } = await db.from('providers').select('id, business_name').in('id', serviceProviderIds);
+        (spData as any[])?.forEach((p: any) => serviceProvidersMap.set(p.id, p.business_name));
+      }
+
       (serviceRes.data as any[])?.forEach((s: any) => {
-        const providerName = s.provider?.business_name;
         newSuggestions.push({
           type: 'service',
           text: s.name,
-          subtext: providerName || 'Service',
+          subtext: serviceProvidersMap.get(s.provider_id) || 'Service',
           link: `/search?q=${encodeURIComponent(s.name)}`,
+          image: undefined,
         });
       });
 
-      const unique = newSuggestions.filter(
-        (v, i, a) => a.findIndex(t => t.text === v.text) === i
-      );
-      setSuggestions(unique.slice(0, 6));
+      setSuggestions(newSuggestions.slice(0, 6));
     };
 
     fetchSuggestions();
@@ -237,7 +242,6 @@ export function SearchClient({ initialProviders, searchParams: initialSearchPara
         }
       }
 
-      // No limit — show all matching providers
       const { data: providersData, error } = await query;
       if (error) throw error;
       if (!(providersData as any[])?.length) return [] as ProviderWithProfile[];
@@ -398,7 +402,7 @@ export function SearchClient({ initialProviders, searchParams: initialSearchPara
                     setShowSuggestions(true);
                   }}
                   onFocus={() => setShowSuggestions(true)}
-                  placeholder="Search services, providers..."
+                  placeholder="Search services..."
                   className="w-full pl-12 pr-10 py-3 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900 shadow-sm"
                 />
                 {searchInput && (
@@ -421,6 +425,7 @@ export function SearchClient({ initialProviders, searchParams: initialSearchPara
               <button type="submit" className="hidden">Search</button>
             </form>
 
+            {/* Suggestions dropdown with images */}
             {showSuggestions && debouncedSearchTerm && suggestions.length > 0 && (
               <div
                 ref={suggestionsRef}
@@ -432,7 +437,18 @@ export function SearchClient({ initialProviders, searchParams: initialSearchPara
                     onClick={() => handleSuggestionClick(s)}
                     className="w-full flex items-center px-4 py-3 hover:bg-gray-50 transition text-left border-b last:border-0"
                   >
-                    <SearchIcon className="h-4 w-4 text-gray-400 mr-3" />
+                    {s.image ? (
+                      <img
+                        src={`${s.image}?width=32&height=32&quality=60&resize=cover`}
+                        alt=""
+                        className="w-8 h-8 rounded-full object-cover mr-3 flex-shrink-0 bg-gray-200"
+                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                      />
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-primary-50 flex items-center justify-center mr-3 flex-shrink-0">
+                        <SearchIcon className="h-4 w-4 text-primary-500" />
+                      </div>
+                    )}
                     <div>
                       <p className="text-sm font-medium text-gray-900">{s.text}</p>
                       {s.subtext && (
