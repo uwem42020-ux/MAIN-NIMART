@@ -15,6 +15,35 @@ import { REFERRAL_BONUS } from '@/lib/nicoinConfig';
 
 type Step = 'email' | 'otp' | 'profile';
 
+// ── Countdown Timer ──
+function CountdownTimer({ initialSeconds, onExpire }: { initialSeconds: number; onExpire: () => void }) {
+  const [seconds, setSeconds] = useState(initialSeconds);
+  const expiredRef = useRef(false);
+
+  useEffect(() => {
+    if (seconds <= 0) {
+      if (!expiredRef.current) {
+        expiredRef.current = true;
+        onExpire();
+      }
+      return;
+    }
+    const interval = setInterval(() => setSeconds(s => s - 1), 1000);
+    return () => clearInterval(interval);
+  }, [seconds, onExpire]);
+
+  const minutes = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+
+  return (
+    <p className={`text-center text-sm font-medium transition-colors ${seconds <= 30 ? 'text-red-500' : 'text-gray-400'}`}>
+      {seconds > 0
+        ? `Code expires in ${minutes}:${secs.toString().padStart(2, '0')}`
+        : 'Code expired'}
+    </p>
+  );
+}
+
 function SignUpContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -50,7 +79,6 @@ function SignUpContent() {
     if (step === 'profile' && nameInputRef.current) nameInputRef.current.focus();
   }, [step]);
 
-  // ── Step 1: Send OTP via Supabase ──
   const sendOTP = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -71,7 +99,6 @@ function SignUpContent() {
     }
   };
 
-  // ── Step 2: Verify OTP via Supabase ──
   const verifyOTP = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -93,7 +120,6 @@ function SignUpContent() {
     }
   };
 
-  // ── Step 3: Complete profile ──
   const completeProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!fullName.trim()) { toast.error('Please enter your full name'); return; }
@@ -112,7 +138,6 @@ function SignUpContent() {
         return;
       }
 
-      // Handle referral
       if (role === 'provider' && referralCode.trim()) {
         const { data: referrer } = await db
           .from('providers').select('id').eq('referral_code', referralCode.trim().toUpperCase()).single();
@@ -139,7 +164,6 @@ function SignUpContent() {
         return;
       }
 
-      // Provider
       await db.from('profiles').update({ full_name: fullName, role, is_complete: false }).eq('id', user.id);
       await refreshProfile();
       toast.success('Account created! Let\'s set up your profile.');
@@ -171,6 +195,8 @@ function SignUpContent() {
     );
   }
 
+  const steps = ['email', 'otp', 'profile'] as Step[];
+
   return (
     <div className="relative min-h-screen bg-gradient-to-br from-green-50 via-white to-emerald-50 flex flex-col">
       <Link
@@ -183,20 +209,30 @@ function SignUpContent() {
 
       <div className="flex-1 flex items-center justify-center px-4 py-12 signup-container">
         <div className="w-full max-w-md">
-          {/* Progress Steps */}
+          {/* ── Progress Steps ── */}
           <div className="flex items-center justify-center gap-2 mb-6">
-            {['email', 'otp', 'profile'].map((s, i) => (
-              <div key={s} className="flex items-center gap-2">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold transition-all ${
-                  step === s ? 'bg-primary-600 text-white scale-110 shadow-lg shadow-primary-600/30' :
-                  ['email', 'otp', 'profile'].indexOf(step) > i ? 'bg-primary-200 text-primary-700' :
-                  'bg-gray-200 text-gray-500'
-                }`}>
-                  {['email', 'otp', 'profile'].indexOf(step) > i ? <CheckCircle className="h-5 w-5" /> : i + 1}
+            {steps.map((s, i) => {
+              const isActive = step === s;
+              const isCompleted = steps.indexOf(step) > i;
+              return (
+                <div key={s} className="flex items-center gap-2">
+                  <div
+                    className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold transition-all duration-500 ${
+                      isActive
+                        ? 'bg-primary-600 text-white scale-110 shadow-lg shadow-primary-600/30 animate-pulse'
+                        : isCompleted
+                        ? 'bg-primary-200 text-primary-700'
+                        : 'bg-gray-200 text-gray-500'
+                    }`}
+                  >
+                    {isCompleted ? <CheckCircle className="h-5 w-5" /> : i + 1}
+                  </div>
+                  {i < 2 && (
+                    <div className={`w-10 h-0.5 transition-colors duration-500 ${isCompleted ? 'bg-primary-300' : 'bg-gray-200'}`} />
+                  )}
                 </div>
-                {i < 2 && <div className={`w-8 h-0.5 ${['email', 'otp', 'profile'].indexOf(step) > i ? 'bg-primary-300' : 'bg-gray-200'}`} />}
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           <div className="bg-white/90 backdrop-blur-md rounded-3xl shadow-xl border border-gray-100 p-6 sm:p-8">
@@ -245,12 +281,50 @@ function SignUpContent() {
             {step === 'otp' && (
               <form onSubmit={verifyOTP} className="space-y-5">
                 <h2 className="text-2xl font-bold text-gray-900 text-center mb-2">Check your email</h2>
-                <p className="text-sm text-gray-500 text-center mb-6">We sent a 6‑digit code to <span className="font-medium text-gray-700">{email}</span></p>
+                <p className="text-sm text-gray-500 text-center mb-6">We sent an 8‑digit code to <span className="font-medium text-gray-700">{email}</span></p>
                 <div>
-                  <input ref={otpInputRef} type="text" required value={otp} onChange={(e) => setOtp(e.target.value)} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 text-center text-2xl tracking-[0.3em] font-mono font-bold" placeholder="000000" maxLength={6} />
+                  <input
+                    ref={otpInputRef}
+                    type="text"
+                    required
+                    value={otp}
+                    onChange={(e) => {
+                      const cleaned = e.target.value.replace(/\D/g, '').slice(0, 8);
+                      setOtp(cleaned);
+                    }}
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 text-center text-2xl tracking-[0.3em] font-mono font-bold"
+                    placeholder="00000000"
+                    maxLength={8}
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                  />
                 </div>
-                <button type="submit" disabled={loading} className="w-full bg-primary-600 text-white py-3 rounded-xl hover:bg-primary-700 disabled:opacity-50 transition font-semibold shadow-lg shadow-primary-600/20">Verify & Continue</button>
-                <button type="button" onClick={() => setStep('email')} className="w-full flex items-center justify-center gap-1 text-sm text-primary-600 hover:underline font-medium"><ArrowLeft className="h-4 w-4" />Back to email</button>
+
+                <CountdownTimer initialSeconds={600} onExpire={() => toast.error('Code expired. Request a new one.')} />
+
+                <button type="submit" disabled={loading || otp.length !== 8} className="w-full bg-primary-600 text-white py-3 rounded-xl hover:bg-primary-700 disabled:opacity-50 transition font-semibold shadow-lg shadow-primary-600/20">
+                  Verify & Continue
+                </button>
+
+                <div className="text-center">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setLoading(true);
+                      const { error } = await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: true } });
+                      setLoading(false);
+                      if (error) toast.error(error.message);
+                      else toast.success('New code sent!');
+                    }}
+                    className="text-sm text-primary-600 hover:underline font-medium"
+                  >
+                    Resend code
+                  </button>
+                </div>
+
+                <button type="button" onClick={() => setStep('email')} className="w-full flex items-center justify-center gap-1 text-sm text-primary-600 hover:underline font-medium">
+                  <ArrowLeft className="h-4 w-4" />Back to email
+                </button>
               </form>
             )}
 
