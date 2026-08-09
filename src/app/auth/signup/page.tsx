@@ -28,10 +28,7 @@ function SignUpContent() {
   const [referralCode, setReferralCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [otpCooldown, setOtpCooldown] = useState(false);
-
-  // Honeypot state
   const [honeypot, setHoneypot] = useState('');
-  // Turnstile token
   const [turnstileToken, setTurnstileToken] = useState('');
 
   const emailInputRef = useRef<HTMLInputElement>(null);
@@ -59,18 +56,8 @@ function SignUpContent() {
 
   const sendOTP = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    // Honeypot check
-    if (honeypot) {
-      toast.error('Spam detected');
-      return;
-    }
-
-    if (!turnstileToken) {
-      toast.error('Please complete the security check');
-      return;
-    }
-
+    if (honeypot) { toast.error('Spam detected'); return; }
+    if (!turnstileToken) { toast.error('Please complete the security check'); return; }
     setLoading(true);
     try {
       const res = await fetch('/api/auth/send-otp', {
@@ -78,10 +65,8 @@ function SignUpContent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, turnstileToken }),
       });
-
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to send OTP');
-
       toast.success('An 8‑digit code has been sent to your email');
       scrollToTop();
       setStep('otp');
@@ -99,8 +84,13 @@ function SignUpContent() {
     e.preventDefault();
     setLoading(true);
     try {
-      const { error } = await supabase.auth.verifyOtp({ email, token: otp, type: 'email' });
-      if (error) throw error;
+      const res = await fetch('/api/auth/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, otp }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Invalid code');
       toast.success('Email verified!');
       scrollToTop();
       setStep('profile');
@@ -184,19 +174,6 @@ function SignUpContent() {
     }
   };
 
-  // Facebook sign-in disabled for now
-  // const handleFacebookSignIn = async () => {
-  //   try {
-  //     await supabase.auth.signInWithOAuth({
-  //       provider: 'facebook',
-  //       options: { redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback` },
-  //     });
-  //   } catch (error: any) {
-  //     scrollToTop();
-  //     toast.error(error.message);
-  //   }
-  // };
-
   if (loading)
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 via-white to-emerald-50">
@@ -237,17 +214,6 @@ function SignUpContent() {
                   <span className="absolute -top-2 right-4 bg-primary-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">RECOMMENDED</span>
                 </div>
 
-                {/* Facebook sign-in disabled for now */}
-                {/* <button
-                  onClick={handleFacebookSignIn}
-                  className="w-full flex items-center justify-center gap-3 bg-[#1877F2] text-white py-3 rounded-xl hover:bg-[#166fe5] transition font-medium shadow-sm mb-4"
-                >
-                  <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
-                  </svg>
-                  Continue with Facebook
-                </button> */}
-
                 <div className="relative my-6">
                   <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200"></div></div>
                   <div className="relative flex justify-center text-sm"><span className="px-3 bg-white text-gray-400 font-medium">or sign up with email</span></div>
@@ -259,22 +225,10 @@ function SignUpContent() {
                     <div className="relative"><Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" /><input ref={emailInputRef} type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:bg-white transition" placeholder="you@example.com" /></div>
                   </div>
 
-                  <input
-                    type="text"
-                    value={honeypot}
-                    onChange={(e) => setHoneypot(e.target.value)}
-                    style={{ position: 'absolute', left: '-9999px' }}
-                    tabIndex={-1}
-                    autoComplete="off"
-                    aria-hidden="true"
-                  />
+                  <input type="text" value={honeypot} onChange={(e) => setHoneypot(e.target.value)} style={{ position: 'absolute', left: '-9999px' }} tabIndex={-1} autoComplete="off" aria-hidden="true" />
 
                   <div className="flex justify-center">
-                    <Turnstile
-                      sitekey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY!}
-                      onVerify={(token) => setTurnstileToken(token)}
-                      theme="light"
-                    />
+                    <Turnstile sitekey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY!} onVerify={(token) => setTurnstileToken(token)} theme="light" />
                   </div>
 
                   <button type="submit" disabled={loading || otpCooldown} className="w-full bg-primary-600 text-white py-3 rounded-xl hover:bg-primary-700 disabled:opacity-50 transition font-semibold shadow-lg shadow-primary-600/20">
