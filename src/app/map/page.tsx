@@ -10,7 +10,7 @@ export default function MapPage() {
       <SEO
         title="Explore Service Providers on Map"
         description="Discover verified service providers near you on the interactive map. Find mechanics, hairdressers, electricians and more."
-        url="https://nimart.ng/map"
+        url="https://www.nimart.ng/map"
       />
       <div className="min-h-screen">
         <MapView />

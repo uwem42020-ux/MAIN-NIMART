@@ -7,11 +7,11 @@ const careersSchema = {
   "@type": "WebPage",
   "name": "Careers at Nimart",
   "description": "Join the Nimart team! We're looking for marketers, social media experts, developers and anyone interested in learning.",
-  "url": "https://nimart.ng/careers",
+  "url": "https://www.nimart.ng/careers",
   "mainEntity": {
     "@type": "Organization",
     "name": "Nimart",
-    "url": "https://nimart.ng",
+    "url": "https://www.nimart.ng",
     "sameAs": [
       "https://www.tiktok.com/@nimart.ng",
       "https://www.instagram.com/nimartng",
@@ -51,7 +51,7 @@ export default function CareersPage() {
       <SEO
         title="Careers at Nimart"
         description="Join Nimart – we're hiring marketers, social media experts, and developers. Work remotely and help connect Nigerians with trusted local services."
-        url="https://nimart.ng/careers"
+        url="https://www.nimart.ng/careers"
         schema={careersSchema}
       />
 

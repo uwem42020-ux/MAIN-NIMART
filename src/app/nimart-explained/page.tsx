@@ -8,11 +8,11 @@ const pageSchema = {
   "@type": "WebPage",
   "name": "What is Nimart? – Nigerian Service Marketplace",
   "description": "Nimart is a Nigerian online service marketplace connecting customers with verified professionals. It is not the NIMART healthcare programme.",
-  "url": "https://nimart.ng/nimart-explained",
+  "url": "https://www.nimart.ng/nimart-explained",
   "isPartOf": {
     "@type": "WebSite",
     "name": "Nimart",
-    "url": "https://nimart.ng"
+    "url": "https://www.nimart.ng"
   }
 };
 
@@ -23,7 +23,7 @@ export default function NimartExplainedPage() {
         title="What is Nimart? | Nigerian Service Marketplace"
         description="Nimart is Nigeria's trusted service marketplace – not the NIMART healthcare programme. Learn what Nimart does and how it connects you with verified professionals."
         keywords="Nimart, Nigerian service marketplace, Nimart explained, what is Nimart, Nimart vs NIMART"
-        url="https://nimart.ng/nimart-explained"
+        url="https://www.nimart.ng/nimart-explained"
         schema={pageSchema}
         breadcrumbs={[
           { label: 'Home', to: '/' },

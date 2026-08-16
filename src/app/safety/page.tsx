@@ -20,11 +20,11 @@ const pageSchema = {
   "@type": "WebPage",
   "name": "Safety Tips – Nimart",
   "description": "Stay safe while using Nimart, Nigeria's service marketplace. Read our safety guidelines for customers and providers.",
-  "url": "https://nimart.ng/safety",
+  "url": "https://www.nimart.ng/safety",
   "isPartOf": {
     "@type": "WebSite",
     "name": "Nimart",
-    "url": "https://nimart.ng"
+    "url": "https://www.nimart.ng"
   }
 };
 
@@ -35,7 +35,7 @@ export default function SafetyPage() {
         title="Safety Tips | Nimart"
         description="Stay safe while using Nimart. Tips for customers and providers."
         keywords="safety, Nimart safety, Nigeria marketplace safety, customer safety, provider safety"
-        url="https://nimart.ng/safety"
+        url="https://www.nimart.ng/safety"
         schema={pageSchema}
         breadcrumbs={[
           { label: 'Home', to: '/' },

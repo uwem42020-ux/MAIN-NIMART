@@ -14,14 +14,14 @@ export async function GET() {
     const feed = new Feed({
       title: 'Nimart Blog – Tips & Guides for Nigerian Services',
       description: 'Read the Nimart blog for tips on hiring trusted professionals, home services, auto repair, beauty, and more.',
-      id: 'https://nimart.ng/blog',
-      link: 'https://nimart.ng/blog',
+      id: 'https://www.nimart.ng/blog',
+      link: 'https://www.nimart.ng/blog',
       language: 'en-ng',
-      favicon: 'https://nimart.ng/favicon.ico',
+      favicon: 'https://www.nimart.ng/favicon.ico',
       copyright: `All rights reserved ${new Date().getFullYear()}, Nimart`,
       updated: new Date(),
       feedLinks: {
-        rss2: 'https://nimart.ng/rss.xml',
+        rss2: 'https://www.nimart.ng/rss.xml',
       },
       author: {
         name: 'Nimart Team',
@@ -32,8 +32,8 @@ export async function GET() {
     (posts || []).forEach((post: any) => {
       feed.addItem({
         title: post.title,
-        id: `https://nimart.ng/blog/${post.slug}`,
-        link: `https://nimart.ng/blog/${post.slug}`,
+        id: `https://www.nimart.ng/blog/${post.slug}`,
+        link: `https://www.nimart.ng/blog/${post.slug}`,
         description: post.excerpt || '',
         content: post.content || '',
         date: new Date(post.created_at),

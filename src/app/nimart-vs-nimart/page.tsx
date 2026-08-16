@@ -10,7 +10,7 @@ export const metadata: Metadata = {
     title: 'Nimart vs NIMART – What’s the Difference? | Nimart Nigeria',
     description:
       'Nimart is Nigeria’s trusted service marketplace. NIMART is a medical term. Here’s the difference between the two.',
-    url: 'https://nimart.ng/nimart-vs-nimart',
+    url: 'https://www.nimart.ng/nimart-vs-nimart',
     siteName: 'Nimart',
     images: ['/og-image.png'],
   },

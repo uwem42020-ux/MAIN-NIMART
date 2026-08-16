@@ -65,7 +65,7 @@ export async function generateMetadata({ searchParams }: SearchPageProps): Promi
     openGraph: {
       title,
       description,
-      url: 'https://nimart.ng/search',
+      url: 'https://www.nimart.ng/search',
       siteName: 'Nimart',
       images: ['/og-image.png'],
     },
@@ -83,7 +83,7 @@ function generateSearchSchema(providers: ProviderWithProfile[]) {
         '@type': 'LocalBusiness',
         name: p.business_name || p.profile?.full_name || 'Provider',
         description: p.description,
-        url: `https://nimart.ng/provider/${p.id}`,
+        url: `https://www.nimart.ng/provider/${p.id}`,
         image: p.profile?.avatar_url,
         aggregateRating: p.review_count ? {
           '@type': 'AggregateRating',

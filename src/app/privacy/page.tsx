@@ -8,11 +8,11 @@ const pageSchema = {
   "@type": "WebPage",
   "name": "Privacy Policy – Nimart",
   "description": "Learn how Nimart collects, uses, and protects your personal data. Compliant with Nigeria's NDPR.",
-  "url": "https://nimart.ng/privacy",
+  "url": "https://www.nimart.ng/privacy",
   "isPartOf": {
     "@type": "WebSite",
     "name": "Nimart",
-    "url": "https://nimart.ng"
+    "url": "https://www.nimart.ng"
   }
 };
 
@@ -23,7 +23,7 @@ export default function PrivacyPage() {
         title="Privacy Policy | Nimart"
         description="Learn how Nimart collects, uses, and protects your personal data. Compliant with Nigeria's NDPR."
         keywords="privacy, data protection, NDPR, personal data, Nimart privacy"
-        url="https://nimart.ng/privacy"
+        url="https://www.nimart.ng/privacy"
         schema={pageSchema}
         breadcrumbs={[
           { label: 'Home', to: '/' },

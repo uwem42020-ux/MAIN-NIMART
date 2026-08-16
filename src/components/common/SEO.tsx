@@ -19,13 +19,13 @@ export function SEO({
   description = "Connect with verified professionals across Nigeria. Book trusted services for home, auto, beauty, and more.",
   keywords = "Nigerian services, find mechanic Nigeria, hire hairdresser, book electrician Lagos, service marketplace Nigeria, local services, Nimart",
   image = "/og-image.png",
-  url = "https://nimart.ng",
+  url = "https://www.nimart.ng",
   type = "website",
   schema,
   breadcrumbs,
 }: SEOProps) {
   const fullTitle = title.includes('Nimart') ? title : `${title} | Nimart`;
-  const imageUrl = image.startsWith('http') ? image : `https://nimart.ng${image}`;
+  const imageUrl = image.startsWith('http') ? image : `https://www.nimart.ng${image}`;
 
   const schemas = schema
     ? Array.isArray(schema)
@@ -41,7 +41,7 @@ export function SEO({
         "@type": "ListItem",
         "position": index + 1,
         "name": item.label,
-        "item": item.to ? `https://nimart.ng${item.to}` : undefined,
+        "item": item.to ? `https://www.nimart.ng${item.to}` : undefined,
       })),
     });
   }

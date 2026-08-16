@@ -92,7 +92,7 @@ export default function BlogPost() {
     enabled: !!postAny?.category && !!postAny?.id,
   });
 
-  const shareUrl = `https://nimart.ng/blog/${slug}`;
+  const shareUrl = `https://www.nimart.ng/blog/${slug}`;
 
   const handleShare = () => {
     if (navigator.share) {
@@ -184,7 +184,7 @@ export default function BlogPost() {
     "@type": "Article",
     "headline": postAny.title,
     "description": postAny.excerpt || postAny.title,
-    "image": postAny.featured_image || "https://nimart.ng/og-image.png",
+    "image": postAny.featured_image || "https://www.nimart.ng/og-image.png",
     "datePublished": postAny.created_at,
     "dateModified": postAny.updated_at || postAny.created_at,
     "author": {
@@ -196,7 +196,7 @@ export default function BlogPost() {
       "name": "Nimart",
       "logo": {
         "@type": "ImageObject",
-        "url": "https://nimart.ng/logo.png"
+        "url": "https://www.nimart.ng/logo.png"
       }
     },
     "url": shareUrl,
@@ -210,8 +210,8 @@ export default function BlogPost() {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
     "itemListElement": [
-      { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://nimart.ng" },
-      { "@type": "ListItem", "position": 2, "name": "Blog", "item": "https://nimart.ng/blog" },
+      { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.nimart.ng" },
+      { "@type": "ListItem", "position": 2, "name": "Blog", "item": "https://www.nimart.ng/blog" },
       { "@type": "ListItem", "position": 3, "name": postAny.title }
     ]
   };

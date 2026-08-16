@@ -42,7 +42,7 @@ export async function generateMetadata({ params }: { params: Promise<{ tierSlug:
     openGraph: {
       title,
       description,
-      url: `https://nimart.ng/category/${tierSlug}`,
+      url: `https://www.nimart.ng/category/${tierSlug}`,
       siteName: 'Nimart',
       images: ['/og-image.png'],
     },

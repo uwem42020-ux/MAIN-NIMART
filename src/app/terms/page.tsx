@@ -8,11 +8,11 @@ const pageSchema = {
   "@type": "WebPage",
   "name": "Terms of Service – Nimart",
   "description": "Read the terms and conditions for using Nimart, Nigeria's service marketplace.",
-  "url": "https://nimart.ng/terms",
+  "url": "https://www.nimart.ng/terms",
   "isPartOf": {
     "@type": "WebSite",
     "name": "Nimart",
-    "url": "https://nimart.ng"
+    "url": "https://www.nimart.ng"
   }
 };
 
@@ -23,7 +23,7 @@ export default function TermsPage() {
         title="Terms of Service | Nimart"
         description="Read the terms and conditions for using Nimart, Nigeria's service marketplace."
         keywords="terms of service, Nimart terms, marketplace terms, Nigeria"
-        url="https://nimart.ng/terms"
+        url="https://www.nimart.ng/terms"
         schema={pageSchema}
         breadcrumbs={[
           { label: 'Home', to: '/' },
@@ -47,7 +47,7 @@ export default function TermsPage() {
             <h2 className="text-xl font-semibold mb-3">1. Introduction</h2>
             <p>
               Welcome to Nimart ("Company", "we", "our", "us"). By accessing or using our website located at{' '}
-              <Link href="/" className="text-primary-600 hover:underline">https://nimart.ng</Link>{' '}
+              <Link href="/" className="text-primary-600 hover:underline">https://www.nimart.ng</Link>{' '}
               (the "Platform"), you agree to be bound by these Terms of Service and our Privacy Policy. If you do not agree, please do not use the Platform.
             </p>
             <p className="mt-2">

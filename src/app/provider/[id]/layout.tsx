@@ -50,7 +50,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
     openGraph: {
       images: [meta.avatar],
     },
-    metadataBase: new URL('https://nimart.ng'),
+    metadataBase: new URL('https://www.nimart.ng'),
   };
 }
 

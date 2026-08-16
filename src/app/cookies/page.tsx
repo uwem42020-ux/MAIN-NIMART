@@ -8,11 +8,11 @@ const pageSchema = {
   "@type": "WebPage",
   "name": "Cookie Policy – Nimart",
   "description": "Learn about how Nimart uses cookies on its platform.",
-  "url": "https://nimart.ng/cookies",
+  "url": "https://www.nimart.ng/cookies",
   "isPartOf": {
     "@type": "WebSite",
     "name": "Nimart",
-    "url": "https://nimart.ng"
+    "url": "https://www.nimart.ng"
   }
 };
 
@@ -23,7 +23,7 @@ export default function CookiesPage() {
         title="Cookie Policy | Nimart"
         description="Learn about how Nimart uses cookies."
         keywords="cookies, cookie policy, Nimart"
-        url="https://nimart.ng/cookies"
+        url="https://www.nimart.ng/cookies"
         schema={pageSchema}
         breadcrumbs={[
           { label: 'Home', to: '/' },

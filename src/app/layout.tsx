@@ -7,7 +7,7 @@ import { GoogleOneTap } from '@/components/common/GoogleOneTap';
 export const metadata = {
   title: "Nimart - Nigeria's Trusted Service Marketplace",
   description: 'Connect with verified professionals across Nigeria. Book trusted services for home, auto, beauty, and more.',
-  metadataBase: new URL('https://nimart.ng'),
+  metadataBase: new URL('https://www.nimart.ng'),
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {

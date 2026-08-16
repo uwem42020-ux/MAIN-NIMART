@@ -161,7 +161,7 @@ export default function NotificationsPage() {
       <SEO
         title="Notifications | Nimart"
         description="View your notifications on Nimart."
-        url="https://nimart.ng/notifications"
+        url="https://www.nimart.ng/notifications"
       />
 
       <div className="max-w-3xl mx-auto px-4 py-8 min-h-[calc(100vh-4rem)]">

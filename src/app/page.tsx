@@ -12,7 +12,7 @@ export const metadata: Metadata = {
     title: "Nimart – Nigeria's Trusted Service Marketplace",
     description:
       'Connect with verified professionals across Nigeria. Book trusted services for home, auto, beauty, and more.',
-    url: 'https://nimart.ng',
+    url: 'https://www.nimart.ng',
     siteName: 'Nimart',
     images: ['/og-image.png'],
   },
@@ -31,8 +31,8 @@ const jsonLd = {
     {
       '@type': 'Organization',
       name: 'Nimart',
-      url: 'https://nimart.ng',
-      logo: 'https://nimart.ng/logo.png',
+      url: 'https://www.nimart.ng',
+      logo: 'https://www.nimart.ng/logo.png',
       description:
         "Nigeria's trusted marketplace connecting customers with verified service professionals.",
       sameAs: [
@@ -46,10 +46,10 @@ const jsonLd = {
     {
       '@type': 'WebSite',
       name: 'Nimart',
-      url: 'https://nimart.ng',
+      url: 'https://www.nimart.ng',
       potentialAction: {
         '@type': 'SearchAction',
-        target: 'https://nimart.ng/search?q={search_term_string}',
+        target: 'https://www.nimart.ng/search?q={search_term_string}',
         'query-input': 'required name=search_term_string',
       },
     },

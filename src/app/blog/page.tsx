@@ -16,7 +16,7 @@ const blogListSchema = {
   "@type": "Blog",
   "name": "Nimart Blog",
   "description": "Tips, guides, and stories about finding trusted services in Nigeria.",
-  "url": "https://nimart.ng/blog",
+  "url": "https://www.nimart.ng/blog",
 };
 
 export default function Blog() {
@@ -64,7 +64,7 @@ export default function Blog() {
       <SEO
         title="Nimart Blog – Tips & Guides for Nigerian Services"
         description="Read the Nimart blog for tips on hiring trusted professionals, home services, auto repair, beauty, and more."
-        url="https://nimart.ng/blog"
+        url="https://www.nimart.ng/blog"
         type="website"
         schema={blogListSchema}
       />

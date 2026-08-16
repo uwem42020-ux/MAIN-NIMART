@@ -17,7 +17,7 @@ export function providerNewBookingEmail(data: { serviceName: string; bookingDate
     <html><head><style>${emailStyles}</style></head><body>
       <div class="container">
         <div class="header">
-          <img src="https://nimart.ng/logo.png" alt="Nimart" style="height:36px; margin-bottom:8px;" />
+          <img src="https://www.nimart.ng/logo.png" alt="Nimart" style="height:36px; margin-bottom:8px;" />
           <h1>New Booking Request</h1>
         </div>
         <div class="body">
@@ -29,7 +29,7 @@ export function providerNewBookingEmail(data: { serviceName: string; bookingDate
             <p><strong>Time:</strong> ${data.bookingTime}</p>
             <p><strong>Location:</strong> ${data.location}</p>
           </div>
-          <a href="https://nimart.ng/provider/bookings" style="display: inline-block; background-color: #008751; color: #ffffff; text-decoration: none; padding: 12px 32px; border-radius: 6px; font-weight: 600;">View My Bookings</a>
+          <a href="https://www.nimart.ng/provider/bookings" style="display: inline-block; background-color: #008751; color: #ffffff; text-decoration: none; padding: 12px 32px; border-radius: 6px; font-weight: 600;">View My Bookings</a>
         </div>
         <div class="footer">
           <p>Need help? <a href="mailto:info@nimart.ng">Contact Support</a></p>
@@ -45,7 +45,7 @@ export function customerBookingConfirmationEmail(data: { providerName: string; s
     <html><head><style>${emailStyles}</style></head><body>
       <div class="container">
         <div class="header">
-          <img src="https://nimart.ng/logo.png" alt="Nimart" style="height:36px; margin-bottom:8px;" />
+          <img src="https://www.nimart.ng/logo.png" alt="Nimart" style="height:36px; margin-bottom:8px;" />
           <h1>Booking Submitted</h1>
         </div>
         <div class="body">
@@ -59,7 +59,7 @@ export function customerBookingConfirmationEmail(data: { providerName: string; s
             <p><strong>Location:</strong> ${data.location}</p>
           </div>
           <p>You can track your booking status anytime from your dashboard.</p>
-          <a href="https://nimart.ng/customer/bookings" style="display: inline-block; background-color: #008751; color: #ffffff; text-decoration: none; padding: 12px 32px; border-radius: 6px; font-weight: 600;">View My Bookings</a>
+          <a href="https://www.nimart.ng/customer/bookings" style="display: inline-block; background-color: #008751; color: #ffffff; text-decoration: none; padding: 12px 32px; border-radius: 6px; font-weight: 600;">View My Bookings</a>
         </div>
         <div class="footer">
           <p>Need help? <a href="mailto:info@nimart.ng">Contact Support</a></p>

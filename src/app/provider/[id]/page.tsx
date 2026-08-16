@@ -114,7 +114,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
       title,
       description,
       images: profile.avatar_url ? [profile.avatar_url] : ['/og-image.png'],
-      url: `https://nimart.ng/provider/${id}`,
+      url: `https://www.nimart.ng/provider/${id}`,
       type: 'profile',
     },
     twitter: {

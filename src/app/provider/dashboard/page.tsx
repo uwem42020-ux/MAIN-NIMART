@@ -230,13 +230,13 @@ export default function ProviderDashboard() {
   };
 
   const copyReferralLink = () => {
-    const link = `https://nimart.ng/auth/signup?role=provider&ref=${referralCode}`;
+    const link = `https://www.nimart.ng/auth/signup?role=provider&ref=${referralCode}`;
     navigator.clipboard.writeText(link);
     toast.success('Referral link copied!');
   };
 
   const shareReferralLink = () => {
-    const link = `https://nimart.ng/auth/signup?role=provider&ref=${referralCode}`;
+    const link = `https://www.nimart.ng/auth/signup?role=provider&ref=${referralCode}`;
     const text = `Join Nimart as a provider and get ${REFERRAL_BONUS} free Nicoins! Use my referral link: ${link}`;
     if (navigator.share) {
       navigator.share({ title: 'Join Nimart', text, url: link });

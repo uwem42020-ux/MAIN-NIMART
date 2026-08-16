@@ -36,7 +36,7 @@ export async function generateMetadata({ params }: { params: Promise<{ categoryS
     openGraph: {
       title,
       description,
-      url: `https://nimart.ng/services/${categorySlug}/in/${lgaId}`,
+      url: `https://www.nimart.ng/services/${categorySlug}/in/${lgaId}`,
       siteName: 'Nimart',
       images: ['/og-image.png'],
     },

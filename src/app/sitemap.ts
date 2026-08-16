@@ -3,7 +3,7 @@ import { MetadataRoute } from 'next';
 import { db } from '@/lib/supabase-any';
 import { TIERS } from '@/data/categories';
 
-const BASE_URL = 'https://nimart.ng';
+const BASE_URL = 'https://www.nimart.ng';
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Static pages

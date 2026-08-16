@@ -8,11 +8,11 @@ const pageSchema = {
   "@type": "WebPage",
   "name": "Help Center – Nimart",
   "description": "Find answers to common questions about Nimart, Nigeria's service marketplace. Contact support or browse FAQs.",
-  "url": "https://nimart.ng/help",
+  "url": "https://www.nimart.ng/help",
   "isPartOf": {
     "@type": "WebSite",
     "name": "Nimart",
-    "url": "https://nimart.ng"
+    "url": "https://www.nimart.ng"
   }
 };
 
@@ -31,7 +31,7 @@ export default function HelpPage() {
       <SEO
         title="Help Center | Nimart"
         description="Find answers to common questions or contact Nimart support."
-        url="https://nimart.ng/help"
+        url="https://www.nimart.ng/help"
         schema={pageSchema}
         breadcrumbs={[
           { label: 'Home', to: '/' },

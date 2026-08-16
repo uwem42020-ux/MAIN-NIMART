@@ -12,11 +12,11 @@ const pageSchema = {
   "@type": "WebPage",
   "name": "Report an Issue – Nimart",
   "description": "Report safety concerns, suspicious activity, or platform issues to the Nimart team.",
-  "url": "https://nimart.ng/report",
+  "url": "https://www.nimart.ng/report",
   "isPartOf": {
     "@type": "WebSite",
     "name": "Nimart",
-    "url": "https://nimart.ng"
+    "url": "https://www.nimart.ng"
   }
 };
 
@@ -51,7 +51,7 @@ export default function ReportPage() {
         title="Report an Issue | Nimart"
         description="Report safety concerns or issues on Nimart."
         keywords="report, issue, safety, Nimart"
-        url="https://nimart.ng/report"
+        url="https://www.nimart.ng/report"
         schema={pageSchema}
         breadcrumbs={[
           { label: 'Home', to: '/' },

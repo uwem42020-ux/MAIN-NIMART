@@ -22,7 +22,7 @@ export function Breadcrumbs({ items }: BreadcrumbsProps) {
       "@type": "ListItem",
       "position": index + 1,
       "name": item.label,
-      "item": item.to ? `https://nimart.ng${item.to}` : undefined,
+      "item": item.to ? `https://www.nimart.ng${item.to}` : undefined,
     })),
   };
 
