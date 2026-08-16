@@ -18,6 +18,12 @@ const nextConfig: NextConfig = {
         destination: '/search',
         permanent: true,
       },
+      {
+        source: '/:path*',
+        has: [{ type: 'host', value: 'www.nimart.ng' }],
+        destination: 'https://nimart.ng/:path*',
+        permanent: true,
+      },
     ];
   },
 };
