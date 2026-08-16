@@ -21,7 +21,7 @@ const nextConfig: NextConfig = {
       {
         source: '/:path*',
         has: [{ type: 'host', value: 'www.nimart.ng' }],
-        destination: 'https://nimart.ng/:path*',
+        destination: '/:path*',
         permanent: true,
       },
     ];
