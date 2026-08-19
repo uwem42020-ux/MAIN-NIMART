@@ -48,17 +48,11 @@ export function LocationDropdown({
   const [mounted, setMounted] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
 
-  // Ensure portal target exists (only on client)
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  // Floating UI — handles positioning, flipping, viewport awareness
-  const {
-    refs,
-    floatingStyles,
-    context,
-  } = useFloating({
+  const { refs, floatingStyles } = useFloating({
     elements: {
       reference: triggerRef?.current ?? null,
     },
@@ -70,16 +64,25 @@ export function LocationDropdown({
       size({
         padding: 8,
         apply({ availableHeight, elements }) {
-          // Constrain dropdown height to available viewport space
           Object.assign(elements.floating.style, {
             maxHeight: `${Math.max(200, availableHeight)}px`,
           });
         },
       }),
     ],
-    whileElementsMounted: autoUpdate, // Auto-updates on scroll/resize
+    whileElementsMounted: autoUpdate,
     open: true,
   });
+
+  // ── Lock body scroll on mobile when dropdown is open ──
+  useEffect(() => {
+    if (window.innerWidth < 640) {
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = '';
+      };
+    }
+  }, []);
 
   // Close on scroll outside the dropdown
   useEffect(() => {
@@ -162,7 +165,7 @@ export function LocationDropdown({
       <div
         ref={refs.setFloating}
         style={floatingStyles}
-        className="z-[99999] bg-white/95 backdrop-blur-md rounded-xl shadow-2xl border border-gray-200 overflow-hidden w-[288px] max-w-[calc(100vw-2rem)]"
+        className="z-[99999] bg-white/70 backdrop-blur-md rounded-xl shadow-2xl border border-gray-200 overflow-hidden w-[288px] max-w-[calc(100vw-2rem)]"
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
@@ -193,9 +196,7 @@ export function LocationDropdown({
               {preloadedStates.map((state) => (
                 <button
                   key={state.state_id}
-                  onClick={() =>
-                    handleStateClick(state.state_id.toString())
-                  }
+                  onClick={() => handleStateClick(state.state_id.toString())}
                   className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-green-50/80 transition-colors flex items-center justify-between"
                 >
                   {state.state_name}
@@ -224,7 +225,6 @@ export function LocationDropdown({
                 }
               </button>
 
-              {/* LGA Search (only shows when > 10 LGAs) */}
               {currentLgas.length > 10 && (
                 <div className="px-3 py-2 border-b border-gray-100">
                   <div className="relative">
@@ -242,9 +242,7 @@ export function LocationDropdown({
 
               {filteredLgas.length === 0 ? (
                 <p className="px-4 py-4 text-sm text-gray-500 text-center">
-                  {lgaSearch
-                    ? 'No LGAs match your search'
-                    : 'No LGAs found'}
+                  {lgaSearch ? 'No LGAs match your search' : 'No LGAs found'}
                 </p>
               ) : (
                 filteredLgas.map((lga) => (
