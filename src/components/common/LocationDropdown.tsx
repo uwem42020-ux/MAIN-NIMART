@@ -165,10 +165,10 @@ export function LocationDropdown({
       <div
         ref={refs.setFloating}
         style={floatingStyles}
-        className="z-[99999] bg-white/70 backdrop-blur-md rounded-xl shadow-2xl border border-gray-200 overflow-hidden w-[288px] max-w-[calc(100vw-2rem)]"
+        className="z-[99999] bg-white/70 backdrop-blur-md rounded-xl shadow-2xl border border-gray-200 overflow-hidden w-[288px] max-w-[calc(100vw-2rem)] flex flex-col"
       >
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+        {/* Header - fixed */}
+        <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 border-b border-gray-100">
           <h3 className="text-sm font-semibold text-gray-700">
             {showLgas ? 'Select LGA' : 'Select Location'}
           </h3>
@@ -181,11 +181,14 @@ export function LocationDropdown({
           </button>
         </div>
 
-        {/* Content */}
+        {/* Content - scrollable, takes remaining space */}
         <div
           ref={listRef}
-          className="overflow-y-auto"
-          style={{ maxHeight: 'calc(100vh - 120px)' }}
+          className="overflow-y-auto overscroll-contain"
+          style={{
+            maxHeight: 'min(70vh, 420px)',
+            WebkitOverflowScrolling: 'touch',
+          }}
         >
           {!showLgas ? (
             /* ── States List ── */
@@ -230,7 +233,7 @@ export function LocationDropdown({
               </button>
 
               {currentLgas.length > 10 && (
-                <div className="px-3 py-2 border-b border-gray-100">
+                <div className="px-3 py-2 border-b border-gray-100 sticky top-0 bg-white/90 backdrop-blur-sm z-10">
                   <div className="relative">
                     <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
                     <input
