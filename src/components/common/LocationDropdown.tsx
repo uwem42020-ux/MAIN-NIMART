@@ -182,7 +182,11 @@ export function LocationDropdown({
         </div>
 
         {/* Content */}
-        <div ref={listRef} className="overflow-y-auto">
+        <div
+          ref={listRef}
+          className="overflow-y-auto"
+          style={{ maxHeight: 'calc(100vh - 120px)' }}
+        >
           {!showLgas ? (
             /* ── States List ── */
             <div>
