@@ -5,6 +5,10 @@ import { TIERS } from '@/data/categories';
 
 const BASE_URL = 'https://www.nimart.ng';
 
+function slugify(str: string) {
+  return str.toLowerCase().replace(/\s+/g, '-');
+}
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Static pages
   const staticPages = [
@@ -22,6 +26,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${BASE_URL}/report`, priority: 0.4, changeFrequency: 'monthly' as const },
     { url: `${BASE_URL}/nimart-explained`, priority: 0.8, changeFrequency: 'monthly' as const },
     { url: `${BASE_URL}/about`, priority: 0.7, changeFrequency: 'monthly' as const },
+    { url: `${BASE_URL}/service-marketplace-nigeria`, priority: 0.9, changeFrequency: 'weekly' as const },
   ];
 
   // Provider pages
@@ -58,44 +63,84 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.6,
   }));
 
-  // Only service pages with actual providers — get providers then join profiles separately
-  const { data: activeProviders } = await db
-    .from('providers')
-    .select('id, selected_category_slug')
-    .eq('is_available', true)
-    .not('selected_category_slug', 'is', null);
+  // ── Fetch all available providers once ──
+  const { data: allProvidersData } = await db.rpc('get_search_providers');
+  const allProviders = Array.isArray(allProvidersData) ? (allProvidersData as any[]) : [];
 
-  if (activeProviders && (activeProviders as any[]).length > 0) {
-    const providerIds = (activeProviders as any[]).map((p: any) => p.id);
+  // Sets for deduplication
+  const stateSet = new Set<string>();
+  const categorySet = new Set<string>();
+  const categoryStateSet = new Set<string>();
+  const lgaSet = new Set<number>();
+  const serviceLocationSet = new Set<string>();
 
-    const { data: profiles } = await db
-      .from('profiles')
-      .select('id, lga_id')
-      .in('id', providerIds)
-      .not('lga_id', 'is', null);
+  allProviders.forEach((p) => {
+    const stateName = p.profile?.state_name;
+    const categorySlug = p.selected_category_slug;
+    const lgaId = p.profile?.lga_id;
 
-    const profileMap = new Map((profiles as any[])?.map((p: any) => [p.id, p.lga_id]) || []);
+    if (stateName) stateSet.add(stateName);
+    if (categorySlug) categorySet.add(categorySlug);
+    if (stateName && categorySlug) categoryStateSet.add(`${categorySlug}||${stateName}`);
+    if (lgaId) lgaSet.add(lgaId);
+    if (categorySlug && lgaId) serviceLocationSet.add(`${categorySlug}||${lgaId}`);
+  });
 
-    const seen = new Set<string>();
-    const serviceLocationUrls: MetadataRoute.Sitemap[number][] = [];
+  // State landing pages
+  const stateLandingUrls = [...stateSet].map((stateName) => ({
+    url: `${BASE_URL}/providers/${slugify(stateName)}`,
+    lastModified: new Date(),
+    changeFrequency: 'weekly' as const,
+    priority: 0.7,
+  }));
 
-    (activeProviders as any[]).forEach((p: any) => {
-      const lgaId = profileMap.get(p.id);
-      if (!lgaId) return;
-      const key = `${p.selected_category_slug}||${lgaId}`;
-      if (!seen.has(key)) {
-        seen.add(key);
-        serviceLocationUrls.push({
-          url: `${BASE_URL}/services/${p.selected_category_slug}/in/${lgaId}`,
-          lastModified: new Date(),
-          changeFrequency: 'weekly' as const,
-          priority: 0.5,
-        });
-      }
-    });
+  // Category landing pages
+  const categoryLandingUrls = [...categorySet].map((categorySlug) => ({
+    url: `${BASE_URL}/categories/${slugify(categorySlug)}`,
+    lastModified: new Date(),
+    changeFrequency: 'weekly' as const,
+    priority: 0.6,
+  }));
 
-    return [...staticPages, ...providerUrls, ...blogUrls, ...tierUrls, ...serviceLocationUrls];
-  }
+  // Category + State landing pages
+  const categoryStateUrls = [...categoryStateSet].map((key) => {
+    const [categorySlug, stateName] = key.split('||');
+    return {
+      url: `${BASE_URL}/categories/${slugify(categorySlug)}/${slugify(stateName)}`,
+      lastModified: new Date(),
+      changeFrequency: 'weekly' as const,
+      priority: 0.6,
+    };
+  });
 
-  return [...staticPages, ...providerUrls, ...blogUrls, ...tierUrls];
+  // LGA landing pages
+  const lgaLandingUrls = [...lgaSet].map((lgaId) => ({
+    url: `${BASE_URL}/lga/${lgaId}`,
+    lastModified: new Date(),
+    changeFrequency: 'weekly' as const,
+    priority: 0.6,
+  }));
+
+  // Service location pages
+  const serviceLocationUrls = [...serviceLocationSet].map((key) => {
+    const [categorySlug, lgaId] = key.split('||');
+    return {
+      url: `${BASE_URL}/services/${categorySlug}/in/${lgaId}`,
+      lastModified: new Date(),
+      changeFrequency: 'weekly' as const,
+      priority: 0.5,
+    };
+  });
+
+  return [
+    ...staticPages,
+    ...providerUrls,
+    ...blogUrls,
+    ...tierUrls,
+    ...stateLandingUrls,
+    ...categoryLandingUrls,
+    ...categoryStateUrls,
+    ...lgaLandingUrls,
+    ...serviceLocationUrls,
+  ];
 }
