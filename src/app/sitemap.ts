@@ -27,6 +27,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${BASE_URL}/nimart-explained`, priority: 0.8, changeFrequency: 'monthly' as const },
     { url: `${BASE_URL}/about`, priority: 0.7, changeFrequency: 'monthly' as const },
     { url: `${BASE_URL}/service-marketplace-nigeria`, priority: 0.9, changeFrequency: 'weekly' as const },
+    { url: `${BASE_URL}/top-custodial-service-provider-nigeria`, priority: 0.9, changeFrequency: 'weekly' as const },
+    { url: `${BASE_URL}/event-space-akwa-ibom`, priority: 0.9, changeFrequency: 'weekly' as const },
+    { url: `${BASE_URL}/book-haircut-home-service`, priority: 0.9, changeFrequency: 'weekly' as const },
+    { url: `${BASE_URL}/fridge-repair-near-me-open-now`, priority: 0.9, changeFrequency: 'weekly' as const },
   ];
 
   // Provider pages
