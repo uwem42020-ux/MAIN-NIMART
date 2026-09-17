@@ -1,0 +1,22 @@
+name: Submit URLs to IndexNow
+
+on:
+  schedule:
+    # Run every 6 hours (adjust as needed)
+    - cron: '0 */6 * * *'
+  workflow_dispatch: # Allows manual trigger from GitHub UI
+
+jobs:
+  submit-urls:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Submit sitemap URLs to IndexNow
+        uses: bojieyang/indexnow-action@v3
+        with:
+          sitemap-location: 'https://www.nimart.ng/sitemap.xml'
+          key: ${{ secrets.INDEXNOW_KEY }}
+          since: 1
+          since-unit: 'day'
