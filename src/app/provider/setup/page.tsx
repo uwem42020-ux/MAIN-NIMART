@@ -29,6 +29,7 @@ export default function ProviderSetup() {
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploading, setUploading] = useState(false);
+  const [uploadComplete, setUploadComplete] = useState(false);
 
   // Step 1: Business & Location
   const [businessName, setBusinessName] = useState('');
@@ -121,6 +122,7 @@ export default function ProviderSetup() {
         const pr = profileData as any;
         if (pr.avatar_url) {
           setAvatarPreview(pr.avatar_url);
+          setUploadComplete(true); // already uploaded previously
         }
         if (pr.lga_id) {
           setSelectedLgaId(pr.lga_id.toString());
@@ -186,7 +188,6 @@ export default function ProviderSetup() {
             }
           }
         } catch {
-          // If reverse geocode fails, still mark location as set with GPS coords
           toast.success('Location detected from GPS');
           setHasLocation(true);
         }
@@ -200,43 +201,65 @@ export default function ProviderSetup() {
     );
   }, [states]);
 
-  // ── Image upload ──
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // ── Avatar upload (accepts File, uploads immediately) ──
+  const uploadAvatar = async (file: File): Promise<string | null> => {
+    if (!user) return null;
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${user.id}/avatar-${Date.now()}.${fileExt}`;
+    const { error } = await db.storage
+      .from('avatars')
+      .upload(fileName, file, {
+        cacheControl: '3600',
+        upsert: true,
+      });
+    if (error) throw error;
+    const { data: urlData } = db.storage.from('avatars').getPublicUrl(fileName);
+    const avatarUrl = urlData.publicUrl;
+    await db.from('profiles').update({ avatar_url: avatarUrl }).eq('id', user.id);
+    return avatarUrl;
+  };
+
+  // ── File select: preview + immediate upload ──
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 5 * 1024 * 1024) {
       toast.error('Image must be under 5MB');
       return;
     }
+
+    // Show local preview immediately
     setAvatarFile(file);
     setAvatarPreview(URL.createObjectURL(file));
-  };
-
-  const uploadAvatar = async (): Promise<string | null> => {
-    if (!avatarFile || !user) return avatarPreview;
-    setUploading(true);
+    setUploadComplete(false);
     setUploadProgress(0);
+    setUploading(true);
+
+    // Smooth fake progress: 0 → 90 over ~2s while the real upload runs.
+    // Supabase's .upload() doesn't emit progress events, so we simulate
+    // a smooth ramp and snap to 100 on real success.
+    let pct = 0;
+    const ticker = setInterval(() => {
+      pct = Math.min(pct + 6, 90);
+      setUploadProgress(pct);
+    }, 120);
+
     try {
-      const fileExt = avatarFile.name.split('.').pop();
-      const fileName = `${user.id}/avatar-${Date.now()}.${fileExt}`;
-      const { error } = await db.storage
-        .from('avatars')
-        .upload(fileName, avatarFile, {
-          cacheControl: '3600',
-          upsert: true,
-        });
-      if (error) throw error;
-      const { data: urlData } = db.storage.from('avatars').getPublicUrl(fileName);
-      const avatarUrl = urlData.publicUrl;
-      await db.from('profiles').update({ avatar_url: avatarUrl }).eq('id', user.id);
+      await uploadAvatar(file);
+      clearInterval(ticker);
       setUploadProgress(100);
+      setUploadComplete(true);
       toast.success('Profile picture uploaded!');
-      return avatarUrl;
+      // Brief flash, then hide overlay; the green check badge persists
+      setTimeout(() => setUploading(false), 400);
     } catch (err: any) {
-      toast.error(err.message || 'Upload failed');
-      return null;
-    } finally {
+      clearInterval(ticker);
+      setUploadProgress(0);
       setUploading(false);
+      setUploadComplete(false);
+      setAvatarFile(null);
+      setAvatarPreview(null);
+      toast.error(err?.message || 'Upload failed');
     }
   };
 
@@ -259,7 +282,7 @@ export default function ProviderSetup() {
   // ── Step validation ──
   const canProceed = (): boolean => {
     switch (step) {
-      case 0: return !!avatarPreview;
+      case 0: return !!avatarPreview && uploadComplete;
       case 1: return businessName.trim().length > 0 && hasLocation;
       case 2: return !!selectedTier && !!selectedCategory && !!selectedSubcategoryId;
       case 3: return !!phoneNumber && !phoneError && !!streetAddress.trim() && termsAccepted;
@@ -268,9 +291,6 @@ export default function ProviderSetup() {
   };
 
   const handleNext = async () => {
-    if (step === 0 && avatarFile) {
-      await uploadAvatar();
-    }
     if (canProceed() && step < 3) {
       setStep(step + 1);
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -351,31 +371,61 @@ export default function ProviderSetup() {
 
             <div className="relative w-40 h-40 mx-auto mb-4">
               {avatarPreview ? (
-                <img src={avatarPreview} alt="Preview" className="w-full h-full object-cover rounded-full border-4 border-primary-100" />
+                <img
+                  src={avatarPreview}
+                  alt="Preview"
+                  className={`w-full h-full object-cover rounded-full border-4 ${
+                    uploadComplete ? 'border-green-500' : 'border-primary-100'
+                  }`}
+                />
               ) : (
                 <div className="w-full h-full rounded-full bg-gray-100 flex items-center justify-center border-4 border-dashed border-gray-300">
                   <Camera className="h-10 w-10 text-gray-400" />
                 </div>
               )}
+
+              {/* Uploading overlay — shows % + bar */}
               {uploading && (
-                <div className="absolute inset-0 rounded-full bg-black/50 flex flex-col items-center justify-center">
+                <div className="absolute inset-0 rounded-full bg-black/60 flex flex-col items-center justify-center">
                   <p className="text-white font-bold text-lg">{uploadProgress}%</p>
                   <div className="w-3/4 h-2 bg-white/30 rounded-full mt-2 overflow-hidden">
-                    <div className="h-full bg-white rounded-full transition-all" style={{ width: `${uploadProgress}%` }} />
+                    <div
+                      className="h-full bg-white rounded-full transition-all"
+                      style={{ width: `${uploadProgress}%` }}
+                    />
                   </div>
+                  <p className="text-white text-xs mt-1">Uploading…</p>
+                </div>
+              )}
+
+              {/* Success badge — persists after upload */}
+              {uploadComplete && !uploading && (
+                <div className="absolute bottom-0 right-0 w-10 h-10 rounded-full bg-green-500 border-4 border-white flex items-center justify-center shadow-lg">
+                  <Check className="h-5 w-5 text-white" strokeWidth={3} />
                 </div>
               )}
             </div>
 
+            {uploadComplete && !uploading && (
+              <p className="text-sm text-green-600 font-medium mb-3">
+                ✓ Profile picture uploaded
+              </p>
+            )}
+
             <label className="inline-flex items-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-xl hover:bg-primary-700 cursor-pointer transition font-medium">
               <Upload className="h-5 w-5" />
               {avatarPreview ? 'Change Photo' : 'Upload Photo'}
-              <input type="file" accept="image/*" onChange={handleFileSelect} className="hidden" />
+              <input type="file" accept="image/*" onChange={handleFileSelect} className="hidden" disabled={uploading} />
             </label>
             {avatarPreview && !uploading && (
               <button
                 type="button"
-                onClick={() => { setAvatarFile(null); setAvatarPreview(null); }}
+                onClick={() => {
+                  setAvatarFile(null);
+                  setAvatarPreview(null);
+                  setUploadComplete(false);
+                  setUploadProgress(0);
+                }}
                 className="block mx-auto mt-2 text-sm text-red-500 hover:underline"
               >
                 Remove
@@ -594,7 +644,7 @@ export default function ProviderSetup() {
           )}
 
           {step < 3 ? (
-            <button type="button" onClick={handleNext} disabled={!canProceed()} className="flex items-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-xl hover:bg-primary-700 disabled:opacity-50 font-medium">
+            <button type="button" onClick={handleNext} disabled={!canProceed() || uploading} className="flex items-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-xl hover:bg-primary-700 disabled:opacity-50 font-medium">
               Continue <ChevronRight className="h-5 w-5" />
             </button>
           ) : (
