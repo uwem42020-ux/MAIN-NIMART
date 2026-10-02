@@ -56,6 +56,9 @@ function SignUpContent() {
   const [referralCode, setReferralCode] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Locked at signup when ?role=provider or ?role=customer — can be changed on Step 3
+  const [roleLocked, setRoleLocked] = useState(false);
+
   const emailInputRef = useRef<HTMLInputElement>(null);
   const otpInputRef = useRef<HTMLInputElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
@@ -65,10 +68,16 @@ function SignUpContent() {
     document.querySelector('.signup-container')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
   };
 
+  // Read role + referral from URL params
   useEffect(() => {
     const roleParam = searchParams.get('role');
-    if (roleParam === 'provider') setRole('provider');
-    else if (roleParam === 'customer') setRole('customer');
+    if (roleParam === 'provider') {
+      setRole('provider');
+      setRoleLocked(true);
+    } else if (roleParam === 'customer') {
+      setRole('customer');
+      setRoleLocked(true);
+    }
     const refParam = searchParams.get('ref');
     if (refParam) setReferralCode(refParam.trim().toUpperCase());
   }, [searchParams]);
@@ -196,6 +205,7 @@ function SignUpContent() {
   }
 
   const steps = ['email', 'otp', 'profile'] as Step[];
+  const isProviderFlow = role === 'provider';
 
   return (
     <div className="relative min-h-screen bg-gradient-to-br from-green-50 via-white to-emerald-50 flex flex-col">
@@ -239,8 +249,23 @@ function SignUpContent() {
             {/* Step 1: Email */}
             {step === 'email' && (
               <>
-                <h2 className="text-2xl font-bold text-gray-900 text-center mb-2">Create your account</h2>
-                <p className="text-sm text-gray-500 text-center mb-6">Join Nigeria's trusted service marketplace</p>
+                {isProviderFlow ? (
+                  <>
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary-100 text-primary-700 text-xs font-bold mb-3 mx-auto block w-fit">
+                      <Briefcase className="h-3.5 w-3.5" />
+                      PROVIDER SIGNUP
+                    </div>
+                    <h2 className="text-2xl font-bold text-gray-900 text-center mb-2">Become a Nimart Provider</h2>
+                    <p className="text-sm text-gray-500 text-center mb-6">
+                      Get discovered by customers near you. Free to join, no commission.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <h2 className="text-2xl font-bold text-gray-900 text-center mb-2">Create your account</h2>
+                    <p className="text-sm text-gray-500 text-center mb-6">Join Nigeria's trusted service marketplace</p>
+                  </>
+                )}
 
                 <button
                   onClick={handleGoogleSignIn}
@@ -281,7 +306,7 @@ function SignUpContent() {
             {step === 'otp' && (
               <form onSubmit={verifyOTP} className="space-y-5">
                 <h2 className="text-2xl font-bold text-gray-900 text-center mb-2">Check your email</h2>
-                <p className="text-sm text-gray-500 text-center mb-6">We sent an 8‑digit code to <span className="font-medium text-gray-700">{email}</span></p>
+                <p className="text-sm text-gray-500 text-center mb-6">We sent an 8-digit code to <span className="font-medium text-gray-700">{email}</span></p>
                 <div>
                   <input
                     ref={otpInputRef}
@@ -331,8 +356,22 @@ function SignUpContent() {
             {/* Step 3: Profile */}
             {step === 'profile' && (
               <form onSubmit={completeProfile} className="space-y-5">
-                <h2 className="text-2xl font-bold text-gray-900 text-center mb-2">Complete your profile</h2>
-                <p className="text-sm text-gray-500 text-center mb-6">Just a few more details</p>
+                {isProviderFlow ? (
+                  <>
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary-100 text-primary-700 text-xs font-bold mb-3 mx-auto block w-fit">
+                      <Briefcase className="h-3.5 w-3.5" />
+                      PROVIDER ACCOUNT
+                    </div>
+                    <h2 className="text-2xl font-bold text-gray-900 text-center mb-2">Almost there</h2>
+                    <p className="text-sm text-gray-500 text-center mb-6">Just a few more details to set up your provider account</p>
+                  </>
+                ) : (
+                  <>
+                    <h2 className="text-2xl font-bold text-gray-900 text-center mb-2">Complete your profile</h2>
+                    <p className="text-sm text-gray-500 text-center mb-6">Just a few more details</p>
+                  </>
+                )}
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
                   <div className="relative">
@@ -340,22 +379,46 @@ function SignUpContent() {
                     <input ref={nameInputRef} type="text" required value={fullName} onChange={(e) => setFullName(e.target.value)} className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:bg-white transition" placeholder="John Doe" />
                   </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Referral Code (optional)</label>
-                  <input type="text" value={referralCode} onChange={(e) => setReferralCode(e.target.value.toUpperCase())} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:bg-white transition" placeholder="Enter referral code" maxLength={12} />
-                  <p className="text-xs text-gray-500 mt-1">Both you and the referrer earn {REFERRAL_BONUS} Nicoin after your first completed booking.</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-3">I want to...</label>
-                  <div className="grid grid-cols-2 gap-3">
-                    <button type="button" onClick={() => setRole('customer')} className={`p-4 border-2 rounded-2xl flex flex-col items-center transition-all ${role === 'customer' ? 'border-primary-500 bg-primary-50 text-primary-700 shadow-md scale-[1.02]' : 'border-gray-200 bg-white hover:border-gray-300'}`}>
-                      <User className="h-8 w-8 mb-2" /><span className="font-semibold text-sm">Find services</span><span className="text-xs text-gray-500 mt-1">I'm a customer</span>
-                    </button>
-                    <button type="button" onClick={() => setRole('provider')} className={`p-4 border-2 rounded-2xl flex flex-col items-center transition-all ${role === 'provider' ? 'border-primary-500 bg-primary-50 text-primary-700 shadow-md scale-[1.02]' : 'border-gray-200 bg-white hover:border-gray-300'}`}>
-                      <Briefcase className="h-8 w-8 mb-2" /><span className="font-semibold text-sm">Offer services</span><span className="text-xs text-gray-500 mt-1">I'm a provider</span>
+
+                {isProviderFlow && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Referral Code (optional)</label>
+                    <input type="text" value={referralCode} onChange={(e) => setReferralCode(e.target.value.toUpperCase())} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:bg-white transition" placeholder="Enter referral code" maxLength={12} />
+                    <p className="text-xs text-gray-500 mt-1">Both you and the referrer earn {REFERRAL_BONUS} Nicoin after your first completed booking.</p>
+                  </div>
+                )}
+
+                {/* Role selector — only shown when role wasn't locked via URL */}
+                {!roleLocked && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-3">I want to...</label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button type="button" onClick={() => setRole('customer')} className={`p-4 border-2 rounded-2xl flex flex-col items-center transition-all ${role === 'customer' ? 'border-primary-500 bg-primary-50 text-primary-700 shadow-md scale-[1.02]' : 'border-gray-200 bg-white hover:border-gray-300'}`}>
+                        <User className="h-8 w-8 mb-2" /><span className="font-semibold text-sm">Find services</span><span className="text-xs text-gray-500 mt-1">I'm a customer</span>
+                      </button>
+                      <button type="button" onClick={() => setRole('provider')} className={`p-4 border-2 rounded-2xl flex flex-col items-center transition-all ${role === 'provider' ? 'border-primary-500 bg-primary-50 text-primary-700 shadow-md scale-[1.02]' : 'border-gray-200 bg-white hover:border-gray-300'}`}>
+                        <Briefcase className="h-8 w-8 mb-2" /><span className="font-semibold text-sm">Offer services</span><span className="text-xs text-gray-500 mt-1">I'm a provider</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {roleLocked && (
+                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-200">
+                    <div className="flex items-center gap-2 text-sm text-gray-700">
+                      {isProviderFlow ? <Briefcase className="h-4 w-4 text-primary-600" /> : <User className="h-4 w-4 text-primary-600" />}
+                      <span className="font-medium">{isProviderFlow ? "You're signing up as a Provider" : "You're signing up as a Customer"}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setRoleLocked(false)}
+                      className="text-xs text-primary-600 hover:underline font-semibold"
+                    >
+                      Change
                     </button>
                   </div>
-                </div>
+                )}
+
                 <button type="submit" disabled={loading} className="w-full bg-primary-600 text-white py-3 rounded-xl hover:bg-primary-700 disabled:opacity-50 transition font-semibold flex items-center justify-center gap-2 shadow-lg shadow-primary-600/20">
                   <CheckCircle className="h-5 w-5" />Complete Sign Up
                 </button>
