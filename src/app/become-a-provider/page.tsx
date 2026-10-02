@@ -93,22 +93,7 @@ const CATEGORIES = [
 
 export default function BecomeAProviderPage() {
   return (
-    <div className="min-h-screen bg-white">
-      {/* ── NAV ── */}
-      <nav className="border-b border-gray-100 bg-white/80 backdrop-blur-sm sticky top-0 z-40">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
-          <Link href="/" className="flex items-center">
-            <img src="/logo.png" alt="Nimart" className="h-7" />
-          </Link>
-          <Link
-            href="/auth/signin"
-            className="text-sm font-medium text-gray-600 hover:text-primary-600"
-          >
-            Sign in
-          </Link>
-        </div>
-      </nav>
-
+    <div className="bg-white">
       {/* ── HERO ── */}
       <section className="relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-primary-50 via-white to-emerald-50" />
@@ -265,7 +250,7 @@ export default function BecomeAProviderPage() {
                   className="bg-white rounded-2xl border border-gray-200 p-6 hover:border-primary-200 hover:shadow-md transition-all"
                 >
                   <div className="w-11 h-11 rounded-xl bg-primary-100 flex items-center justify-center mb-4">
-                    <Icon className="h-5.5 w-5.5 text-primary-600" />
+                    <Icon className="h-5 w-5 text-primary-600" />
                   </div>
                   <h3 className="font-bold text-gray-900 mb-2">{b.title}</h3>
                   <p className="text-sm text-gray-600 leading-relaxed">
@@ -278,7 +263,7 @@ export default function BecomeAProviderPage() {
         </div>
       </section>
 
-      {/* ── SOCIAL PROOF / TESTIMONIAL STYLE ── */}
+      {/* ── SOCIAL PROOF ── */}
       <section className="py-16 bg-white">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 text-center">
           <div className="inline-flex items-center gap-2 mb-4">
@@ -358,24 +343,6 @@ export default function BecomeAProviderPage() {
           </p>
         </div>
       </section>
-
-      {/* ── FOOTER MINI ── */}
-      <footer className="py-8 bg-white border-t border-gray-100 text-center">
-        <p className="text-sm text-gray-500">
-          © {new Date().getFullYear()} Nimart ·{' '}
-          <Link href="/" className="hover:text-primary-600">
-            Home
-          </Link>{' '}
-          ·{' '}
-          <Link href="/terms" className="hover:text-primary-600">
-            Terms
-          </Link>{' '}
-          ·{' '}
-          <Link href="/privacy" className="hover:text-primary-600">
-            Privacy
-          </Link>
-        </p>
-      </footer>
     </div>
   );
 }
