@@ -1,40 +1,47 @@
 // src/app/cookies/page.tsx
 import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
-import { SEO } from '@/components/common/SEO';
+import type { Metadata } from 'next';
+import { buildMetadata } from '@/lib/seo';
+
+export const metadata: Metadata = buildMetadata({
+  title: 'Cookie Policy',
+  description:
+    'Learn about how Nimart uses cookies on its platform.',
+  path: '/cookies',
+});
 
 const pageSchema = {
-  "@context": "https://schema.org",
-  "@type": "WebPage",
-  "name": "Cookie Policy – Nimart",
-  "description": "Learn about how Nimart uses cookies on its platform.",
-  "url": "https://www.nimart.ng/cookies",
-  "isPartOf": {
-    "@type": "WebSite",
-    "name": "Nimart",
-    "url": "https://www.nimart.ng"
-  }
+  '@context': 'https://schema.org',
+  '@type': 'WebPage',
+  name: 'Cookie Policy – Nimart',
+  description: 'Learn about how Nimart uses cookies on its platform.',
+  url: 'https://www.nimart.ng/cookies',
+  isPartOf: {
+    '@type': 'WebSite',
+    name: 'Nimart',
+    url: 'https://www.nimart.ng',
+  },
+  breadcrumb: {
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://www.nimart.ng' },
+      { '@type': 'ListItem', position: 2, name: 'Cookies', item: 'https://www.nimart.ng/cookies' },
+    ],
+  },
 };
 
 export default function CookiesPage() {
   return (
     <>
-      <SEO
-        title="Cookie Policy | Nimart"
-        description="Learn about how Nimart uses cookies."
-        keywords="cookies, cookie policy, Nimart"
-        url="https://www.nimart.ng/cookies"
-        schema={pageSchema}
-        breadcrumbs={[
-          { label: 'Home', to: '/' },
-          { label: 'Cookies' }
-        ]}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(pageSchema) }}
       />
-
       <div className="max-w-4xl mx-auto px-4 py-12">
         <h1 className="text-3xl font-bold mb-6">Cookie Policy</h1>
         <p className="text-gray-600 mb-4">
-          Last updated: {new Date().toLocaleDateString('en-NG', { year: 'numeric', month: 'long', day: 'numeric' })}
+          Last updated: October 4, 2026
         </p>
 
         <div className="space-y-6 text-gray-700">
@@ -82,7 +89,7 @@ export default function CookiesPage() {
           </section>
         </div>
 
-        {/* Cross‑links */}
+        {/* Cross-links */}
         <div className="mt-12 border-t pt-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-3">More about Nimart</h2>
           <ul className="space-y-2 text-sm text-gray-600">

@@ -5,7 +5,6 @@ import { useState, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { db } from '@/lib/supabase-any';
-import { SEO } from '@/components/common/SEO';
 import { NimartSpinner } from '@/components/common/NimartSpinner';
 import { Plus, Edit, Trash2, Save, X, Eye, EyeOff, Image, Upload, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -191,7 +190,6 @@ export default function AdminBlog() {
 
   return (
     <>
-      <SEO title="Manage Blog - Admin" />
       <div className="max-w-6xl mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-3xl font-bold text-gray-900">Blog Posts</h1>

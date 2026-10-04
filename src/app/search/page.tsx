@@ -1,9 +1,10 @@
-// app/search/page.tsx
+// src/app/search/page.tsx
 import { Metadata } from 'next';
 import { createServerSupabase } from '@/lib/supabase-server';
 import { fetchSearchProviders } from '@/lib/serverQueries';
 import { SearchClient } from './SearchClient';
 import type { ProviderWithProfile } from '@/components/provider/ProviderCardPortrait';
+import { buildMetadata } from '@/lib/seo';
 
 interface SearchPageProps {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
@@ -39,7 +40,7 @@ export async function generateMetadata({ searchParams }: SearchPageProps): Promi
   const state = (params.state as string) || '';
   const lga = (params.lga as string) || '';
 
-  let title = 'Find Trusted Service Providers in Nigeria | Nimart';
+  let title = 'Find Trusted Service Providers in Nigeria';
   let description = 'Browse verified professionals across Nigeria. Search by service, location, and ratings.';
 
   if (keyword || category || lga || state) {
@@ -54,22 +55,17 @@ export async function generateMetadata({ searchParams }: SearchPageProps): Promi
       parts.push(stateName);
     }
     if (parts.length > 0) {
-      title = `${parts.join(' in ')} – Hire Trusted Pros | Nimart`;
+      title = `${parts.join(' in ')} - Hire Trusted Pros`;
       description = `Find ${parts.join(' in ')}. Verified professionals, real reviews, and instant booking on Nimart.`;
     }
   }
 
-  return {
+  return buildMetadata({
     title,
     description,
-    openGraph: {
-      title,
-      description,
-      url: 'https://www.nimart.ng/search',
-      siteName: 'Nimart',
-      images: ['/og-image.png'],
-    },
-  };
+    path: '/search',
+    noindex: true,
+  });
 }
 
 function generateSearchSchema(providers: ProviderWithProfile[]) {

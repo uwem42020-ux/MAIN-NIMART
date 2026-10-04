@@ -1,9 +1,11 @@
 // src/app/providers/[state]/page.tsx
 import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
+import { cache } from 'react';
 import { db } from '@/lib/supabase-any';
 import type { ProviderWithProfile } from '@/components/provider/ProviderCardPortrait';
 import StateLandingClient from './StateLandingClient';
+import { buildMetadata } from '@/lib/seo';
 
 interface StatePageProps {
   params: Promise<{ state: string }>;
@@ -36,66 +38,20 @@ function mapProvider(raw: any): ProviderWithProfile {
   };
 }
 
+// cache() ensures this runs only ONCE per request even if called from
+// both generateMetadata and the page component. Fixes the 5xx errors.
+const getProviders = cache(async () => {
+  const { data, error } = await db.rpc('get_search_providers');
+  if (error) return { data: [], error };
+  return { data: Array.isArray(data) ? data : [], error: null };
+});
+
 export async function generateMetadata({ params }: StatePageProps): Promise<Metadata> {
   const { state: stateSlug } = await params;
+  const { data: allProviders } = await getProviders();
 
-  const { data: allStates } = await db
-    .from('lga_centers')
-    .select('state_name, lga_id')
-    .not('state_name', 'is', null);
-
-  const distinctStateNames = [...new Set((allStates as any[])?.map((s) => s.state_name))];
-  const stateName = distinctStateNames.find((s) => slugify(s) === stateSlug.toLowerCase());
-
-  if (!stateName) {
-    return {
-      title: 'State Not Found | Nimart',
-      description: 'The state you are looking for is not available on Nimart.',
-    };
-  }
-
-  // Fetch all providers once
-  const { data: providersData } = await db.rpc('get_search_providers');
-  const allProviders = Array.isArray(providersData) ? providersData : [];
-  const stateProviders = allProviders.filter((p: any) => p.profile?.state_name === stateName);
-
-  const title = `Find Verified Service Providers in ${stateName} | Nimart`;
-  const description = `Browse ${stateProviders.length} trusted service providers in ${stateName}, Nigeria. Compare ratings, read reviews, and book services like plumbing, electrical, beauty, and more on Nimart.`;
-
-  return {
-    title,
-    description,
-    openGraph: {
-      title,
-      description,
-      url: `https://www.nimart.ng/providers/${stateSlug}`,
-      siteName: 'Nimart',
-      images: ['/og-image.png'],
-    },
-    twitter: {
-      card: 'summary_large_image',
-      title,
-      description,
-      images: ['/og-image.png'],
-    },
-  };
-}
-
-export default async function StateLandingPage({ params }: StatePageProps) {
-  const { state: stateSlug } = await params;
-
-  // Get all states and their providers in one go
-  const { data: providersData, error } = await db.rpc('get_search_providers');
-  if (error) {
-    console.error('Failed to fetch providers for state page:', error);
-    return notFound();
-  }
-
-  const allProviders = Array.isArray(providersData) ? (providersData as any[]) : [];
-
-  // Build state map
   const stateMap = new Map<string, any[]>();
-  allProviders.forEach((p) => {
+  allProviders.forEach((p: any) => {
     const sName = p.profile?.state_name;
     if (sName) {
       if (!stateMap.has(sName)) stateMap.set(sName, []);
@@ -106,22 +62,53 @@ export default async function StateLandingPage({ params }: StatePageProps) {
   const stateName = [...stateMap.keys()].find((s) => slugify(s) === stateSlug.toLowerCase());
 
   if (!stateName) {
-    return notFound();
+    return {
+      title: 'State Not Found',
+      robots: { index: false, follow: false },
+    };
   }
 
   const stateProviders = stateMap.get(stateName) || [];
 
-  // Map providers for client
+  return buildMetadata({
+    title: `Find Verified Service Providers in ${stateName} | Nimart`,
+    description: `Browse ${stateProviders.length} trusted service providers in ${stateName}, Nigeria. Compare ratings, read reviews, and book services like plumbing, electrical, beauty, and more on Nimart.`,
+    path: `/providers/${stateSlug}`,
+  });
+}
+
+export default async function StateLandingPage({ params }: StatePageProps) {
+  const { state: stateSlug } = await params;
+  const { data: allProviders, error } = await getProviders();
+
+  if (error) {
+    console.error('Failed to fetch providers for state page:', error);
+    return notFound();
+  }
+
+  const stateMap = new Map<string, any[]>();
+  allProviders.forEach((p: any) => {
+    const sName = p.profile?.state_name;
+    if (sName) {
+      if (!stateMap.has(sName)) stateMap.set(sName, []);
+      stateMap.get(sName)!.push(p);
+    }
+  });
+
+  const stateName = [...stateMap.keys()].find((s) => slugify(s) === stateSlug.toLowerCase());
+  if (!stateName) return notFound();
+
+  const stateProviders = stateMap.get(stateName) || [];
   const mappedProviders = stateProviders.map(mapProvider);
 
-  // Build all states with counts for cross-linking
-  const allStates = [...stateMap.entries()].map(([name, providers]) => ({
-    name,
-    slug: slugify(name),
-    count: providers.length,
-  })).sort((a, b) => a.name.localeCompare(b.name));
+  const allStates = [...stateMap.entries()]
+    .map(([name, providers]) => ({
+      name,
+      slug: slugify(name),
+      count: providers.length,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 
-  // JSON-LD
   const jsonLd = {
     '@context': 'https://schema.org',
     '@graph': [

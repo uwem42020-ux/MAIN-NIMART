@@ -1,29 +1,16 @@
-// app/page.tsx
+// src/app/page.tsx
 import { Suspense } from 'react';
 import { HomeClient } from './HomeClient';
 import { fetchInitialProviders, fetchPopularCombos, fetchTopProviders } from '@/lib/serverQueries';
 import type { Metadata } from 'next';
+import { buildMetadata } from '@/lib/seo';
 
-export const metadata: Metadata = {
-  title: "Nimart – Nigeria's Trusted Service Marketplace",
+export const metadata: Metadata = buildMetadata({
+  title: "Nimart - Nigeria's Trusted Service Marketplace",
   description:
     'Connect with verified professionals across Nigeria. Book trusted services for home, auto, beauty, and more.',
-  openGraph: {
-    title: "Nimart – Nigeria's Trusted Service Marketplace",
-    description:
-      'Connect with verified professionals across Nigeria. Book trusted services for home, auto, beauty, and more.',
-    url: 'https://www.nimart.ng',
-    siteName: 'Nimart',
-    images: ['/og-image.png'],
-  },
-  twitter: {
-    card: 'summary_large_image',
-    title: "Nimart – Nigeria's Trusted Service Marketplace",
-    description:
-      'Connect with verified professionals across Nigeria. Book trusted services for home, auto, beauty, and more.',
-    images: ['/og-image.png'],
-  },
-};
+  path: '/',
+});
 
 const jsonLd = {
   '@context': 'https://schema.org',

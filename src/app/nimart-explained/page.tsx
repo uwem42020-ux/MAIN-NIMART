@@ -1,36 +1,49 @@
 // src/app/nimart-explained/page.tsx
 import Link from 'next/link';
 import { ArrowRight, Info, CheckCircle } from 'lucide-react';
-import { SEO } from '@/components/common/SEO';
+import type { Metadata } from 'next';
+import { buildMetadata } from '@/lib/seo';
+
+export const metadata: Metadata = buildMetadata({
+  title: 'What is Nimart?',
+  description:
+    "Nimart is Nigeria's trusted service marketplace – not the NIMART healthcare programme. Learn what Nimart does and how it connects you with verified professionals.",
+  path: '/nimart-explained',
+});
 
 const pageSchema = {
-  "@context": "https://schema.org",
-  "@type": "WebPage",
-  "name": "What is Nimart? – Nigerian Service Marketplace",
-  "description": "Nimart is a Nigerian online service marketplace connecting customers with verified professionals. It is not the NIMART healthcare programme.",
-  "url": "https://www.nimart.ng/nimart-explained",
-  "isPartOf": {
-    "@type": "WebSite",
-    "name": "Nimart",
-    "url": "https://www.nimart.ng"
-  }
+  '@context': 'https://schema.org',
+  '@type': 'WebPage',
+  name: 'What is Nimart? – Nigerian Service Marketplace',
+  description:
+    'Nimart is a Nigerian online service marketplace connecting customers with verified professionals. It is not the NIMART healthcare programme.',
+  url: 'https://www.nimart.ng/nimart-explained',
+  isPartOf: {
+    '@type': 'WebSite',
+    name: 'Nimart',
+    url: 'https://www.nimart.ng',
+  },
+  breadcrumb: {
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://www.nimart.ng' },
+      {
+        '@type': 'ListItem',
+        position: 2,
+        name: 'What is Nimart?',
+        item: 'https://www.nimart.ng/nimart-explained',
+      },
+    ],
+  },
 };
 
 export default function NimartExplainedPage() {
   return (
     <>
-      <SEO
-        title="What is Nimart? | Nigerian Service Marketplace"
-        description="Nimart is Nigeria's trusted service marketplace – not the NIMART healthcare programme. Learn what Nimart does and how it connects you with verified professionals."
-        keywords="Nimart, Nigerian service marketplace, Nimart explained, what is Nimart, Nimart vs NIMART"
-        url="https://www.nimart.ng/nimart-explained"
-        schema={pageSchema}
-        breadcrumbs={[
-          { label: 'Home', to: '/' },
-          { label: 'What is Nimart?' }
-        ]}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(pageSchema) }}
       />
-
       <div className="max-w-4xl mx-auto px-4 py-12">
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 sm:p-10">
           <div className="flex items-center gap-3 mb-6">

@@ -1,44 +1,51 @@
 // src/app/help/page.tsx
 import Link from 'next/link';
 import { Mail, Phone, HelpCircle, BookOpen, Shield, CreditCard } from 'lucide-react';
-import { SEO } from '@/components/common/SEO';
+import type { Metadata } from 'next';
+import { buildMetadata } from '@/lib/seo';
+
+export const metadata: Metadata = buildMetadata({
+  title: 'Help Center',
+  description:
+    "Find answers to common questions about Nimart, Nigeria's service marketplace. Contact support or browse FAQs.",
+  path: '/help',
+});
+
+const faqs = [
+  { q: 'How do I book a service?', a: 'Search for a provider, visit their profile, and click "Book Now". Fill in the details and submit. The provider will confirm your booking.' },
+  { q: 'How do I become a Provider?', a: 'Sign up for an account, select "Offer Services", and complete the setup process. You will need to provide your location, business details, and portfolio images.' },
+  { q: 'Is Nimart free?', a: 'Yes, creating an account and browsing is free. Providers may purchase optional boosts to increase visibility. Transaction fees may apply in the future.' },
+  { q: 'How do I reset my password?', a: 'On the sign‑in page, click "Forgot password?" and follow the instructions sent to your email.' },
+  { q: 'How do I contact a Provider?', a: 'You can use the "Message" button on their profile to start an in‑app chat.' },
+  { q: 'What if a Provider cancels my booking?', a: 'You will be notified. You can search for another provider. No payment is processed until the service is confirmed.' },
+];
 
 const pageSchema = {
-  "@context": "https://schema.org",
-  "@type": "WebPage",
-  "name": "Help Center – Nimart",
-  "description": "Find answers to common questions about Nimart, Nigeria's service marketplace. Contact support or browse FAQs.",
-  "url": "https://www.nimart.ng/help",
-  "isPartOf": {
-    "@type": "WebSite",
-    "name": "Nimart",
-    "url": "https://www.nimart.ng"
-  }
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  mainEntity: faqs.map((f) => ({
+    '@type': 'Question',
+    name: f.q,
+    acceptedAnswer: {
+      '@type': 'Answer',
+      text: f.a,
+    },
+  })),
+  url: 'https://www.nimart.ng/help',
+  isPartOf: {
+    '@type': 'WebSite',
+    name: 'Nimart',
+    url: 'https://www.nimart.ng',
+  },
 };
 
 export default function HelpPage() {
-  const faqs = [
-    { q: 'How do I book a service?', a: 'Search for a provider, visit their profile, and click "Book Now". Fill in the details and submit. The provider will confirm your booking.' },
-    { q: 'How do I become a Provider?', a: 'Sign up for an account, select "Offer Services", and complete the setup process. You will need to provide your location, business details, and portfolio images.' },
-    { q: 'Is Nimart free?', a: 'Yes, creating an account and browsing is free. Providers may purchase optional boosts to increase visibility. Transaction fees may apply in the future.' },
-    { q: 'How do I reset my password?', a: 'On the sign‑in page, click "Forgot password?" and follow the instructions sent to your email.' },
-    { q: 'How do I contact a Provider?', a: 'You can use the "Message" button on their profile to start an in‑app chat.' },
-    { q: 'What if a Provider cancels my booking?', a: 'You will be notified. You can search for another provider. No payment is processed until the service is confirmed.' },
-  ];
-
   return (
     <>
-      <SEO
-        title="Help Center | Nimart"
-        description="Find answers to common questions or contact Nimart support."
-        url="https://www.nimart.ng/help"
-        schema={pageSchema}
-        breadcrumbs={[
-          { label: 'Home', to: '/' },
-          { label: 'Help' }
-        ]}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(pageSchema) }}
       />
-
       <div className="max-w-4xl mx-auto px-4 py-12">
         <h1 className="text-3xl font-bold mb-2">Help Center</h1>
         <p className="text-gray-600 mb-8">Find answers to common questions or contact our support team.</p>
@@ -104,7 +111,7 @@ export default function HelpPage() {
           </div>
         </div>
 
-        {/* Cross‑links to brand pages */}
+        {/* Cross-links to brand pages */}
         <div className="mt-10 border-t pt-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-3">More about Nimart</h2>
           <ul className="space-y-2 text-sm text-gray-600">

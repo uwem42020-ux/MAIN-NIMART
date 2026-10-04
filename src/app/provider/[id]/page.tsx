@@ -1,6 +1,7 @@
 // src/app/provider/[id]/page.tsx
 import { Metadata } from 'next';
 import { ProviderProfileClient } from './ProviderProfileClient';
+import { buildMetadata } from '@/lib/seo';
 
 async function getProvider(id: string) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -82,8 +83,8 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 
   if (!provider) {
     return {
-      title: 'Provider not found | Nimart',
-      description: 'The provider you\'re looking for doesn\'t exist or has been removed.',
+      title: 'Provider not found',
+      description: "The provider you're looking for doesn't exist or has been removed.",
       robots: { index: false, follow: true },
     };
   }
@@ -100,30 +101,20 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
     : null;
 
   const title = rating
-    ? `${businessName} – ⭐${rating} ${category} in ${location} | Nimart`
-    : `${businessName} – ${category} in ${location} | Nimart`;
+    ? `${businessName} - ${rating} ${category} in ${location}`
+    : `${businessName} - ${category} in ${location}`;
 
   const description = rating
-    ? `Book ${businessName} for ${category} in ${location}. Rated ${rating}/5 from ${reviewCount} reviews on Nimart — Nigeria's trusted service marketplace.`
-    : `Book ${businessName} for ${category} in ${location} on Nimart — Nigeria's trusted service marketplace. Read reviews, view portfolio, and hire trusted professionals.`;
+    ? `Book ${businessName} for ${category} in ${location}. Rated ${rating}/5 from ${reviewCount} reviews on Nimart - Nigeria's trusted service marketplace.`
+    : `Book ${businessName} for ${category} in ${location} on Nimart - Nigeria's trusted service marketplace. Read reviews, view portfolio, and hire trusted professionals.`;
 
-  return {
+  return buildMetadata({
     title,
     description,
-    openGraph: {
-      title,
-      description,
-      images: profile.avatar_url ? [profile.avatar_url] : ['/og-image.png'],
-      url: `https://www.nimart.ng/provider/${id}`,
-      type: 'profile',
-    },
-    twitter: {
-      card: 'summary_large_image',
-      title,
-      description,
-      images: profile.avatar_url ? [profile.avatar_url] : ['/og-image.png'],
-    },
-  };
+    path: `/provider/${id}`,
+    image: profile.avatar_url || '/og-image.png',
+    type: 'profile',
+  });
 }
 
 export default async function ProviderPage({ params }: { params: Promise<{ id: string }> }) {
@@ -134,7 +125,7 @@ export default async function ProviderPage({ params }: { params: Promise<{ id: s
     return (
       <div className="max-w-7xl mx-auto px-4 py-20 text-center">
         <h1 className="text-2xl font-bold text-gray-900 mb-2">Provider not found</h1>
-        <p className="text-gray-500">The provider you\'re looking for doesn\'t exist or has been removed.</p>
+        <p className="text-gray-500">The provider you're looking for doesn't exist or has been removed.</p>
       </div>
     );
   }

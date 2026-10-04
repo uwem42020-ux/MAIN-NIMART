@@ -1,36 +1,44 @@
 // src/app/privacy/page.tsx
 import Link from 'next/link';
 import { ShieldCheck, ArrowRight } from 'lucide-react';
-import { SEO } from '@/components/common/SEO';
+import type { Metadata } from 'next';
+import { buildMetadata } from '@/lib/seo';
+
+export const metadata: Metadata = buildMetadata({
+  title: 'Privacy Policy',
+  description:
+    "Learn how Nimart collects, uses, and protects your personal data. Compliant with Nigeria's NDPR.",
+  path: '/privacy',
+});
 
 const pageSchema = {
-  "@context": "https://schema.org",
-  "@type": "WebPage",
-  "name": "Privacy Policy – Nimart",
-  "description": "Learn how Nimart collects, uses, and protects your personal data. Compliant with Nigeria's NDPR.",
-  "url": "https://www.nimart.ng/privacy",
-  "isPartOf": {
-    "@type": "WebSite",
-    "name": "Nimart",
-    "url": "https://www.nimart.ng"
-  }
+  '@context': 'https://schema.org',
+  '@type': 'WebPage',
+  name: 'Privacy Policy – Nimart',
+  description:
+    "Learn how Nimart collects, uses, and protects your personal data. Compliant with Nigeria's NDPR.",
+  url: 'https://www.nimart.ng/privacy',
+  isPartOf: {
+    '@type': 'WebSite',
+    name: 'Nimart',
+    url: 'https://www.nimart.ng',
+  },
+  breadcrumb: {
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://www.nimart.ng' },
+      { '@type': 'ListItem', position: 2, name: 'Privacy', item: 'https://www.nimart.ng/privacy' },
+    ],
+  },
 };
 
 export default function PrivacyPage() {
   return (
     <>
-      <SEO
-        title="Privacy Policy | Nimart"
-        description="Learn how Nimart collects, uses, and protects your personal data. Compliant with Nigeria's NDPR."
-        keywords="privacy, data protection, NDPR, personal data, Nimart privacy"
-        url="https://www.nimart.ng/privacy"
-        schema={pageSchema}
-        breadcrumbs={[
-          { label: 'Home', to: '/' },
-          { label: 'Privacy' }
-        ]}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(pageSchema) }}
       />
-
       <div className="max-w-4xl mx-auto px-4 py-12">
         <div className="flex items-center gap-3 mb-6">
           <div className="bg-blue-100 p-3 rounded-full">
@@ -39,7 +47,7 @@ export default function PrivacyPage() {
           <h1 className="text-3xl md:text-4xl font-bold text-gray-900">Privacy Policy</h1>
         </div>
         <p className="text-gray-500 mb-8">
-          Last updated: {new Date().toLocaleDateString('en-NG', { year: 'numeric', month: 'long', day: 'numeric' })}
+          Last updated: October 4, 2026
         </p>
 
         <div className="space-y-8 text-gray-700">
@@ -114,7 +122,7 @@ export default function PrivacyPage() {
           </section>
         </div>
 
-        {/* Cross‑links to brand pages */}
+        {/* Cross-links to brand pages */}
         <div className="mt-12 border-t pt-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-3">More about Nimart</h2>
           <ul className="space-y-2 text-sm text-gray-600">

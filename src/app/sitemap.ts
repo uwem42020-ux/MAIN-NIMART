@@ -13,17 +13,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Static pages
   const staticPages = [
     { url: `${BASE_URL}/`, priority: 1, changeFrequency: 'daily' as const },
-    { url: `${BASE_URL}/search`, priority: 0.9, changeFrequency: 'daily' as const },
     { url: `${BASE_URL}/blog`, priority: 0.9, changeFrequency: 'daily' as const },
     { url: `${BASE_URL}/careers`, priority: 0.5, changeFrequency: 'weekly' as const },
-    { url: `${BASE_URL}/auth/signup`, priority: 0.8, changeFrequency: 'weekly' as const },
-    { url: `${BASE_URL}/auth/signin`, priority: 0.7, changeFrequency: 'weekly' as const },
     { url: `${BASE_URL}/help`, priority: 0.7, changeFrequency: 'monthly' as const },
     { url: `${BASE_URL}/safety`, priority: 0.6, changeFrequency: 'monthly' as const },
     { url: `${BASE_URL}/terms`, priority: 0.3, changeFrequency: 'yearly' as const },
     { url: `${BASE_URL}/privacy`, priority: 0.3, changeFrequency: 'yearly' as const },
     { url: `${BASE_URL}/cookies`, priority: 0.3, changeFrequency: 'yearly' as const },
-    { url: `${BASE_URL}/report`, priority: 0.4, changeFrequency: 'monthly' as const },
     { url: `${BASE_URL}/nimart-explained`, priority: 0.8, changeFrequency: 'monthly' as const },
     { url: `${BASE_URL}/about`, priority: 0.7, changeFrequency: 'monthly' as const },
     { url: `${BASE_URL}/service-marketplace-nigeria`, priority: 0.9, changeFrequency: 'weekly' as const },

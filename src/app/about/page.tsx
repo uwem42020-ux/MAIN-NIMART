@@ -1,36 +1,44 @@
-// src/app/page.tsx
+// src/app/about/page.tsx
 import Link from 'next/link';
-import { SEO } from '@/components/common/SEO';
 import { Info, CheckCircle } from 'lucide-react';
+import type { Metadata } from 'next';
+import { buildMetadata } from '@/lib/seo';
+
+export const metadata: Metadata = buildMetadata({
+  title: "About Nimart - Nigeria's Local Service Marketplace",
+  description:
+    "Nimart connects skilled Nigerians with customers near them. Free to use, built for local services. Founded by Edidiong Edem from Akwa Ibom.",
+  path: '/about',
+});
 
 const pageSchema = {
-  "@context": "https://schema.org",
-  "@type": "AboutPage",
-  "name": "About Nimart – Nigeria's Service Marketplace",
-  "description": "Nimart connects skilled Nigerian professionals with customers who need their services. Founded by Edidiong Edem, Nimart is free, local, and built for real Nigerian challenges.",
-  "url": "https://www.nimart.ng/about",
-  "isPartOf": {
-    "@type": "WebSite",
-    "name": "Nimart",
-    "url": "https://www.nimart.ng"
-  }
+  '@context': 'https://schema.org',
+  '@type': 'AboutPage',
+  name: "About Nimart – Nigeria's Service Marketplace",
+  description:
+    "Nimart connects skilled Nigerian professionals with customers who need their services. Founded by Edidiong Edem, Nimart is free, local, and built for real Nigerian challenges.",
+  url: 'https://www.nimart.ng/about',
+  isPartOf: {
+    '@type': 'WebSite',
+    name: 'Nimart',
+    url: 'https://www.nimart.ng',
+  },
+  breadcrumb: {
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://www.nimart.ng' },
+      { '@type': 'ListItem', position: 2, name: 'About', item: 'https://www.nimart.ng/about' },
+    ],
+  },
 };
 
 export default function AboutPage() {
   return (
     <>
-      <SEO
-        title="About Nimart | Nigeria's Local Service Marketplace"
-        description="Nimart connects skilled Nigerians with customers near them. Free to use, built for local services. Founded by Edidiong Edem from Akwa Ibom."
-        keywords="about Nimart, Nigerian service marketplace, local services Nigeria, Nimart founder, Edidiong Edem, connect with professionals Nigeria"
-        url="https://www.nimart.ng/about"
-        schema={pageSchema}
-        breadcrumbs={[
-          { label: 'Home', to: '/' },
-          { label: 'About' }
-        ]}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(pageSchema) }}
       />
-
       <div className="max-w-4xl mx-auto px-4 py-12">
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 sm:p-10">
           <div className="flex items-center gap-3 mb-6">

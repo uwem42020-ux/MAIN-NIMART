@@ -1,36 +1,44 @@
 // src/app/terms/page.tsx
 import Link from 'next/link';
 import { ArrowRight, Scale } from 'lucide-react';
-import { SEO } from '@/components/common/SEO';
+import type { Metadata } from 'next';
+import { buildMetadata } from '@/lib/seo';
+
+export const metadata: Metadata = buildMetadata({
+  title: 'Terms of Service',
+  description:
+    "Read the terms and conditions for using Nimart, Nigeria's service marketplace.",
+  path: '/terms',
+});
 
 const pageSchema = {
-  "@context": "https://schema.org",
-  "@type": "WebPage",
-  "name": "Terms of Service – Nimart",
-  "description": "Read the terms and conditions for using Nimart, Nigeria's service marketplace.",
-  "url": "https://www.nimart.ng/terms",
-  "isPartOf": {
-    "@type": "WebSite",
-    "name": "Nimart",
-    "url": "https://www.nimart.ng"
-  }
+  '@context': 'https://schema.org',
+  '@type': 'WebPage',
+  name: 'Terms of Service – Nimart',
+  description:
+    "Read the terms and conditions for using Nimart, Nigeria's service marketplace.",
+  url: 'https://www.nimart.ng/terms',
+  isPartOf: {
+    '@type': 'WebSite',
+    name: 'Nimart',
+    url: 'https://www.nimart.ng',
+  },
+  breadcrumb: {
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://www.nimart.ng' },
+      { '@type': 'ListItem', position: 2, name: 'Terms', item: 'https://www.nimart.ng/terms' },
+    ],
+  },
 };
 
 export default function TermsPage() {
   return (
     <>
-      <SEO
-        title="Terms of Service | Nimart"
-        description="Read the terms and conditions for using Nimart, Nigeria's service marketplace."
-        keywords="terms of service, Nimart terms, marketplace terms, Nigeria"
-        url="https://www.nimart.ng/terms"
-        schema={pageSchema}
-        breadcrumbs={[
-          { label: 'Home', to: '/' },
-          { label: 'Terms' }
-        ]}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(pageSchema) }}
       />
-
       <div className="max-w-4xl mx-auto px-4 py-12">
         <div className="flex items-center gap-3 mb-6">
           <div className="bg-primary-100 p-3 rounded-full">
@@ -39,7 +47,7 @@ export default function TermsPage() {
           <h1 className="text-3xl md:text-4xl font-bold text-gray-900">Terms of Service</h1>
         </div>
         <p className="text-gray-500 mb-8">
-          Last updated: {new Date().toLocaleDateString('en-NG', { year: 'numeric', month: 'long', day: 'numeric' })}
+          Last updated: October 4, 2026
         </p>
 
         <div className="space-y-8 text-gray-700">
@@ -118,7 +126,7 @@ export default function TermsPage() {
           </section>
         </div>
 
-        {/* Cross‑links to brand pages */}
+        {/* Cross-links to brand pages */}
         <div className="mt-12 border-t pt-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-3">More about Nimart</h2>
           <ul className="space-y-2 text-sm text-gray-600">

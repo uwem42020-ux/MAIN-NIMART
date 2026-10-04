@@ -13,36 +13,44 @@ import {
   Flag,
   ArrowRight,
 } from 'lucide-react';
-import { SEO } from '@/components/common/SEO';
+import type { Metadata } from 'next';
+import { buildMetadata } from '@/lib/seo';
+
+export const metadata: Metadata = buildMetadata({
+  title: 'Safety Tips',
+  description:
+    "Stay safe while using Nimart, Nigeria's service marketplace. Read our safety guidelines for customers and providers.",
+  path: '/safety',
+});
 
 const pageSchema = {
-  "@context": "https://schema.org",
-  "@type": "WebPage",
-  "name": "Safety Tips – Nimart",
-  "description": "Stay safe while using Nimart, Nigeria's service marketplace. Read our safety guidelines for customers and providers.",
-  "url": "https://www.nimart.ng/safety",
-  "isPartOf": {
-    "@type": "WebSite",
-    "name": "Nimart",
-    "url": "https://www.nimart.ng"
-  }
+  '@context': 'https://schema.org',
+  '@type': 'WebPage',
+  name: 'Safety Tips – Nimart',
+  description:
+    "Stay safe while using Nimart, Nigeria's service marketplace. Read our safety guidelines for customers and providers.",
+  url: 'https://www.nimart.ng/safety',
+  isPartOf: {
+    '@type': 'WebSite',
+    name: 'Nimart',
+    url: 'https://www.nimart.ng',
+  },
+  breadcrumb: {
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://www.nimart.ng' },
+      { '@type': 'ListItem', position: 2, name: 'Safety', item: 'https://www.nimart.ng/safety' },
+    ],
+  },
 };
 
 export default function SafetyPage() {
   return (
     <>
-      <SEO
-        title="Safety Tips | Nimart"
-        description="Stay safe while using Nimart. Tips for customers and providers."
-        keywords="safety, Nimart safety, Nigeria marketplace safety, customer safety, provider safety"
-        url="https://www.nimart.ng/safety"
-        schema={pageSchema}
-        breadcrumbs={[
-          { label: 'Home', to: '/' },
-          { label: 'Safety' }
-        ]}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(pageSchema) }}
       />
-
       <div className="max-w-4xl mx-auto px-4 py-12">
         <div className="flex items-center gap-3 mb-6">
           <div className="bg-yellow-100 p-3 rounded-full">
@@ -166,7 +174,7 @@ export default function SafetyPage() {
           </div>
         </div>
 
-        {/* Cross‑links */}
+        {/* Cross-links */}
         <div className="mt-10 border-t pt-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-3">More about Nimart</h2>
           <ul className="space-y-2 text-sm text-gray-600">
