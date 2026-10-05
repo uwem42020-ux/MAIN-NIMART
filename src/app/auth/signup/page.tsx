@@ -47,7 +47,7 @@ function CountdownTimer({ initialSeconds, onExpire }: { initialSeconds: number; 
 function SignUpContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { refreshProfile } = useAuth();
+  const { user, profile, isLoading: authLoading, refreshProfile } = useAuth();
   const [step, setStep] = useState<Step>('email');
   const [email, setEmail] = useState('');
   const [otp, setOtp] = useState('');
@@ -67,6 +67,23 @@ function SignUpContent() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
     document.querySelector('.signup-container')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
   };
+
+  // ── Redirect already-registered users away from signup ──
+  // Only redirects when the user is BOTH authenticated AND has a completed
+  // profile (has a role). Users mid-signup (steps 2-3) are authenticated but
+  // have no role yet, so they're not redirected.
+  useEffect(() => {
+    if (authLoading) return;         // Still determining auth state
+    if (step !== 'email') return;    // Mid-signup flow — don't interrupt
+
+    if (user && profile?.role) {
+      const userRole = profile.role as string;
+      if (userRole === 'admin') router.replace('/admin/dashboard');
+      else if (userRole === 'provider') router.replace('/provider/dashboard');
+      else if (userRole === 'customer') router.replace('/customer/dashboard');
+      else router.replace('/');
+    }
+  }, [user, profile, authLoading, step, router]);
 
   // Read role + referral from URL params
   useEffect(() => {
@@ -134,11 +151,11 @@ function SignUpContent() {
     if (!fullName.trim()) { toast.error('Please enter your full name'); return; }
     setLoading(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (!authUser) throw new Error('Not authenticated');
 
       const { data: existingProfile } = await db
-        .from('profiles').select('role').eq('id', user.id).single();
+        .from('profiles').select('role').eq('id', authUser.id).single();
 
       if (existingProfile?.role) {
         await supabase.auth.signOut();
@@ -155,28 +172,28 @@ function SignUpContent() {
           setLoading(false);
           return;
         }
-        if (referrer.id === user.id) {
+        if (referrer.id === authUser.id) {
           toast.error('You cannot refer yourself.');
           setLoading(false);
           return;
         }
-        await db.from('providers').update({ referred_by: referrer.id }).eq('id', user.id);
-        await db.from('referrals').insert({ referrer_id: referrer.id, referred_provider_id: user.id });
+        await db.from('providers').update({ referred_by: referrer.id }).eq('id', authUser.id);
+        await db.from('referrals').insert({ referrer_id: referrer.id, referred_provider_id: authUser.id });
       }
 
       if (role === 'customer') {
-        await db.from('profiles').update({ full_name: fullName, role, is_complete: true }).eq('id', user.id);
+        await db.from('profiles').update({ full_name: fullName, role, is_complete: true }).eq('id', authUser.id);
         await refreshProfile();
         toast.success('Welcome to Nimart!');
-        await requestPushPermission(user.id);
+        await requestPushPermission(authUser.id);
         router.push('/customer/dashboard');
         return;
       }
 
-      await db.from('profiles').update({ full_name: fullName, role, is_complete: false }).eq('id', user.id);
+      await db.from('profiles').update({ full_name: fullName, role, is_complete: false }).eq('id', authUser.id);
       await refreshProfile();
       toast.success('Account created! Let\'s set up your profile.');
-      await requestPushPermission(user.id);
+      await requestPushPermission(authUser.id);
       router.push('/provider/setup');
     } catch (error: any) {
       toast.error(error.message || 'Failed to complete signup');
@@ -388,7 +405,6 @@ function SignUpContent() {
                   </div>
                 )}
 
-                {/* Role selector — only shown when role wasn't locked via URL */}
                 {!roleLocked && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-3">I want to...</label>
