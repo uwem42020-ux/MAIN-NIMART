@@ -8,6 +8,7 @@ export const metadata: Metadata = buildMetadata({
   description:
     'Read the Nimart blog for tips on hiring trusted professionals, home services, auto repair, beauty, and more.',
   path: '/blog',
+  absoluteTitle: true,
 });
 
 const blogListSchema = {

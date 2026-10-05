@@ -1,9 +1,11 @@
 // src/app/lga/[lgaId]/page.tsx
 import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
+import { cache } from 'react';
 import { db } from '@/lib/supabase-any';
 import type { ProviderWithProfile } from '@/components/provider/ProviderCardPortrait';
 import LgaLandingClient from './LgaLandingClient';
+import { buildMetadata } from '@/lib/seo';
 
 interface LgaPageProps {
   params: Promise<{ lgaId: string }>;
@@ -32,45 +34,36 @@ function mapProvider(raw: any): ProviderWithProfile {
   };
 }
 
+const getProviders = cache(async () => {
+  const { data, error } = await db.rpc('get_search_providers');
+  if (error) return { data: [], error };
+  return { data: Array.isArray(data) ? data : [], error: null };
+});
+
 export async function generateMetadata({ params }: LgaPageProps): Promise<Metadata> {
   const { lgaId } = await params;
   const parsedId = parseInt(lgaId);
   if (isNaN(parsedId)) return notFound();
 
-  const { data: providersData } = await db.rpc('get_search_providers');
-  const allProviders = Array.isArray(providersData) ? (providersData as any[]) : [];
+  const { data: allProviders } = await getProviders();
   const lgaProviders = allProviders.filter((p) => p.profile?.lga_id === parsedId);
 
   if (lgaProviders.length === 0) {
     return {
-      title: 'LGA Not Found | Nimart',
+      title: 'LGA Not Found',
       description: 'The local government area you are looking for does not have any providers on Nimart yet.',
+      robots: { index: false, follow: false },
     };
   }
 
   const lgaName = lgaProviders[0]?.profile?.lga_name || 'Your Area';
   const stateName = lgaProviders[0]?.profile?.state_name || '';
 
-  const title = `Find Trusted Service Providers in ${lgaName}, ${stateName} | Nimart`;
-  const description = `Browse ${lgaProviders.length} verified service providers in ${lgaName}, ${stateName}. Compare ratings, read reviews, and book local professionals on Nimart.`;
-
-  return {
-    title,
-    description,
-    openGraph: {
-      title,
-      description,
-      url: `https://www.nimart.ng/lga/${lgaId}`,
-      siteName: 'Nimart',
-      images: ['/og-image.png'],
-    },
-    twitter: {
-      card: 'summary_large_image',
-      title,
-      description,
-      images: ['/og-image.png'],
-    },
-  };
+  return buildMetadata({
+    title: `Find Trusted Service Providers in ${lgaName}, ${stateName}`,
+    description: `Browse ${lgaProviders.length} verified service providers in ${lgaName}, ${stateName}. Compare ratings, read reviews, and book local professionals on Nimart.`,
+    path: `/lga/${lgaId}`,
+  });
 }
 
 export default async function LgaLandingPage({ params }: LgaPageProps) {
@@ -78,10 +71,9 @@ export default async function LgaLandingPage({ params }: LgaPageProps) {
   const parsedId = parseInt(lgaId);
   if (isNaN(parsedId)) return notFound();
 
-  const { data: providersData, error } = await db.rpc('get_search_providers');
+  const { data: allProviders, error } = await getProviders();
   if (error) return notFound();
 
-  const allProviders = Array.isArray(providersData) ? (providersData as any[]) : [];
   const lgaProviders = allProviders.filter((p) => p.profile?.lga_id === parsedId);
 
   if (lgaProviders.length === 0) return notFound();

@@ -10,6 +10,10 @@ interface BuildMetadataOptions {
   image?: string;            // '/og-image.png' or full URL
   noindex?: boolean;
   type?: 'website' | 'article' | 'profile';
+  // If true, bypasses the layout title template ("%s | Nimart").
+  // Use when your page title ALREADY contains "Nimart" and would otherwise render
+  // as e.g. "What is Nimart? | Nimart".
+  absoluteTitle?: boolean;
 }
 
 export function buildMetadata({
@@ -19,13 +23,14 @@ export function buildMetadata({
   image = '/og-image.png',
   noindex = false,
   type = 'website',
+  absoluteTitle = false,
 }: BuildMetadataOptions): Metadata {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
   const canonical = `${BASE_URL}${normalizedPath}`;
   const imageUrl = image.startsWith('http') ? image : `${BASE_URL}${image}`;
 
   return {
-    title,
+    title: absoluteTitle ? { absolute: title } : title,
     description,
     alternates: { canonical },
     robots: noindex

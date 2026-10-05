@@ -1,9 +1,11 @@
 // src/app/categories/[categorySlug]/page.tsx
 import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
+import { cache } from 'react';
 import { db } from '@/lib/supabase-any';
 import type { ProviderWithProfile } from '@/components/provider/ProviderCardPortrait';
 import CategoryLandingClient from './CategoryLandingClient';
+import { buildMetadata } from '@/lib/seo';
 
 interface CategoryPageProps {
   params: Promise<{ categorySlug: string }>;
@@ -36,19 +38,27 @@ function mapProvider(raw: any): ProviderWithProfile {
   };
 }
 
+// cache() ensures this runs only ONCE per request even though it's called
+// from both generateMetadata and the page component. Fixes the 5xx pattern.
+const getProviders = cache(async () => {
+  const { data, error } = await db.rpc('get_search_providers');
+  if (error) return { data: [], error };
+  return { data: Array.isArray(data) ? data : [], error: null };
+});
+
 export async function generateMetadata({ params }: CategoryPageProps): Promise<Metadata> {
   const { categorySlug } = await params;
+  const { data: allProviders } = await getProviders();
 
-  const { data: providersData } = await db.rpc('get_search_providers');
-  const allProviders = Array.isArray(providersData) ? (providersData as any[]) : [];
   const categoryProviders = allProviders.filter(
     (p) => slugify(p.selected_category_slug || '') === categorySlug.toLowerCase()
   );
 
   if (categoryProviders.length === 0) {
     return {
-      title: 'Category Not Found | Nimart',
+      title: 'Category Not Found',
       description: 'The service category you are looking for does not have any providers on Nimart yet.',
+      robots: { index: false, follow: false },
     };
   }
 
@@ -57,38 +67,22 @@ export async function generateMetadata({ params }: CategoryPageProps): Promise<M
     .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(' ');
 
-  const title = `${categoryName} Services in Nigeria – Find Trusted Providers | Nimart`;
-  const description = `Browse ${categoryProviders.length} verified ${categoryName.toLowerCase()} providers across Nigeria. Compare ratings, read reviews, and book trusted ${categoryName.toLowerCase()} services on Nimart.`;
-
-  return {
-    title,
-    description,
-    openGraph: {
-      title,
-      description,
-      url: `https://www.nimart.ng/categories/${categorySlug}`,
-      siteName: 'Nimart',
-      images: ['/og-image.png'],
-    },
-    twitter: {
-      card: 'summary_large_image',
-      title,
-      description,
-      images: ['/og-image.png'],
-    },
-  };
+  return buildMetadata({
+    title: `${categoryName} Services in Nigeria – Find Trusted Providers`,
+    description: `Browse ${categoryProviders.length} verified ${categoryName.toLowerCase()} providers across Nigeria. Compare ratings, read reviews, and book trusted ${categoryName.toLowerCase()} services on Nimart.`,
+    path: `/categories/${categorySlug}`,
+  });
 }
 
 export default async function CategoryLandingPage({ params }: CategoryPageProps) {
   const { categorySlug } = await params;
+  const { data: allProviders, error } = await getProviders();
 
-  const { data: providersData, error } = await db.rpc('get_search_providers');
   if (error) {
     console.error('Failed to fetch providers for category page:', error);
     return notFound();
   }
 
-  const allProviders = Array.isArray(providersData) ? (providersData as any[]) : [];
   const categoryProviders = allProviders.filter(
     (p) => slugify(p.selected_category_slug || '') === categorySlug.toLowerCase()
   );

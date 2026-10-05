@@ -9,6 +9,7 @@ export const metadata: Metadata = buildMetadata({
   description:
     "Nimart is Nigeria's trusted service marketplace – not the NIMART healthcare programme. Learn what Nimart does and how it connects you with verified professionals.",
   path: '/nimart-explained',
+  absoluteTitle: true,
 });
 
 const pageSchema = {

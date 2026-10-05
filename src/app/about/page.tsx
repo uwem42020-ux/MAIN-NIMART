@@ -9,6 +9,7 @@ export const metadata: Metadata = buildMetadata({
   description:
     "Nimart connects skilled Nigerians with customers near them. Free to use, built for local services. Founded by Edidiong Edem from Akwa Ibom.",
   path: '/about',
+  absoluteTitle: true,
 });
 
 const pageSchema = {

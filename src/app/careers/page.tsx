@@ -8,6 +8,7 @@ export const metadata: Metadata = buildMetadata({
   description:
     "Join Nimart - we're hiring marketers, social media experts, and developers. Work remotely and help connect Nigerians with trusted local services.",
   path: '/careers',
+  absoluteTitle: true,
 });
 
 const careersSchema = {

@@ -1,9 +1,11 @@
 // src/app/categories/[categorySlug]/[state]/page.tsx
 import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
+import { cache } from 'react';
 import { db } from '@/lib/supabase-any';
 import type { ProviderWithProfile } from '@/components/provider/ProviderCardPortrait';
 import CategoryStateClient from './CategoryStateClient';
+import { buildMetadata } from '@/lib/seo';
 
 interface CategoryStatePageProps {
   params: Promise<{ categorySlug: string; state: string }>;
@@ -36,11 +38,16 @@ function mapProvider(raw: any): ProviderWithProfile {
   };
 }
 
+const getProviders = cache(async () => {
+  const { data, error } = await db.rpc('get_search_providers');
+  if (error) return { data: [], error };
+  return { data: Array.isArray(data) ? data : [], error: null };
+});
+
 export async function generateMetadata({ params }: CategoryStatePageProps): Promise<Metadata> {
   const { categorySlug, state } = await params;
+  const { data: allProviders } = await getProviders();
 
-  const { data: providersData } = await db.rpc('get_search_providers');
-  const allProviders = Array.isArray(providersData) ? (providersData as any[]) : [];
   const filtered = allProviders.filter(
     (p) =>
       slugify(p.selected_category_slug || '') === categorySlug.toLowerCase() &&
@@ -49,43 +56,28 @@ export async function generateMetadata({ params }: CategoryStatePageProps): Prom
 
   if (filtered.length === 0) {
     return {
-      title: 'No Providers Found | Nimart',
+      title: 'No Providers Found',
       description: 'There are no service providers in this category and state yet.',
+      robots: { index: false, follow: false },
     };
   }
 
   const categoryName = (categorySlug || '').split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
   const stateName = filtered[0]?.profile?.state_name || state;
 
-  const title = `${categoryName} Services in ${stateName} – Find Trusted Providers | Nimart`;
-  const description = `Browse ${filtered.length} verified ${categoryName.toLowerCase()} providers in ${stateName}. Compare ratings, read reviews, and book trusted ${categoryName.toLowerCase()} services on Nimart.`;
-
-  return {
-    title,
-    description,
-    openGraph: {
-      title,
-      description,
-      url: `https://www.nimart.ng/categories/${categorySlug}/${state}`,
-      siteName: 'Nimart',
-      images: ['/og-image.png'],
-    },
-    twitter: {
-      card: 'summary_large_image',
-      title,
-      description,
-      images: ['/og-image.png'],
-    },
-  };
+  return buildMetadata({
+    title: `${categoryName} Services in ${stateName} – Find Trusted Providers`,
+    description: `Browse ${filtered.length} verified ${categoryName.toLowerCase()} providers in ${stateName}. Compare ratings, read reviews, and book trusted ${categoryName.toLowerCase()} services on Nimart.`,
+    path: `/categories/${categorySlug}/${state}`,
+  });
 }
 
 export default async function CategoryStatePage({ params }: CategoryStatePageProps) {
   const { categorySlug, state } = await params;
+  const { data: allProviders, error } = await getProviders();
 
-  const { data: providersData, error } = await db.rpc('get_search_providers');
   if (error) return notFound();
 
-  const allProviders = Array.isArray(providersData) ? (providersData as any[]) : [];
   const filtered = allProviders.filter(
     (p) =>
       slugify(p.selected_category_slug || '') === categorySlug.toLowerCase() &&
@@ -98,7 +90,6 @@ export default async function CategoryStatePage({ params }: CategoryStatePagePro
   const categoryName = (categorySlug || '').split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
   const stateName = filtered[0]?.profile?.state_name || state;
 
-  // LGAs with providers in this category/state
   const lgaMap = new Map<string, { name: string; count: number }>();
   filtered.forEach((p) => {
     const lga = p.profile?.lga_name;
