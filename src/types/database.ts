@@ -15,6 +15,10 @@ export interface Database {
           full_name: string | null
           phone: string | null
           role: 'customer' | 'provider'
+          is_customer: boolean
+          is_provider: boolean
+          customer_complete: boolean
+          provider_complete: boolean
           avatar_url: string | null
           lga_id: number | null
           lga_name: string | null
@@ -51,6 +55,10 @@ export interface Database {
           full_name?: string | null
           phone?: string | null
           role?: 'customer' | 'provider'
+          is_customer?: boolean
+          is_provider?: boolean
+          customer_complete?: boolean
+          provider_complete?: boolean
           avatar_url?: string | null
           lga_id?: number | null
           lga_name?: string | null
@@ -87,6 +95,10 @@ export interface Database {
           full_name?: string | null
           phone?: string | null
           role?: 'customer' | 'provider'
+          is_customer?: boolean
+          is_provider?: boolean
+          customer_complete?: boolean
+          provider_complete?: boolean
           avatar_url?: string | null
           lga_id?: number | null
           lga_name?: string | null

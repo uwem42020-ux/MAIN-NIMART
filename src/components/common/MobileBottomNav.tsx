@@ -40,7 +40,7 @@ interface NavItem {
 }
 
 export function MobileBottomNav() {
-  const { profile } = useAuth();
+  const { profile, isProvider } = useAuth();
   const { counts, markBookingsAsSeen, markMessagesAsSeen, markSystemAsSeen } = useNotifications();
   const router = useRouter();
   const pathname = usePathname();
@@ -76,9 +76,9 @@ export function MobileBottomNav() {
     return () => footerObserverRef.current?.disconnect();
   }, [isHomePage]);
 
-  const getLink = (roleSuffix: string) => {
+  const getLink = (suffix: string) => {
     if (!profile) return '/auth/signin';
-    return profile.role === 'provider' ? `/provider/${roleSuffix}` : `/customer/${roleSuffix}`;
+    return isProvider ? `/provider/${suffix}` : `/customer/${suffix}`;
   };
 
   const isOnMessagesPage = pathname.includes('/messages');
@@ -146,7 +146,7 @@ export function MobileBottomNav() {
           } else if (item.id === 'notifications') {
             active = pathname.startsWith('/notifications');
           } else {
-            const basePath = profile?.role === 'provider' ? `/provider/${item.id}` : `/customer/${item.id}`;
+            const basePath = isProvider ? `/provider/${item.id}` : `/customer/${item.id}`;
             active = pathname.startsWith(basePath);
           }
 

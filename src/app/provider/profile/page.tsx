@@ -14,14 +14,14 @@ import toast from 'react-hot-toast';
 import {
   User, Phone, Store, FileText, Save, Camera, AlertCircle,
   Home, Landmark, Image, Languages, GraduationCap, Calendar,
-  CheckCircle, Loader2, MapPin
+  CheckCircle, Loader2, MapPin, Search, ArrowRight
 } from 'lucide-react';
 
 export default function ProviderProfile() {
   const router = useRouter();
   const { user, profile, updateProfile, refreshProfile } = useAuth();
 
-  // --- Setup‑filled fields (read‑only) ---
+  // --- Setup-filled fields (read-only) ---
   const [businessName, setBusinessName] = useState('');
   const [phone, setPhone] = useState('');
   const [streetAddress, setStreetAddress] = useState('');
@@ -34,7 +34,7 @@ export default function ProviderProfile() {
   const [lat, setLat] = useState<number | null>(null);
   const [lng, setLng] = useState<number | null>(null);
 
-  // --- Profile‑specific fields (editable) ---
+  // --- Profile-specific fields (editable) ---
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [coverPhoto, setCoverPhoto] = useState<string | null>(null);
   const [gender, setGender] = useState('');
@@ -227,7 +227,15 @@ export default function ProviderProfile() {
 
     setSaving(true);
     try {
-      await updateProfile({ is_complete: true });
+      // Mark onboarding complete across all flags.
+      // - is_complete: legacy flag, kept for old app compat
+      // - provider_complete: new source of truth the guard reads
+      // - is_provider: capability flag (defensive — should already be true)
+      await updateProfile({
+        is_complete: true,
+        provider_complete: true,
+        is_provider: true,
+      });
       await refreshProfile();
       toast.success('Profile completed! Redirecting to dashboard...');
       router.push('/provider/dashboard');
@@ -308,6 +316,9 @@ export default function ProviderProfile() {
   }
 
   const showWarning = !avatarUrl || !hasPassword;
+  // Show the customer-side cross-promo only until the user completes
+  // customer onboarding (via the mobile Nimart app).
+  const showCustomerPromo = (profile as any)?.customer_complete !== true;
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
@@ -315,6 +326,29 @@ export default function ProviderProfile() {
       <p className="text-gray-600 mb-6">
         Please upload a profile picture and set a password to activate your account.
       </p>
+
+      {/* Customer-side cross-promo — links to search, not to onboarding */}
+      {showCustomerPromo && (
+        <div className="bg-primary-50 border border-primary-200 rounded-lg p-4 mb-6 flex items-start gap-3">
+          <div className="flex-shrink-0 w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center">
+            <Search className="h-5 w-5 text-primary-600" />
+          </div>
+          <div className="flex-1">
+            <h2 className="text-base font-semibold text-primary-900 mb-1">
+              Want to book services?
+            </h2>
+            <p className="text-sm text-primary-800 mb-3">
+              Find trusted providers near you and book a service in minutes.
+            </p>
+            <Link
+              href="/search"
+              className="inline-flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary-700 transition"
+            >
+              Browse services <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
+        </div>
+      )}
 
       {showWarning && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6 flex items-start gap-3">
@@ -329,11 +363,11 @@ export default function ProviderProfile() {
         </div>
       )}
 
-      {/* Two‑column layout on desktop */}
+      {/* Two-column layout on desktop */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* LEFT COLUMN */}
         <div className="space-y-6">
-          {/* Business Information (read‑only) */}
+          {/* Business Information (read-only) */}
           <div className="bg-white rounded-lg shadow-sm border p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Business Information (from setup)</h2>
             <div className="space-y-3">
@@ -360,9 +394,9 @@ export default function ProviderProfile() {
                   <p className="text-sm text-gray-500">{addressArea}</p>
                   <p className="text-xs text-gray-500 mt-1">
                     {locationStatus?.free_available ? (
-                      <span className="text-green-600">✅ Free change available</span>
+                      <span className="text-green-600">Free change available</span>
                     ) : (
-                      <span className="text-amber-600">⏳ Next free change in {cooldownTimer}</span>
+                      <span className="text-amber-600">Next free change in {cooldownTimer}</span>
                     )}
                   </p>
                 </div>

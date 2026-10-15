@@ -2,19 +2,23 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { upgradeToProvider } from '@/lib/upgradeProvider';
 import { SetPasswordForm } from '@/components/profile/SetPasswordForm';
 import toast from 'react-hot-toast';
-import { User, Phone, Save, Camera } from 'lucide-react';
+import { User, Phone, Save, Camera, Briefcase, ArrowRight } from 'lucide-react';
 
 export default function CustomerProfile() {
-  const { user, profile, updateProfile } = useAuth();
+  const router = useRouter();
+  const { user, profile, updateProfile, refreshProfile, isProvider } = useAuth();
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [switching, setSwitching] = useState(false);
 
   useEffect(() => {
     if (profile) {
@@ -32,7 +36,7 @@ export default function CustomerProfile() {
     try {
       const fileExt = file.name.split('.').pop();
       const fileName = `${user!.id}/${user!.id}-${Date.now()}.${fileExt}`;
-      
+
       const { error: uploadError } = await supabase.storage
         .from('avatars')
         .upload(fileName, file);
@@ -65,9 +69,61 @@ export default function CustomerProfile() {
     }
   };
 
+  const handleBecomeProvider = async () => {
+    if (!user) return;
+    if (!window.confirm(
+      'Become a provider?\n\nYou will keep your email and account. You\'ll just need to complete your business profile to appear on the map and search results.'
+    )) return;
+
+    setSwitching(true);
+    try {
+      const result = await upgradeToProvider(user.id, isProvider, refreshProfile);
+      if (!result.ok) {
+        throw new Error(result.error || 'Something went wrong. Please try again.');
+      }
+      toast.success('You are now a provider! Complete your business profile.');
+      router.push('/provider/setup');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to switch. Please try again.');
+    } finally {
+      setSwitching(false);
+    }
+  };
+
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
       <h1 className="text-2xl font-bold text-gray-900 mb-6">Profile Settings</h1>
+
+      {/* Provider upgrade card — hidden once user is a provider */}
+      {!isProvider && (
+        <div className="bg-primary-50 border border-primary-200 rounded-lg p-5 mb-6">
+          <div className="flex items-start gap-3">
+            <div className="flex-shrink-0 w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center">
+              <Briefcase className="h-5 w-5 text-primary-600" />
+            </div>
+            <div className="flex-1">
+              <h2 className="text-base font-semibold text-primary-900 mb-1">
+                Want to earn on Nimart too?
+              </h2>
+              <p className="text-sm text-primary-800 mb-3">
+                Offer your services to customers in your area. Set your own
+                prices, control your schedule, and get paid.
+              </p>
+              <button
+                onClick={handleBecomeProvider}
+                disabled={switching}
+                className="inline-flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary-700 disabled:opacity-50 transition"
+              >
+                {switching ? 'Setting up...' : (
+                  <>
+                    Become a provider <ArrowRight className="h-4 w-4" />
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="bg-white rounded-lg shadow-sm border p-6 mb-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Personal Information</h2>

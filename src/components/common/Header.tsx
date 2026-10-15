@@ -23,9 +23,9 @@ import {
 } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { db } from '@/lib/supabase-any';
 import { cn } from '@/lib/utils';
 import { useNotifications } from '@/contexts/NotificationContext';
+import { useAuth } from '@/contexts/AuthContext';
 import toast from 'react-hot-toast';
 
 // Solid SVG icons
@@ -56,53 +56,39 @@ const SolidMapIcon = ({ className }: { className?: string }) => (
 export function Header() {
   const router = useRouter();
   const pathname = usePathname();
-  const [user, setUser] = useState<any>(null);
-  const [profile, setProfile] = useState<any>(null);
+  const { user, profile, isProvider } = useAuth();
   const { counts } = useNotifications();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [mobileProfileOpen, setMobileProfileOpen] = useState(false);
   const [mobileView, setMobileView] = useState<'main' | 'settings'>('main');
   const [signingOut, setSigningOut] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
-  const closeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Auth listener + initial session fetch
+  // Detect desktop viewport. Needed because a phone in "desktop view" has
+  // hover-less touch input — the hover-based dropdown never opens, and the
+  // mobile panel is CSS-hidden. We branch on this for click behavior.
   useEffect(() => {
-    const fetchSession = async () => {
-      const { data: { user: currentUser } } = await supabase.auth.getUser();
-      setUser(currentUser);
-      if (currentUser) {
-        const { data: prof }: { data: any } = await db
-          .from('profiles')
-          .select('role, is_verified, avatar_url, full_name')
-          .eq('id', currentUser.id)
-          .single();
-        setProfile(prof);
-      } else {
-        setProfile(null);
-      }
-    };
-    fetchSession();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      const currentUser = session?.user ?? null;
-      setUser(currentUser);
-      if (currentUser) {
-        db
-          .from('profiles')
-          .select('role, is_verified, avatar_url, full_name')
-          .eq('id', currentUser.id)
-          .single()
-          .then(({ data: prof }: { data: any }) => setProfile(prof));
-      } else {
-        setProfile(null);
-      }
-    });
-
-    return () => subscription.unsubscribe();
+    const mq = window.matchMedia('(min-width: 768px)');
+    const update = () => setIsDesktop(mq.matches);
+    update();
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
   }, []);
 
-  const role = profile?.role || 'customer';
+  // Close desktop dropdown when clicking outside.
+  useEffect(() => {
+    if (!isUserMenuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setIsUserMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isUserMenuOpen]);
+
+  const isProviderUser = isProvider;
 
   const handleSignOut = async () => {
     if (signingOut) return;
@@ -121,14 +107,14 @@ export function Header() {
     }
   };
 
-  const getDashboardLink = () => (role === 'provider' ? '/provider/dashboard' : '/customer/dashboard');
-  const getBookingsLink = () => (role === 'provider' ? '/provider/bookings' : '/customer/bookings');
-  const getMessagesLink = () => (role === 'provider' ? '/provider/messages' : '/customer/messages');
+  const getDashboardLink = () => (isProviderUser ? '/provider/dashboard' : '/customer/dashboard');
+  const getBookingsLink = () => (isProviderUser ? '/provider/bookings' : '/customer/bookings');
+  const getMessagesLink = () => (isProviderUser ? '/provider/messages' : '/customer/messages');
   const getNotificationsLink = () => '/notifications';
-  const getProfileLink = () => (role === 'provider' ? '/provider/profile' : '/customer/profile');
-  const getPortfolioLink = () => (role === 'provider' ? '/provider/portfolio' : null);
-  const getServicesLink = () => (role === 'provider' ? '/provider/services' : null);
-  const getVerificationLink = () => (role === 'provider' ? '/provider/verification' : null);
+  const getProfileLink = () => (isProviderUser ? '/provider/profile' : '/customer/profile');
+  const getPortfolioLink = () => (isProviderUser ? '/provider/portfolio' : null);
+  const getServicesLink = () => (isProviderUser ? '/provider/services' : null);
+  const getVerificationLink = () => (isProviderUser ? '/provider/verification' : null);
 
   const isOnBookingsPage = pathname.includes('/bookings');
   const isOnMessagesPage = pathname.includes('/messages');
@@ -158,27 +144,30 @@ export function Header() {
     router.push('/map');
   };
 
+  // Account button click. On desktop viewport → toggle dropdown (works with
+  // both mouse and touch). On mobile viewport → open the full-screen panel.
+  const handleAccountClick = () => {
+    if (isDesktop) {
+      setIsUserMenuOpen((prev) => !prev);
+    } else {
+      handleMobileProfileClick();
+    }
+  };
+
   const handleMouseEnter = () => {
-    if (closeTimeoutRef.current) clearTimeout(closeTimeoutRef.current);
-    if (user) setIsUserMenuOpen(true);
+    if (user && isDesktop) setIsUserMenuOpen(true);
   };
 
   const handleMouseLeave = () => {
-    if (!user) return;
-    closeTimeoutRef.current = setTimeout(() => setIsUserMenuOpen(false), 150);
+    if (!user || !isDesktop) return;
+    setIsUserMenuOpen(false);
   };
-
-  useEffect(() => {
-    return () => {
-      if (closeTimeoutRef.current) clearTimeout(closeTimeoutRef.current);
-    };
-  }, []);
 
   const mobileMainItems = [
     { label: 'Dashboard', icon: <LayoutDashboard className="h-5 w-5" />, to: getDashboardLink(), disabled: false },
     { label: 'Messages', icon: <MessageCircle className="h-5 w-5" />, to: getMessagesLink(), disabled: false },
     { label: 'My Bookings', icon: <Calendar className="h-5 w-5" />, to: getBookingsLink(), disabled: false },
-    ...(role === 'provider' ? [
+    ...(isProviderUser ? [
       { label: 'Portfolio', icon: <Image className="h-5 w-5" />, to: getPortfolioLink()!, disabled: false },
       { label: 'Set Prices', icon: <Package className="h-5 w-5" />, to: getServicesLink()!, disabled: false },
       { label: 'Get Verified', icon: <Shield className="h-5 w-5" />, to: getVerificationLink()!, disabled: profile?.is_verified === true },
@@ -212,13 +201,13 @@ export function Header() {
     setMobileView('main');
   };
 
-  // ── Shared button classes with micro‑interactions ──
+  // ── Shared button classes with micro-interactions ──
   const iconBtnClass = (active: boolean) =>
     cn(
       'relative hidden md:flex items-center justify-center w-9 h-9 rounded-full',
       'transition-all duration-200 ease-in-out',
-      'hover:bg-green-50 hover:scale-110',           // hover: green bg + slight grow
-      'active:scale-95',                             // click: shrink (press effect)
+      'hover:bg-green-50 hover:scale-110',
+      'active:scale-95',
       active ? 'bg-primary-50 text-primary-600' : 'text-[#008751]'
     );
 
@@ -324,7 +313,7 @@ export function Header() {
                   <button
                     title="Account"
                     aria-label="Account"
-                    onClick={handleMobileProfileClick}
+                    onClick={handleAccountClick}
                     className="flex items-center space-x-1 p-1 active:scale-95 transition"
                   >
                     <span className="relative flex items-center justify-center w-9 h-9">
@@ -379,7 +368,7 @@ export function Header() {
         </div>
       </header>
 
-      {/* Mobile full‑screen profile panel */}
+      {/* Mobile full-screen profile panel */}
       {user && mobileProfileOpen && (
         <div className="fixed inset-0 z-50 md:hidden flex flex-col bg-white">
           <div className="flex items-center gap-4 px-4 py-3 border-b border-gray-200">

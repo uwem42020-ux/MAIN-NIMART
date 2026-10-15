@@ -7,11 +7,14 @@ import { supabase } from '../lib/supabase';
 import { db } from '@/lib/supabase-any';
 import type { Profile } from '../types/database';
 
+// NOTE: Mirrors nimart-shared/src/lib/AuthContext.tsx — update both if you change one.
 interface AuthContextType {
   session: Session | null;
   user: User | null;
   profile: Profile | null;
   isLoading: boolean;
+  isCustomer: boolean;
+  isProvider: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signInWithOTP: (email: string) => Promise<void>;
   verifyOTP: (email: string, token: string) => Promise<void>;
@@ -131,11 +134,21 @@ export function AuthProvider({
     await refreshProfile();
   };
 
+  // Capability flags — source of truth for new code.
+  // Fallback to `role` so accounts created before the capability migration
+  // (with is_customer/is_provider unset) still behave correctly.
+  const isCustomer =
+    profile?.is_customer ??
+    (profile?.role === 'customer' || profile?.role === undefined);
+  const isProvider = profile?.is_provider ?? profile?.role === 'provider';
+
   const value = {
     session,
     user,
     profile,
     isLoading,
+    isCustomer,
+    isProvider,
     signIn,
     signInWithOTP,
     verifyOTP,

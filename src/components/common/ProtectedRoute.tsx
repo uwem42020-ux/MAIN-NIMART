@@ -8,13 +8,39 @@ import { useEffect } from 'react';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  allowedRoles?: ('customer' | 'provider')[];
+  /** Require provider capability (is_provider). */
+  requireProvider?: boolean;
+  /** Require customer capability (is_customer). */
+  requireCustomer?: boolean;
 }
 
-export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
-  const { user, profile, isLoading } = useAuth();
+export function ProtectedRoute({
+  children,
+  requireProvider,
+  requireCustomer,
+}: ProtectedRouteProps) {
+  const { user, profile, isLoading, isCustomer, isProvider } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+
+  const hasProfile = !!profile;
+
+  // Onboarding status: both flags count. Use || (not ??) because
+  // provider_complete is NOT NULL DEFAULT false — never nullish — so the
+  // ?? chain would short-circuit on it and is_complete would be dead code.
+  const providerComplete =
+    (profile as any)?.provider_complete === true ||
+    (profile as any)?.is_complete === true;
+
+  // Capability mismatch. Only evaluated once profile has loaded.
+  const wrongCapability =
+    hasProfile &&
+    ((requireProvider === true && !isProvider) ||
+      (requireCustomer === true && !isCustomer));
+
+  // Provider capability present but onboarding not finished.
+  const needsSetup =
+    hasProfile && requireProvider === true && isProvider && !providerComplete;
 
   useEffect(() => {
     if (isLoading) return;
@@ -22,15 +48,14 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
       router.replace('/auth/signin');
       return;
     }
-    if (allowedRoles && profile && !allowedRoles.includes(profile.role)) {
+    if (wrongCapability) {
       router.replace('/');
       return;
     }
-    const needsSetup = profile?.role === 'provider' && !profile?.is_complete;
     if (needsSetup && !pathname.startsWith('/provider/setup')) {
       router.replace('/provider/setup');
     }
-  }, [user, profile, isLoading, allowedRoles, router, pathname]);
+  }, [user, isLoading, wrongCapability, needsSetup, router, pathname]);
 
   if (isLoading) {
     return (
@@ -41,9 +66,8 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
   }
 
   if (!user) return null;
-  if (allowedRoles && profile && !allowedRoles.includes(profile.role)) return null;
-  const needsSetup = profile?.role === 'provider' && !profile?.is_complete;
+  if (wrongCapability) return null;
   if (needsSetup && !pathname.startsWith('/provider/setup')) return null;
 
   return <>{children}</>;
-};
+}

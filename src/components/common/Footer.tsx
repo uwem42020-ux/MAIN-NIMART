@@ -4,34 +4,11 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Mail, Phone, MapPin } from 'lucide-react';
-import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
 
 export function Footer() {
   const currentYear = new Date().getFullYear();
-  const [profile, setProfile] = useState<any>(null);
   const pathname = usePathname();
   const isHomePage = pathname === '/' || pathname === '/search';
-
-  useEffect(() => {
-    async function fetchProfile() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data: p } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', user.id)
-          .single();
-        setProfile(p);
-      }
-    }
-    fetchProfile();
-  }, []);
-
-  const getDashboardLink = () => {
-    if (!profile) return '/';
-    return profile.role === 'provider' ? '/provider/dashboard' : '/customer/dashboard';
-  };
 
   return (
     <footer className={`bg-[#008751] text-white ${isHomePage ? '' : 'hidden md:block'}`}>

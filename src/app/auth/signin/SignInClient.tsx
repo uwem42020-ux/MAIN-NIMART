@@ -11,7 +11,11 @@ import { Mail, Lock, ArrowLeft, Eye, EyeOff, MessageSquare } from 'lucide-react'
 import { NimartSpinner } from '@/components/common/NimartSpinner';
 import { requestPushPermission } from '@/lib/pushNotifications';
 
-export function SignInClient() {
+interface SignInClientProps {
+  next?: string;
+}
+
+export function SignInClient({ next }: SignInClientProps = {}) {
   const router = useRouter();
   const [mode, setMode] = useState<'password' | 'otp'>('password');
   const [email, setEmail] = useState('');
@@ -20,6 +24,29 @@ export function SignInClient() {
   const [otp, setOtp] = useState('');
   const [step, setStep] = useState<'email' | 'otp'>('email');
   const [loading, setLoading] = useState(false);
+
+  // Resolve destination for a signed-in user.
+  // Priority:
+  //   1. ?next= URL param (safe-path check blocks open redirects)
+  //   2. Capability-based routing with role fallback
+  const resolveDestination = (profile: any): string => {
+    if (next && next.startsWith('/') && !next.startsWith('//')) {
+      return next;
+    }
+    // Fallback chain for isProvider:
+    //   1. is_provider (new column, source of truth)
+    //   2. role === 'provider' (legacy, kept for backwards compat)
+    const isProviderFlag = profile?.is_provider ?? profile?.role === 'provider';
+    // Onboarding status: both flags count. Use || (not ??) because
+    // provider_complete is NOT NULL DEFAULT false — never nullish — so the
+    // ?? chain would short-circuit on it and is_complete would be dead code.
+    const providerComplete =
+      profile?.provider_complete === true || profile?.is_complete === true;
+    if (isProviderFlag) {
+      return providerComplete ? '/provider/dashboard' : '/provider/setup';
+    }
+    return '/customer/dashboard';
+  };
 
   const handlePasswordSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,7 +59,7 @@ export function SignInClient() {
       const { data: { user } } = await supabase.auth.getUser();
       const { data: profile } = await db
         .from('profiles')
-        .select('role, is_complete, has_password')
+        .select('role, is_provider, provider_complete, is_complete, has_password')
         .eq('id', user?.id as string)
         .single();
 
@@ -42,15 +69,7 @@ export function SignInClient() {
 
       if (user) await requestPushPermission(user.id);
 
-      if (profile?.role === 'provider') {
-        if (!profile.is_complete) {
-          router.push('/provider/setup');
-        } else {
-          router.push('/provider/dashboard');
-        }
-      } else {
-        router.push('/customer/dashboard');
-      }
+      router.push(resolveDestination(profile));
     } catch (error: any) {
       toast.error(error.message);
     } finally {
@@ -84,21 +103,13 @@ export function SignInClient() {
       const { data: { user } } = await supabase.auth.getUser();
       const { data: profile } = await db
         .from('profiles')
-        .select('role, is_complete')
+        .select('role, is_provider, provider_complete, is_complete')
         .eq('id', user?.id as string)
         .single();
 
       if (user) await requestPushPermission(user.id);
 
-      if (profile?.role === 'provider') {
-        if (!profile.is_complete) {
-          router.push('/provider/setup');
-        } else {
-          router.push('/provider/dashboard');
-        }
-      } else {
-        router.push('/customer/dashboard');
-      }
+      router.push(resolveDestination(profile));
     } catch (error: any) {
       toast.error(error.message);
     } finally {
@@ -119,21 +130,6 @@ export function SignInClient() {
       toast.error(error.message);
     }
   };
-
-  // Facebook sign-in disabled for now
-  // const handleFacebookSignIn = async () => {
-  //   try {
-  //     const { error } = await supabase.auth.signInWithOAuth({
-  //       provider: 'facebook',
-  //       options: {
-  //         redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`,
-  //       },
-  //     });
-  //     if (error) throw error;
-  //   } catch (error: any) {
-  //     toast.error(error.message);
-  //   }
-  // };
 
   if (loading) {
     return (
@@ -272,7 +268,7 @@ export function SignInClient() {
                     maxLength={8}
                   />
                   <p className="mt-2 text-xs text-gray-500 text-center">
-                    We sent an 8‑digit code to <span className="font-medium text-gray-700">{email}</span>
+                    We sent an 8-digit code to <span className="font-medium text-gray-700">{email}</span>
                   </p>
                 </div>
                 <button
@@ -303,7 +299,6 @@ export function SignInClient() {
           </div>
         </div>
 
-        {/* Google sign-in only, Facebook disabled */}
         <button
           onClick={handleGoogleSignIn}
           className="w-full flex items-center justify-center gap-3 bg-white border border-gray-300 text-gray-700 py-3 rounded-xl hover:bg-gray-50 transition font-medium shadow-sm"

@@ -174,7 +174,7 @@ async function executeFunction(
         }
         const { error } = await db
           .from('profiles')
-          .update({ role: 'provider', is_complete: false } as any)
+          .update({ role: 'provider', is_provider: true, is_complete: false } as any)
           .eq('id', userId);
         if (error) return 'Failed to switch account.';
         return 'You have been switched to a provider account. Please complete your business profile on the Setup page to appear in search results.';

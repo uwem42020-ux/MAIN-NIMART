@@ -37,7 +37,7 @@ export default function ProviderLayout({
 
   // Signed-in providers only
   return (
-    <ProtectedRoute allowedRoles={['provider']}>
+    <ProtectedRoute requireProvider>
       {children}
     </ProtectedRoute>
   );

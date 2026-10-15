@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { db } from '@/lib/supabase-any';
+import { upgradeToProvider } from '@/lib/upgradeProvider';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -17,7 +18,6 @@ import {
   ArrowRight,
   Settings,
   Heart,
-  Briefcase,
 } from 'lucide-react';
 import { LocationPrompt } from '@/components/customer/LocationPrompt';
 import { NimartSpinner } from '@/components/common/NimartSpinner';
@@ -47,7 +47,7 @@ interface BookingWithProvider {
 }
 
 export default function CustomerDashboard() {
-  const { user, profile, refreshProfile } = useAuth();
+  const { user, profile, refreshProfile, isProvider } = useAuth();
   const router = useRouter();
   const [stats, setStats] = useState<DashboardStats>({
     totalBookings: 0,
@@ -162,21 +162,18 @@ export default function CustomerDashboard() {
   }
 
   const handleSwitchToProvider = async () => {
+    if (!user) return;
     if (!window.confirm(
       'Switch to a Provider account?\n\nYou will keep your email and account. You\'ll just need to complete your business profile to appear on the map and search results.'
     )) return;
 
     setSwitching(true);
     try {
-      const { error } = await db
-        .from('profiles')
-        .update({ role: 'provider', is_complete: false })
-        .eq('id', user!.id);
-
-      if (error) throw error;
-
-      await refreshProfile();
-      toast.success('Switched to Provider! Complete your business profile now.');
+      const result = await upgradeToProvider(user.id, isProvider, refreshProfile);
+      if (!result.ok) {
+        throw new Error(result.error || 'Something went wrong. Please try again.');
+      }
+      toast.success('You are now a provider! Complete your business profile.');
       router.push('/provider/setup');
     } catch (err: any) {
       toast.error(err.message || 'Failed to switch. Please try again.');
@@ -206,30 +203,19 @@ export default function CustomerDashboard() {
         <p className="text-gray-600 mt-1">Here's an overview of your activity.</p>
       </div>
 
-      <div className="bg-gradient-to-r from-primary-600 to-green-600 rounded-xl shadow-md p-6 mb-8 text-white">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h2 className="text-xl font-bold flex items-center gap-2">
-              <Briefcase className="h-6 w-6" />
-              Offer Your Services?
-            </h2>
-            <p className="mt-1 text-green-50 text-sm max-w-md">
-              Switch to a Provider account, set up your business profile, and start getting customers directly.
-            </p>
-          </div>
-          <button
-            onClick={handleSwitchToProvider}
-            disabled={switching}
-            className="bg-white text-primary-700 px-6 py-3 rounded-lg font-semibold hover:bg-green-50 transition disabled:opacity-50 flex items-center gap-2 whitespace-nowrap"
-          >
-            {switching ? 'Switching...' : (
-              <>
-                Switch to Provider <ArrowRight className="h-5 w-5" />
-              </>
-            )}
-          </button>
-        </div>
-      </div>
+      {/* Compact provider upgrade banner — hidden once user is a provider */}
+      {!isProvider && (
+        <button
+          onClick={handleSwitchToProvider}
+          disabled={switching}
+          className="w-full mb-6 flex items-center justify-between gap-3 px-4 py-3 rounded-xl bg-primary-50 border border-primary-200 text-primary-700 hover:bg-primary-100 transition disabled:opacity-50"
+        >
+          <span className="font-medium text-sm sm:text-base">
+            {switching ? 'Switching...' : 'Earn money on Nimart'}
+          </span>
+          <ArrowRight className="h-5 w-5 flex-shrink-0 text-primary-600" />
+        </button>
+      )}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <div className="bg-white rounded-2xl shadow-sm border p-4">
