@@ -180,11 +180,7 @@ export function Header() {
     { label: 'Change Phone/Email', icon: <Phone className="h-5 w-5" />, to: getProfileLink() },
     { label: 'Change Language', icon: <Globe className="h-5 w-5" />, action: () => toast.success('Language selector coming soon') },
     { label: 'Change Password', icon: <Lock className="h-5 w-5" />, to: '/auth/reset-password' },
-    { label: 'Delete My Account', icon: <Trash2 className="h-5 w-5 text-red-500" />, action: () => {
-      if (window.confirm('Are you sure you want to delete your account? This action cannot be undone.')) {
-        toast.error('Account deletion is not yet implemented.');
-      }
-    }, danger: true },
+    { label: 'Delete My Account', icon: <Trash2 className="h-5 w-5 text-red-500" />, to: '/delete-account', danger: true },
   ];
 
   const handleMobileProfileClick = () => {
