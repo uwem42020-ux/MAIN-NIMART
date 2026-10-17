@@ -130,19 +130,38 @@ export default function ProviderBookings() {
   } : {};
 
   const updateStatus = async (bookingId: string, newStatus: string, booking: Booking) => {
-    const updates: any = { status: newStatus };
-    if (newStatus === 'in_progress') updates.provider_started_at = new Date().toISOString();
-    if (newStatus === 'completed') updates.completed_at = new Date().toISOString();
-    if (newStatus.startsWith('cancelled')) {
-      updates.cancelled_at = new Date().toISOString();
-      updates.cancelled_by = user?.id;
+    // Determine expected current status for the RPC's optimistic-concurrency guard.
+    let expected: string;
+    switch (newStatus) {
+      case 'confirmed':
+      case 'cancelled_by_provider':
+        expected = 'pending';
+        break;
+      case 'in_progress':
+        expected = 'confirmed';
+        break;
+      case 'completed':
+        expected = 'in_progress';
+        break;
+      default:
+        expected = 'any_active';
     }
 
     setActionLoading(bookingId);
-    const { error } = await db.from('bookings').update(updates).eq('id', bookingId);
+    const { data, error } = await db.rpc('transition_booking_status', {
+      p_booking_id: bookingId,
+      p_expected_status: expected,
+      p_new_status: newStatus,
+      p_price: null,
+      p_cancellation_reason:
+        newStatus === 'cancelled_by_provider' ? 'Cancelled by provider' : null,
+    });
     setActionLoading(null);
-    if (error) {
-      toast.error(error.message);
+
+    if (error || !(data as any)?.success) {
+      const msg =
+        (data as any)?.error || error?.message || 'Could not update booking.';
+      toast.error(msg);
       return;
     }
 
