@@ -8,9 +8,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { db } from '@/lib/supabase-any';
 import toast from 'react-hot-toast';
 import {
-  MapPin, Store, Save, AlertCircle, Home, Landmark, Phone,
-  Loader2, Info, Camera, Check, ChevronRight, ChevronLeft,
-  Upload, X, Navigation,
+  Store, Save, Home, Landmark, Phone,
+  Loader2, Camera, Check, ChevronRight, ChevronLeft,
+  Upload, Navigation,
 } from 'lucide-react';
 import { TIERS, getCategoriesByTier, getSubcategoriesByCategory } from '@/data/categories';
 import type { Category, Subcategory } from '@/data/categories';
@@ -67,7 +67,6 @@ export default function ProviderSetup() {
         const unique = (data as any[]).filter((v: any, i: number, a: any[]) =>
           a.findIndex((t: any) => t.state_id === v.state_id) === i
         );
-        // Sort: Lagos, FCT, Rivers first
         const priority = ['FCT', 'Lagos', 'Rivers'];
         const sorted = unique.sort((a: any, b: any) => {
           const aIdx = priority.indexOf(a.state_name);
@@ -96,9 +95,22 @@ export default function ProviderSetup() {
     fetchLgas();
   }, [selectedStateId]);
 
-  // ── Category chain ──
-  useEffect(() => { setCategories(getCategoriesByTier(selectedTier)); setSelectedCategory(''); setSubcategories([]); setSelectedSubcategoryId(''); }, [selectedTier]);
-  useEffect(() => { if (selectedCategory) { setSubcategories(getSubcategoriesByCategory(selectedCategory)); setSelectedSubcategoryId(''); } }, [selectedCategory]);
+  // ── Category chain (Local Data) ──
+  useEffect(() => { 
+    setCategories(getCategoriesByTier(selectedTier)); 
+    setSelectedCategory(''); 
+    setSubcategories([]); 
+    setSelectedSubcategoryId(''); 
+  }, [selectedTier]);
+
+  useEffect(() => { 
+    if (selectedCategory) { 
+      setSubcategories(getSubcategoriesByCategory(selectedCategory)); 
+      setSelectedSubcategoryId(''); 
+    } else {
+      setSubcategories([]);
+    }
+  }, [selectedCategory]);
 
   // ── Pre-fill existing data ──
   useEffect(() => {
@@ -122,7 +134,7 @@ export default function ProviderSetup() {
         const pr = profileData as any;
         if (pr.avatar_url) {
           setAvatarPreview(pr.avatar_url);
-          setUploadComplete(true); // already uploaded previously
+          setUploadComplete(true);
         }
         if (pr.lga_id) {
           setSelectedLgaId(pr.lga_id.toString());
@@ -201,17 +213,14 @@ export default function ProviderSetup() {
     );
   }, [states]);
 
-  // ── Avatar upload (accepts File, uploads immediately) ──
+  // ── Avatar upload ──
   const uploadAvatar = async (file: File): Promise<string | null> => {
     if (!user) return null;
     const fileExt = file.name.split('.').pop();
     const fileName = `${user.id}/avatar-${Date.now()}.${fileExt}`;
     const { error } = await db.storage
       .from('avatars')
-      .upload(fileName, file, {
-        cacheControl: '3600',
-        upsert: true,
-      });
+      .upload(fileName, file, { cacheControl: '3600', upsert: true });
     if (error) throw error;
     const { data: urlData } = db.storage.from('avatars').getPublicUrl(fileName);
     const avatarUrl = urlData.publicUrl;
@@ -219,7 +228,6 @@ export default function ProviderSetup() {
     return avatarUrl;
   };
 
-  // ── File select: preview + immediate upload ──
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -227,17 +235,12 @@ export default function ProviderSetup() {
       toast.error('Image must be under 5MB');
       return;
     }
-
-    // Show local preview immediately
     setAvatarFile(file);
     setAvatarPreview(URL.createObjectURL(file));
     setUploadComplete(false);
     setUploadProgress(0);
     setUploading(true);
 
-    // Smooth fake progress: 0 → 90 over ~2s while the real upload runs.
-    // Supabase's .upload() doesn't emit progress events, so we simulate
-    // a smooth ramp and snap to 100 on real success.
     let pct = 0;
     const ticker = setInterval(() => {
       pct = Math.min(pct + 6, 90);
@@ -250,7 +253,6 @@ export default function ProviderSetup() {
       setUploadProgress(100);
       setUploadComplete(true);
       toast.success('Profile picture uploaded!');
-      // Brief flash, then hide overlay; the green check badge persists
       setTimeout(() => setUploading(false), 400);
     } catch (err: any) {
       clearInterval(ticker);
@@ -348,7 +350,6 @@ export default function ProviderSetup() {
       <h1 className="text-2xl font-bold text-gray-900 mb-2">Complete Your Profile</h1>
       <p className="text-gray-500 mb-6">Step {step + 1} of {STEPS.length}: {STEPS[step]}</p>
 
-      {/* ── Progress bar ── */}
       <div className="flex gap-2 mb-8">
         {STEPS.map((label, idx) => (
           <div key={idx} className="flex-1">
@@ -371,34 +372,21 @@ export default function ProviderSetup() {
 
             <div className="relative w-40 h-40 mx-auto mb-4">
               {avatarPreview ? (
-                <img
-                  src={avatarPreview}
-                  alt="Preview"
-                  className={`w-full h-full object-cover rounded-full border-4 ${
-                    uploadComplete ? 'border-green-500' : 'border-primary-100'
-                  }`}
-                />
+                <img src={avatarPreview} alt="Preview" className={`w-full h-full object-cover rounded-full border-4 ${uploadComplete ? 'border-green-500' : 'border-primary-100'}`} />
               ) : (
                 <div className="w-full h-full rounded-full bg-gray-100 flex items-center justify-center border-4 border-dashed border-gray-300">
                   <Camera className="h-10 w-10 text-gray-400" />
                 </div>
               )}
-
-              {/* Uploading overlay — shows % + bar */}
               {uploading && (
                 <div className="absolute inset-0 rounded-full bg-black/60 flex flex-col items-center justify-center">
                   <p className="text-white font-bold text-lg">{uploadProgress}%</p>
                   <div className="w-3/4 h-2 bg-white/30 rounded-full mt-2 overflow-hidden">
-                    <div
-                      className="h-full bg-white rounded-full transition-all"
-                      style={{ width: `${uploadProgress}%` }}
-                    />
+                    <div className="h-full bg-white rounded-full transition-all" style={{ width: `${uploadProgress}%` }} />
                   </div>
                   <p className="text-white text-xs mt-1">Uploading…</p>
                 </div>
               )}
-
-              {/* Success badge — persists after upload */}
               {uploadComplete && !uploading && (
                 <div className="absolute bottom-0 right-0 w-10 h-10 rounded-full bg-green-500 border-4 border-white flex items-center justify-center shadow-lg">
                   <Check className="h-5 w-5 text-white" strokeWidth={3} />
@@ -406,11 +394,7 @@ export default function ProviderSetup() {
               )}
             </div>
 
-            {uploadComplete && !uploading && (
-              <p className="text-sm text-green-600 font-medium mb-3">
-                ✓ Profile picture uploaded
-              </p>
-            )}
+            {uploadComplete && !uploading && <p className="text-sm text-green-600 font-medium mb-3">✓ Profile picture uploaded</p>}
 
             <label className="inline-flex items-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-xl hover:bg-primary-700 cursor-pointer transition font-medium">
               <Upload className="h-5 w-5" />
@@ -418,16 +402,7 @@ export default function ProviderSetup() {
               <input type="file" accept="image/*" onChange={handleFileSelect} className="hidden" disabled={uploading} />
             </label>
             {avatarPreview && !uploading && (
-              <button
-                type="button"
-                onClick={() => {
-                  setAvatarFile(null);
-                  setAvatarPreview(null);
-                  setUploadComplete(false);
-                  setUploadProgress(0);
-                }}
-                className="block mx-auto mt-2 text-sm text-red-500 hover:underline"
-              >
+              <button type="button" onClick={() => { setAvatarFile(null); setAvatarPreview(null); setUploadComplete(false); setUploadProgress(0); }} className="block mx-auto mt-2 text-sm text-red-500 hover:underline">
                 Remove
               </button>
             )}
@@ -442,56 +417,27 @@ export default function ProviderSetup() {
               <Store className="h-5 w-5 text-primary-600" /> Business & Location
             </h2>
 
-            {/* GPS button */}
             {!hasLocation && (
-              <button
-                type="button"
-                onClick={detectLocation}
-                disabled={detectingLocation}
-                className="w-full flex items-center justify-center gap-2 p-4 bg-green-50 border-2 border-green-300 rounded-xl hover:bg-green-100 transition disabled:opacity-50"
-              >
-                {detectingLocation ? (
-                  <><Loader2 className="h-5 w-5 animate-spin text-green-600" /> Detecting your location...</>
-                ) : (
-                  <><Navigation className="h-5 w-5 text-green-600" /> Auto-detect my location</>
-                )}
+              <button type="button" onClick={detectLocation} disabled={detectingLocation} className="w-full flex items-center justify-center gap-2 p-4 bg-green-50 border-2 border-green-300 rounded-xl hover:bg-green-100 transition disabled:opacity-50">
+                {detectingLocation ? (<><Loader2 className="h-5 w-5 animate-spin text-green-600" /> Detecting your location...</>) : (<><Navigation className="h-5 w-5 text-green-600" /> Auto-detect my location</>)}
               </button>
             )}
 
-            {!hasLocation && (
-              <p className="text-center text-sm text-gray-400">— or select manually —</p>
-            )}
+            {!hasLocation && <p className="text-center text-sm text-gray-400">— or select manually —</p>}
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Business Name *</label>
-              <input
-                type="text"
-                value={businessName}
-                onChange={(e) => setBusinessName(e.target.value)}
-                required
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500"
-                placeholder="e.g., Ade's Auto Repair"
-              />
+              <input type="text" value={businessName} onChange={(e) => setBusinessName(e.target.value)} required className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500" placeholder="e.g., Ade's Auto Repair" />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Description (optional)</label>
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                rows={3}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500"
-                placeholder="Briefly describe your services..."
-              />
+              <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500" placeholder="Briefly describe your services..." />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">State *</label>
-              <select
-                value={selectedStateId}
-                onChange={(e) => { setSelectedStateId(e.target.value); setSelectedLgaId(''); setHasLocation(false); }}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500"
-              >
+              <select value={selectedStateId} onChange={(e) => { setSelectedStateId(e.target.value); setSelectedLgaId(''); setHasLocation(false); }} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500">
                 <option value="">Select State</option>
                 {states.map(s => <option key={s.state_id} value={s.state_id}>{s.state_name}</option>)}
               </select>
@@ -500,22 +446,18 @@ export default function ProviderSetup() {
             {selectedStateId && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">LGA *</label>
-                <select
-                  value={selectedLgaId}
-                  onChange={(e) => {
-                    const lga = lgas.find(l => l.lga_id === parseInt(e.target.value));
-                    if (lga) {
-                      setSelectedLgaId(lga.lga_id.toString());
-                      setSelectedLgaName(lga.lga_name);
-                      setMapLat(lga.lat);
-                      setMapLng(lga.lng);
-                      const state = states.find(s => s.state_id === parseInt(selectedStateId));
-                      if (state) setSelectedStateName(state.state_name);
-                      setHasLocation(true);
-                    }
-                  }}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500"
-                >
+                <select value={selectedLgaId} onChange={(e) => {
+                  const lga = lgas.find(l => l.lga_id === parseInt(e.target.value));
+                  if (lga) {
+                    setSelectedLgaId(lga.lga_id.toString());
+                    setSelectedLgaName(lga.lga_name);
+                    setMapLat(lga.lat);
+                    setMapLng(lga.lng);
+                    const state = states.find(s => s.state_id === parseInt(selectedStateId));
+                    if (state) setSelectedStateName(state.state_name);
+                    setHasLocation(true);
+                  }
+                }} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500">
                   <option value="">Select LGA</option>
                   {lgas.map(l => <option key={l.lga_id} value={l.lga_id}>{l.lga_name}</option>)}
                 </select>
@@ -570,15 +512,7 @@ export default function ProviderSetup() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number *</label>
-              <input
-                type="tel"
-                value={phoneNumber}
-                onChange={handlePhoneChange}
-                required
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl"
-                placeholder="+234 123 456 7890"
-                maxLength={14}
-              />
+              <input type="tel" value={phoneNumber} onChange={handlePhoneChange} required className="w-full px-4 py-3 border border-gray-300 rounded-xl" placeholder="+234 123 456 7890" maxLength={14} />
               {phoneError && <p className="mt-1 text-xs text-red-600">{phoneError}</p>}
             </div>
 
@@ -586,36 +520,18 @@ export default function ProviderSetup() {
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 <Home className="inline h-4 w-4 mr-1" /> Street Address *
               </label>
-              <input
-                type="text"
-                value={streetAddress}
-                onChange={(e) => setStreetAddress(e.target.value)}
-                required
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl"
-                placeholder="House number & street name"
-              />
+              <input type="text" value={streetAddress} onChange={(e) => setStreetAddress(e.target.value)} required className="w-full px-4 py-3 border border-gray-300 rounded-xl" placeholder="House number & street name" />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 <Landmark className="inline h-4 w-4 mr-1" /> Nearest Landmark (optional)
               </label>
-              <input
-                type="text"
-                value={landmark}
-                onChange={(e) => setLandmark(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl"
-                placeholder="e.g., Near First Bank"
-              />
+              <input type="text" value={landmark} onChange={(e) => setLandmark(e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-xl" placeholder="e.g., Near First Bank" />
             </div>
 
             <label className="flex items-start gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={termsAccepted}
-                onChange={(e) => setTermsAccepted(e.target.checked)}
-                className="mt-1 h-4 w-4 text-primary-600 rounded"
-              />
+              <input type="checkbox" checked={termsAccepted} onChange={(e) => setTermsAccepted(e.target.checked)} className="mt-1 h-4 w-4 text-primary-600 rounded" />
               <span className="text-sm text-gray-700">
                 I agree to the{' '}
                 <Link href="/terms" target="_blank" className="text-primary-600 hover:underline">Terms of Service</Link>
