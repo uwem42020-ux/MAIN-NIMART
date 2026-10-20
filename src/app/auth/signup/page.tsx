@@ -69,12 +69,9 @@ function SignUpContent() {
   };
 
   // ── Redirect already-registered users away from signup ──
-  // Only redirects when the user is BOTH authenticated AND has a completed
-  // profile (has a role). Users mid-signup (steps 2-3) are authenticated but
-  // have no role yet, so they're not redirected.
   useEffect(() => {
-    if (authLoading) return;         // Still determining auth state
-    if (step !== 'email') return;    // Mid-signup flow — don't interrupt
+    if (authLoading) return;         
+    if (step !== 'email') return;    
 
     if (user && profile?.role) {
       const userRole = profile.role as string;
@@ -111,7 +108,10 @@ function SignUpContent() {
     try {
       const { error } = await supabase.auth.signInWithOtp({
         email,
-        options: { shouldCreateUser: true },
+        options: {
+          shouldCreateUser: true,
+          data: { role }, // CRITICAL: Pass role to the database trigger
+        },
       });
       if (error) throw error;
       toast.success('Check your email for the verification code');
@@ -154,15 +154,7 @@ function SignUpContent() {
       const { data: { user: authUser } } = await supabase.auth.getUser();
       if (!authUser) throw new Error('Not authenticated');
 
-      const { data: existingProfile } = await db
-        .from('profiles').select('role').eq('id', authUser.id).single();
-
-      if (existingProfile?.role) {
-        await supabase.auth.signOut();
-        router.push('/auth/signin');
-        toast.error(`This email is already registered as a ${existingProfile.role}. Please sign in.`);
-        return;
-      }
+      // REMOVED: The existingProfile check that was crashing the flow.
 
       if (role === 'provider' && referralCode.trim()) {
         const { data: referrer } = await db
@@ -182,7 +174,13 @@ function SignUpContent() {
       }
 
       if (role === 'customer') {
-        await db.from('profiles').update({ full_name: fullName, role, is_complete: true }).eq('id', authUser.id);
+        await db.from('profiles').update({ 
+          full_name: fullName, 
+          role, 
+          is_customer: true,
+          is_provider: false,
+          is_complete: true 
+        }).eq('id', authUser.id);
         await refreshProfile();
         toast.success('Welcome to Nimart!');
         await requestPushPermission(authUser.id);
@@ -190,9 +188,16 @@ function SignUpContent() {
         return;
       }
 
-      await db.from('profiles').update({ full_name: fullName, role, is_complete: false }).eq('id', authUser.id);
+      // Provider flow
+      await db.from('profiles').update({ 
+        full_name: fullName, 
+        role, 
+        is_customer: true, 
+        is_provider: true, 
+        is_complete: false 
+      }).eq('id', authUser.id);
       await refreshProfile();
-      toast.success('Account created! Let\'s set up your profile.');
+      toast.success("Account created! Let's set up your profile.");
       await requestPushPermission(authUser.id);
       router.push('/provider/setup');
     } catch (error: any) {
@@ -353,7 +358,10 @@ function SignUpContent() {
                     type="button"
                     onClick={async () => {
                       setLoading(true);
-                      const { error } = await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: true } });
+                      const { error } = await supabase.auth.signInWithOtp({ 
+                        email, 
+                        options: { shouldCreateUser: true, data: { role } } 
+                      });
                       setLoading(false);
                       if (error) toast.error(error.message);
                       else toast.success('New code sent!');
