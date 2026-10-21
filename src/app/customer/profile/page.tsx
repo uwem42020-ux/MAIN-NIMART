@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { upgradeToProvider } from '@/lib/upgradeProvider';
+import { compressImage } from '@/lib/imageUtils';
 import { SetPasswordForm } from '@/components/profile/SetPasswordForm';
 import toast from 'react-hot-toast';
 import { User, Phone, Save, Camera, Briefcase, ArrowRight } from 'lucide-react';
@@ -34,12 +35,13 @@ export default function CustomerProfile() {
 
     setUploading(true);
     try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${user!.id}/${user!.id}-${Date.now()}.${fileExt}`;
+      const compressedFile = await compressImage(file);
+
+      const fileName = `${user!.id}/${user!.id}-${Date.now()}.jpg`;
 
       const { error: uploadError } = await supabase.storage
         .from('avatars')
-        .upload(fileName, file);
+        .upload(fileName, compressedFile, { upsert: true });
 
       if (uploadError) throw uploadError;
 
@@ -94,7 +96,7 @@ export default function CustomerProfile() {
     <div className="max-w-3xl mx-auto px-4 py-8">
       <h1 className="text-2xl font-bold text-gray-900 mb-6">Profile Settings</h1>
 
-      {/* Provider upgrade card — hidden once user is a provider */}
+      {/* Provider upgrade card - hidden once user is a provider */}
       {!isProvider && (
         <div className="bg-primary-50 border border-primary-200 rounded-lg p-5 mb-6">
           <div className="flex items-start gap-3">

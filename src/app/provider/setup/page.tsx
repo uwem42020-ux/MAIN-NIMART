@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { TIERS, getCategoriesByTier, getSubcategoriesByCategory } from '@/data/categories';
 import type { Category, Subcategory } from '@/data/categories';
+import { compressImage } from '@/lib/imageUtils';
 
 const STEPS = ['Profile Picture', 'Business & Location', 'Category', 'Contact & Finish'];
 
@@ -213,14 +214,18 @@ export default function ProviderSetup() {
     );
   }, [states]);
 
-  // ── Avatar upload ──
+  // ── Avatar upload (WITH COMPRESSION) ──
   const uploadAvatar = async (file: File): Promise<string | null> => {
     if (!user) return null;
-    const fileExt = file.name.split('.').pop();
+
+    // Compress before uploading
+    const compressedFile = await compressImage(file);
+    
+    const fileExt = 'jpg';
     const fileName = `${user.id}/avatar-${Date.now()}.${fileExt}`;
     const { error } = await db.storage
       .from('avatars')
-      .upload(fileName, file, { cacheControl: '3600', upsert: true });
+      .upload(fileName, compressedFile, { cacheControl: '3600', upsert: true });
     if (error) throw error;
     const { data: urlData } = db.storage.from('avatars').getPublicUrl(fileName);
     const avatarUrl = urlData.publicUrl;
