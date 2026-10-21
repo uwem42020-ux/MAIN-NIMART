@@ -1,5 +1,5 @@
 import { cn } from '../../lib/utils';
-import { Clock, ShieldCheck, Loader2, CheckCircle, Star, XCircle, AlertTriangle } from 'lucide-react';
+import { Clock, ShieldCheck, Loader2, CheckCircle, Star, XCircle, AlertTriangle, Navigation, MapPin } from 'lucide-react';
 
 interface Step {
   key: string;
@@ -10,6 +10,8 @@ interface Step {
 const steps: Step[] = [
   { key: 'pending', label: 'Requested', icon: Clock },
   { key: 'confirmed', label: 'Confirmed', icon: ShieldCheck },
+  { key: 'on_the_way', label: 'On the way', icon: Navigation },
+  { key: 'arrived', label: 'Arrived', icon: MapPin },
   { key: 'in_progress', label: 'In Progress', icon: Loader2 },
   { key: 'completed', label: 'Completed', icon: CheckCircle },
   { key: 'rated', label: 'Rated', icon: Star },
@@ -27,23 +29,30 @@ export function BookingStatusTimeline({
   size = 'md',
 }: BookingStatusTimelineProps) {
   const statusIndex = steps.findIndex(s => s.key === currentStatus);
-  const isCancelled = currentStatus.startsWith('cancelled');
+  
+  // Treat all failure states as "dead" so the progress bar stops
+  const isDead = ['cancelled_by_customer', 'cancelled_by_provider', 'declined', 'expired', 'no_show'].includes(currentStatus);
   const isDisputed = customerConfirmationStatus === 'disputed';
   const isCompleted = currentStatus === 'completed';
   const isRated = isCompleted && customerConfirmationStatus === 'confirmed';
+
+  // Determine the label to show on the right side if the booking failed
+  let deadLabel = 'Cancelled';
+  if (currentStatus === 'declined') deadLabel = 'Declined';
+  if (currentStatus === 'expired') deadLabel = 'Expired';
+  if (currentStatus === 'no_show') deadLabel = 'No Show';
 
   return (
     <div className="flex items-center w-full">
       {steps.map((step, idx) => {
         const StepIcon = step.icon;
-        const isActive = idx <= statusIndex && !isCancelled;
-        const isCurrent = idx === statusIndex && !isCancelled;
+        const isActive = idx <= statusIndex && !isDead;
+        const isCurrent = idx === statusIndex && !isDead;
         const isStepAfterCompleted = step.key === 'rated' && isRated;
         const isFuture = idx > statusIndex && !isStepAfterCompleted;
 
         // Determine active line up to this step
-        const lineActive =
-          idx < statusIndex || (idx === statusIndex && isStepAfterCompleted);
+        const lineActive = idx < statusIndex || (idx === statusIndex && isStepAfterCompleted);
 
         return (
           <div key={step.key} className="flex items-center flex-1">
@@ -52,17 +61,17 @@ export function BookingStatusTimeline({
               <div
                 className={cn(
                   'relative flex items-center justify-center rounded-full transition-all duration-300 z-10',
-                  size === 'sm' ? 'w-8 h-8' : 'w-10 h-10',
-                  (isActive || isStepAfterCompleted) && !isCancelled && !isDisputed
+                  size === 'sm' ? 'w-7 h-7' : 'w-9 h-9',
+                  (isActive || isStepAfterCompleted) && !isDead && !isDisputed
                     ? 'bg-primary-600 text-white shadow-md'
-                    : isCancelled || isDisputed
+                    : isDead || isDisputed
                     ? 'bg-red-100 text-red-500'
                     : 'bg-gray-100 text-gray-400'
                 )}
               >
                 <StepIcon
                   className={cn(
-                    size === 'sm' ? 'w-4 h-4' : 'w-5 h-5',
+                    size === 'sm' ? 'w-3.5 h-3.5' : 'w-4 h-4',
                     isCurrent && 'animate-pulse'
                   )}
                 />
@@ -73,8 +82,8 @@ export function BookingStatusTimeline({
               {size === 'md' && (
                 <span
                   className={cn(
-                    'text-xs mt-1 font-medium',
-                    (isActive || isStepAfterCompleted) && !isCancelled && !isDisputed
+                    'text-[10px] mt-1.5 font-medium text-center max-w-[60px] leading-tight',
+                    (isActive || isStepAfterCompleted) && !isDead && !isDisputed
                       ? 'text-primary-700'
                       : 'text-gray-400',
                     isCurrent && 'text-primary-700 font-semibold'
@@ -89,8 +98,8 @@ export function BookingStatusTimeline({
             {idx < steps.length - 1 && (
               <div
                 className={cn(
-                  'flex-1 h-1 mx-1 rounded-full',
-                  lineActive && !isCancelled && !isDisputed
+                  'flex-1 h-1 mx-1 rounded-full -mt-4 sm:-mt-5',
+                  lineActive && !isDead && !isDisputed
                     ? 'bg-primary-500'
                     : 'bg-gray-200'
                 )}
@@ -100,9 +109,10 @@ export function BookingStatusTimeline({
         );
       })}
 
-      {isCancelled && (
+      {/* Failure States (Cancelled, Declined, Expired) */}
+      {isDead && (
         <div className="ml-2 flex items-center gap-1 text-xs text-red-600 font-medium whitespace-nowrap">
-          <XCircle className="h-4 w-4" /> Cancelled
+          <XCircle className="h-4 w-4" /> {deadLabel}
         </div>
       )}
       {isDisputed && (

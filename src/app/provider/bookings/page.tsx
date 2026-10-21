@@ -8,7 +8,7 @@ import { db } from '@/lib/supabase-any';
 import { format, isToday, isTomorrow, isThisWeek, parseISO } from 'date-fns';
 import {
   Calendar, Clock, MapPin, CheckCircle, XCircle, MessageCircle, Phone,
-  AlertCircle, RefreshCw, ChevronDown, Loader2, Share2
+  AlertCircle, RefreshCw, ChevronDown, Loader2, Share2, Zap, Navigation
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { cn } from '@/lib/utils';
@@ -25,13 +25,14 @@ interface Booking {
   customer_id: string;
   provider_id: string;
   service_name: string;
-  booking_date: string;
-  booking_time: string;
+  booking_date: string | null;
+  booking_time: string | null;
   duration_minutes: number;
   price: number | null;
   location: string;
   special_instructions: string | null;
   status: string;
+  acquisition_mode: 'scheduled' | 'immediate';
   created_at: string;
   customer_name: string | null;
   customer_phone: string | null;
@@ -43,9 +44,8 @@ interface Booking {
 
 const tabs = [
   { key: 'all', label: 'All' },
-  { key: 'pending', label: 'Pending' },
-  { key: 'confirmed', label: 'Confirmed' },
-  { key: 'in_progress', label: 'In Progress' },
+  { key: 'pending', label: 'Requests' },
+  { key: 'active', label: 'Active' },
   { key: 'completed', label: 'Completed' },
   { key: 'cancelled', label: 'Cancelled' },
 ];
@@ -53,10 +53,14 @@ const tabs = [
 const statusColors: Record<string, string> = {
   pending: 'bg-yellow-100 text-yellow-800 border-yellow-200',
   confirmed: 'bg-blue-100 text-blue-800 border-blue-200',
+  on_the_way: 'bg-blue-100 text-blue-800 border-blue-200',
+  arrived: 'bg-purple-100 text-purple-800 border-purple-200',
   in_progress: 'bg-purple-100 text-purple-800 border-purple-200',
   completed: 'bg-green-100 text-green-800 border-green-200',
   cancelled_by_customer: 'bg-red-100 text-red-800 border-red-200',
   cancelled_by_provider: 'bg-red-100 text-red-800 border-red-200',
+  declined: 'bg-red-100 text-red-800 border-red-200',
+  expired: 'bg-gray-100 text-gray-800 border-gray-200',
   no_show: 'bg-gray-100 text-gray-800 border-gray-200',
 };
 
@@ -76,11 +80,12 @@ export default function ProviderBookings() {
         .from('bookings')
         .select('*')
         .eq('provider_id', user.id)
-        .order('booking_date', { ascending: true })
-        .order('booking_time', { ascending: true });
+        .order('created_at', { ascending: false });
 
       if (activeTab === 'cancelled') {
-        query = query.in('status', ['cancelled_by_customer', 'cancelled_by_provider']);
+        query = query.in('status', ['cancelled_by_customer', 'cancelled_by_provider', 'declined', 'expired']);
+      } else if (activeTab === 'active') {
+        query = query.in('status', ['confirmed', 'on_the_way', 'arrived', 'in_progress']);
       } else if (activeTab !== 'all') {
         query = query.eq('status', activeTab);
       }
@@ -123,10 +128,9 @@ export default function ProviderBookings() {
   const counts = bookings ? {
     all: bookings.length,
     pending: bookings.filter(b => b.status === 'pending').length,
-    confirmed: bookings.filter(b => b.status === 'confirmed').length,
-    in_progress: bookings.filter(b => b.status === 'in_progress').length,
+    active: bookings.filter(b => ['confirmed', 'on_the_way', 'arrived', 'in_progress'].includes(b.status)).length,
     completed: bookings.filter(b => b.status === 'completed').length,
-    cancelled: bookings.filter(b => b.status.startsWith('cancelled')).length,
+    cancelled: bookings.filter(b => ['cancelled_by_customer', 'cancelled_by_provider', 'declined', 'expired'].includes(b.status)).length,
   } : {};
 
   const updateStatus = async (bookingId: string, newStatus: string, booking: Booking) => {
@@ -134,11 +138,18 @@ export default function ProviderBookings() {
     let expected: string;
     switch (newStatus) {
       case 'confirmed':
+      case 'declined':
       case 'cancelled_by_provider':
         expected = 'pending';
         break;
-      case 'in_progress':
+      case 'on_the_way':
         expected = 'confirmed';
+        break;
+      case 'arrived':
+        expected = 'on_the_way';
+        break;
+      case 'in_progress':
+        expected = 'arrived'; // Note: Mobile allows confirmed -> in_progress directly, but web assumes travel
         break;
       case 'completed':
         expected = 'in_progress';
@@ -154,13 +165,13 @@ export default function ProviderBookings() {
       p_new_status: newStatus,
       p_price: null,
       p_cancellation_reason:
-        newStatus === 'cancelled_by_provider' ? 'Cancelled by provider' : null,
+        newStatus === 'cancelled_by_provider' ? 'Cancelled by provider' : 
+        newStatus === 'declined' ? 'Declined by provider' : null,
     });
     setActionLoading(null);
 
     if (error || !(data as any)?.success) {
-      const msg =
-        (data as any)?.error || error?.message || 'Could not update booking.';
+      const msg = (data as any)?.error || error?.message || 'Could not update booking.';
       toast.error(msg);
       return;
     }
@@ -207,25 +218,16 @@ export default function ProviderBookings() {
           .single();
 
         if (referral) {
-          await db.rpc('adjust_coin_balance', {
-            p_provider_id: referral.referrer_id,
-            p_amount: REFERRAL_BONUS,
-          });
-          await db.rpc('adjust_coin_balance', {
-            p_provider_id: booking.provider_id,
-            p_amount: REFERRAL_BONUS,
-          });
-
-          await db
-            .from('referrals')
-            .update({ status: 'awarded', awarded_at: new Date().toISOString() })
-            .eq('id', referral.id);
+          await db.rpc('adjust_coin_balance', { p_provider_id: referral.referrer_id, p_amount: REFERRAL_BONUS });
+          await db.rpc('adjust_coin_balance', { p_provider_id: booking.provider_id, p_amount: REFERRAL_BONUS });
+          await db.from('referrals').update({ status: 'awarded', awarded_at: new Date().toISOString() }).eq('id', referral.id);
         }
       }
     }
   };
 
-  const formatBookingDate = (dateStr: string) => {
+  const formatBookingDate = (dateStr: string | null) => {
+    if (!dateStr) return 'ASAP';
     const date = parseISO(dateStr);
     if (isToday(date)) return `Today, ${format(date, 'MMM d')}`;
     if (isTomorrow(date)) return `Tomorrow, ${format(date, 'MMM d')}`;
@@ -244,8 +246,8 @@ export default function ProviderBookings() {
     }
   };
 
-  const activeBookings = bookings?.filter(b => !['completed', 'cancelled_by_customer', 'cancelled_by_provider', 'no_show'].includes(b.status));
-  const pastBookings = bookings?.filter(b => ['completed', 'cancelled_by_customer', 'cancelled_by_provider', 'no_show'].includes(b.status));
+  const activeBookings = bookings?.filter(b => ['pending', 'confirmed', 'on_the_way', 'arrived', 'in_progress'].includes(b.status));
+  const pastBookings = bookings?.filter(b => ['completed', 'cancelled_by_customer', 'cancelled_by_provider', 'declined', 'expired', 'no_show'].includes(b.status));
 
   if (isLoading) {
     return (
@@ -360,16 +362,17 @@ function BookingCard({
   actionLoading: string | null;
   updateStatus: (id: string, status: string, booking: Booking) => Promise<void>;
   shareReceipt: (token: string) => void;
-  formatBookingDate: (date: string) => string;
+  formatBookingDate: (date: string | null) => string;
 }) {
   const isPendingConfirmation = booking.status === 'completed' && booking.customer_confirmation_status === 'pending';
   const isDisputed = booking.customer_confirmation_status === 'disputed';
+  const isCancelled = ['cancelled_by_customer', 'cancelled_by_provider', 'declined', 'expired', 'no_show'].includes(booking.status);
 
   return (
     <div
       className={cn(
         'bg-white rounded-2xl shadow-sm border p-5 hover:shadow-md transition',
-        booking.status.startsWith('cancelled') && 'opacity-60'
+        isCancelled && 'opacity-60'
       )}
     >
       <BookingStatusTimeline
@@ -398,14 +401,27 @@ function BookingCard({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-2 flex-wrap">
             <span className="text-sm font-bold text-gray-800 font-mono tracking-wide">{booking.booking_number}</span>
-            <span className={cn('px-2.5 py-1 rounded-full text-xs font-medium border', statusColors[booking.status])}>
+            <span className={cn('px-2.5 py-1 rounded-full text-xs font-medium border', statusColors[booking.status] || statusColors.no_show)}>
               {booking.status.replace(/_/g, ' ')}
             </span>
+            {booking.acquisition_mode === 'immediate' && (
+              <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-orange-100 text-orange-800 flex items-center gap-1">
+                <Zap className="h-3 w-3" /> Hire Now
+              </span>
+            )}
           </div>
           <h3 className="font-semibold text-gray-900">{booking.service_name}</h3>
           <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-sm text-gray-600">
-            <div className="flex items-center gap-1"><Calendar className="h-4 w-4 text-primary-500" />{formatBookingDate(booking.booking_date)}</div>
-            <div className="flex items-center gap-1"><Clock className="h-4 w-4 text-primary-500" />{booking.booking_time} ({booking.duration_minutes} min)</div>
+            <div className="flex items-center gap-1">
+              <Calendar className="h-4 w-4 text-primary-500" />
+              {formatBookingDate(booking.booking_date)}
+            </div>
+            {booking.booking_time && (
+              <div className="flex items-center gap-1">
+                <Clock className="h-4 w-4 text-primary-500" />
+                {booking.booking_time} ({booking.duration_minutes} min)
+              </div>
+            )}
             <div className="flex items-center gap-1"><MapPin className="h-4 w-4 text-primary-500" />{booking.location}</div>
           </div>
           {booking.price && <p className="mt-2 text-sm font-semibold">₦{booking.price.toLocaleString()}</p>}
@@ -428,6 +444,7 @@ function BookingCard({
         </div>
 
         <div className="flex sm:flex-col items-center sm:items-end gap-2 sm:w-40 flex-shrink-0">
+          {/* PENDING ACTIONS */}
           {booking.status === 'pending' && (
             <>
               <button onClick={() => updateStatus(booking.id, 'confirmed', booking)} disabled={actionLoading === booking.id}
@@ -441,13 +458,41 @@ function BookingCard({
               </button>
             </>
           )}
+          
+          {/* CONFIRMED ACTIONS */}
           {booking.status === 'confirmed' && (
+            <>
+              <button onClick={() => updateStatus(booking.id, 'on_the_way', booking)} disabled={actionLoading === booking.id}
+                className="w-full flex items-center justify-center gap-1 px-3 py-2.5 bg-primary-600 text-white rounded-full hover:bg-primary-700 text-sm font-medium transition active:scale-95 animate-pulse disabled:opacity-50">
+                {actionLoading === booking.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Navigation className="h-4 w-4" />}
+                On the way
+              </button>
+              <button onClick={() => updateStatus(booking.id, 'cancelled_by_provider', booking)} disabled={actionLoading === booking.id}
+                className="w-full flex items-center justify-center gap-1 px-3 py-2.5 bg-gray-100 text-gray-600 rounded-full hover:bg-gray-200 text-sm font-medium transition active:scale-95 disabled:opacity-50">
+                Cancel
+              </button>
+            </>
+          )}
+
+          {/* ON THE WAY ACTIONS */}
+          {booking.status === 'on_the_way' && (
+            <button onClick={() => updateStatus(booking.id, 'arrived', booking)} disabled={actionLoading === booking.id}
+              className="w-full flex items-center justify-center gap-1 px-3 py-2.5 bg-blue-600 text-white rounded-full hover:bg-blue-700 text-sm font-medium transition active:scale-95 disabled:opacity-50">
+              {actionLoading === booking.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <MapPin className="h-4 w-4" />}
+              I have arrived
+            </button>
+          )}
+
+          {/* ARRIVED ACTIONS */}
+          {booking.status === 'arrived' && (
             <button onClick={() => updateStatus(booking.id, 'in_progress', booking)} disabled={actionLoading === booking.id}
-              className="w-full flex items-center justify-center gap-1 px-3 py-2.5 bg-primary-600 text-white rounded-full hover:bg-primary-700 text-sm font-medium transition active:scale-95 animate-pulse disabled:opacity-50">
+              className="w-full flex items-center justify-center gap-1 px-3 py-2.5 bg-purple-600 text-white rounded-full hover:bg-purple-700 text-sm font-medium transition active:scale-95 disabled:opacity-50">
               {actionLoading === booking.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
               Start Service
             </button>
           )}
+
+          {/* IN PROGRESS ACTIONS */}
           {booking.status === 'in_progress' && (
             <button onClick={() => updateStatus(booking.id, 'completed', booking)} disabled={actionLoading === booking.id}
               className="w-full flex items-center justify-center gap-1 px-3 py-2.5 bg-primary-600 text-white rounded-full hover:bg-primary-700 text-sm font-medium transition active:scale-95 disabled:opacity-50">
@@ -455,6 +500,8 @@ function BookingCard({
               Mark Complete
             </button>
           )}
+
+          {/* COMPLETED STATUSES */}
           {booking.status === 'completed' && booking.customer_confirmation_status === 'confirmed' && (
             <span className="flex items-center gap-1 text-green-600 text-sm font-medium">
               <CheckCircle className="h-4 w-4" /> Done & Confirmed

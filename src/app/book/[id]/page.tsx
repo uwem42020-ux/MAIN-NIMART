@@ -17,6 +17,7 @@ import {
   Navigation,
   ArrowLeft,
   Star,
+  Zap,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { sendEmail, sendPushNotification } from '@/lib/email';
@@ -34,6 +35,9 @@ export default function BookProviderPage() {
   const [loadingSubmit, setLoadingSubmit] = useState(false);
   const [gpsCoords, setGpsCoords] = useState<{ lat: number; lng: number } | null>(null);
 
+  // NEW: Booking Mode state
+  const [bookingMode, setBookingMode] = useState<'immediate' | 'scheduled'>('immediate');
+
   const [formData, setFormData] = useState({
     serviceName: '',
     bookingDate: format(new Date(), 'yyyy-MM-dd'),
@@ -43,7 +47,7 @@ export default function BookProviderPage() {
     specialInstructions: '',
   });
 
-  // Redirect to sign‑in if not logged in
+  // Redirect to sign-in if not logged in
   useEffect(() => {
     if (!user) {
       router.push(`/auth/signin?redirect=/book/${providerId}`);
@@ -68,7 +72,6 @@ export default function BookProviderPage() {
         return;
       }
 
-      // Also fetch the provider’s profile for name/rating/avatar
       const { data: profileData } = await db
         .from('profiles')
         .select('full_name, avatar_url, lat, lng, lga_name')
@@ -100,13 +103,10 @@ export default function BookProviderPage() {
     );
   }
 
-  if (!provider) return null; // already redirected
+  if (!provider) return null;
 
   const isAvailable = provider.status === 'available';
-  const providerName =
-    provider.business_name ||
-    provider.profile?.full_name ||
-    'Provider';
+  const providerName = provider.business_name || provider.profile?.full_name || 'Provider';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -117,7 +117,6 @@ export default function BookProviderPage() {
 
     setLoadingSubmit(true);
     try {
-      // Basic VPN check
       let vpnDetected = false;
       try {
         const ipRes = await fetch('https://ipapi.co/json/');
@@ -126,17 +125,21 @@ export default function BookProviderPage() {
       } catch {}
 
       const receiptToken = crypto.randomUUID();
+      const isImmediate = bookingMode === 'immediate';
+      const expiresAt = isImmediate ? new Date(Date.now() + 5 * 60 * 1000).toISOString() : null;
 
       const { error } = await db.from('bookings').insert({
         customer_id: user.id,
         provider_id: providerId,
         service_name: formData.serviceName,
-        booking_date: formData.bookingDate,
-        booking_time: formData.bookingTime,
+        booking_date: isImmediate ? null : formData.bookingDate,
+        booking_time: isImmediate ? null : formData.bookingTime,
         duration_minutes: formData.duration,
         location: formData.location,
         special_instructions: formData.specialInstructions,
         status: 'pending',
+        acquisition_mode: bookingMode,
+        expires_at: expiresAt,
         customer_gps_lat: gpsCoords?.lat || null,
         customer_gps_lng: gpsCoords?.lng || null,
         vpn_detected: vpnDetected,
@@ -145,7 +148,7 @@ export default function BookProviderPage() {
 
       if (error) throw error;
 
-      toast.success('Booking request sent!');
+      toast.success(isImmediate ? 'Hire request sent!' : 'Booking request sent!');
 
       // ---- Notifications (email + push) ----
       const { data: providerProfile } = await db
@@ -157,11 +160,11 @@ export default function BookProviderPage() {
       if (providerProfile?.email) {
         await sendEmail(
           providerProfile.email,
-          `New Booking Request – ${formData.serviceName}`,
+          `New Request – ${formData.serviceName}`,
           providerNewBookingEmail({
             serviceName: formData.serviceName,
-            bookingDate: formData.bookingDate,
-            bookingTime: formData.bookingTime,
+            bookingDate: isImmediate ? 'ASAP' : formData.bookingDate,
+            bookingTime: isImmediate ? 'Now' : formData.bookingTime,
             location: formData.location,
           })
         );
@@ -170,8 +173,10 @@ export default function BookProviderPage() {
       if (providerProfile?.fcm_token) {
         await sendPushNotification(
           providerProfile.fcm_token,
-          'New Booking Request',
-          `${formData.serviceName} — ${formData.bookingDate} at ${formData.bookingTime}`
+          isImmediate ? '🔥 New Hire Request' : 'New Booking Request',
+          isImmediate
+            ? `${formData.serviceName} — Needed ASAP`
+            : `${formData.serviceName} — ${formData.bookingDate} at ${formData.bookingTime}`
         );
       }
 
@@ -182,8 +187,8 @@ export default function BookProviderPage() {
           customerBookingConfirmationEmail({
             providerName,
             serviceName: formData.serviceName,
-            bookingDate: formData.bookingDate,
-            bookingTime: formData.bookingTime,
+            bookingDate: isImmediate ? 'ASAP' : formData.bookingDate,
+            bookingTime: isImmediate ? 'Now' : formData.bookingTime,
             location: formData.location,
           })
         );
@@ -198,12 +203,11 @@ export default function BookProviderPage() {
       if (customerProfile?.fcm_token) {
         await sendPushNotification(
           customerProfile.fcm_token,
-          'Booking Submitted',
-          `Your booking for ${formData.serviceName} has been sent to ${providerName}.`
+          'Request Submitted',
+          `Your request for ${formData.serviceName} has been sent to ${providerName}.`
         );
       }
 
-      // Redirect to customer bookings page
       router.push('/customer/bookings');
     } catch (error: any) {
       toast.error(error.message);
@@ -214,7 +218,6 @@ export default function BookProviderPage() {
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-8">
-      {/* Back button */}
       <button
         onClick={() => router.back()}
         className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 mb-6"
@@ -253,16 +256,35 @@ export default function BookProviderPage() {
           <div className="mt-4 p-3 bg-yellow-50 rounded-lg flex items-start gap-2">
             <Shield className="h-5 w-5 text-yellow-600 flex-shrink-0 mt-0.5" />
             <p className="text-sm text-yellow-800">
-              This provider is currently <strong>not available</strong>. You can still send a
-              booking request, but they may respond later.
+              This provider is currently <strong>not available</strong>. You can still send a request, but they may respond later.
             </p>
           </div>
         )}
       </div>
 
-      {/* Booking form */}
       <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 space-y-5">
-        <h2 className="text-lg font-semibold text-gray-900 mb-2">Booking Details</h2>
+        
+        {/* NEW: Hire Now vs Schedule Toggle */}
+        <div className="flex gap-2 p-1 bg-gray-100 rounded-xl mb-6">
+          <button
+            type="button"
+            onClick={() => setBookingMode('immediate')}
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-semibold rounded-lg transition-all ${
+              bookingMode === 'immediate' ? 'bg-primary-600 text-white shadow-md' : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <Zap className="h-4 w-4" /> Hire Now
+          </button>
+          <button
+            type="button"
+            onClick={() => setBookingMode('scheduled')}
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-semibold rounded-lg transition-all ${
+              bookingMode === 'scheduled' ? 'bg-primary-600 text-white shadow-md' : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <Calendar className="h-4 w-4" /> Schedule
+          </button>
+        </div>
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1.5">
@@ -278,33 +300,36 @@ export default function BookProviderPage() {
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              <Calendar className="inline h-4 w-4 mr-1" /> Date
-            </label>
-            <input
-              type="date"
-              required
-              min={format(new Date(), 'yyyy-MM-dd')}
-              value={formData.bookingDate}
-              onChange={(e) => setFormData({ ...formData, bookingDate: e.target.value })}
-              className="w-full px-3 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition text-gray-900"
-            />
+        {/* Only show Date/Time if Scheduled */}
+        {bookingMode === 'scheduled' && (
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                <Calendar className="inline h-4 w-4 mr-1" /> Date
+              </label>
+              <input
+                type="date"
+                required={bookingMode === 'scheduled'}
+                min={format(new Date(), 'yyyy-MM-dd')}
+                value={formData.bookingDate}
+                onChange={(e) => setFormData({ ...formData, bookingDate: e.target.value })}
+                className="w-full px-3 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition text-gray-900"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                <Clock className="inline h-4 w-4 mr-1" /> Time
+              </label>
+              <input
+                type="time"
+                required={bookingMode === 'scheduled'}
+                value={formData.bookingTime}
+                onChange={(e) => setFormData({ ...formData, bookingTime: e.target.value })}
+                className="w-full px-3 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition text-gray-900"
+              />
+            </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              <Clock className="inline h-4 w-4 mr-1" /> Time
-            </label>
-            <input
-              type="time"
-              required
-              value={formData.bookingTime}
-              onChange={(e) => setFormData({ ...formData, bookingTime: e.target.value })}
-              className="w-full px-3 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition text-gray-900"
-            />
-          </div>
-        </div>
+        )}
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1.5">Duration</label>
@@ -355,7 +380,6 @@ export default function BookProviderPage() {
           />
         </div>
 
-        {/* Safety notice */}
         <div className="bg-yellow-50 rounded-xl p-3 flex items-start gap-2">
           <Shield className="h-5 w-5 text-yellow-600 flex-shrink-0 mt-0.5" />
           <p className="text-xs text-yellow-800">
@@ -380,10 +404,10 @@ export default function BookProviderPage() {
             {loadingSubmit ? (
               <>
                 <Loader2 className="h-5 w-5 animate-spin" />
-                Booking...
+                Sending...
               </>
             ) : (
-              'Confirm Booking'
+              bookingMode === 'immediate' ? 'Send Hire Request' : 'Confirm Booking'
             )}
           </button>
         </div>
