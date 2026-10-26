@@ -10,6 +10,20 @@ import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { NimartSpinner } from '@/components/common/NimartSpinner';
 
+// Human-readable labels for signup_source values
+const SOURCE_LABELS: Record<string, string> = {
+  facebook: 'Facebook',
+  instagram: 'Instagram',
+  tiktok: 'TikTok',
+  'google-search': 'Google Search',
+  whatsapp: 'WhatsApp',
+  twitter: 'Twitter / X',
+  youtube: 'YouTube',
+  'word-of-mouth': 'Friend / Family',
+  'walk-in': 'Saw a provider',
+  other: 'Other',
+};
+
 interface AdminUser {
   id: string;
   full_name: string | null;
@@ -19,6 +33,8 @@ interface AdminUser {
   created_at: string;
   email: string | null;
   business_name: string | null;
+  signup_source: string | null;
+  signup_platform: string | null;
 }
 
 export default function AdminUsers() {
@@ -26,6 +42,7 @@ export default function AdminUsers() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<'all' | 'customer' | 'provider' | 'banned'>('all');
+  const [sourceFilter, setSourceFilter] = useState<string>('all');
 
   useEffect(() => {
     fetchUsers();
@@ -36,7 +53,7 @@ export default function AdminUsers() {
 
     const { data: profiles, error: profilesError } = await db
       .from('profiles')
-      .select('id, full_name, phone, role, is_banned, created_at, email')
+      .select('id, full_name, phone, role, is_banned, created_at, email, signup_source, signup_platform')
       .order('created_at', { ascending: false });
 
     if (profilesError) {
@@ -112,7 +129,18 @@ export default function AdminUsers() {
   }
 
   const filteredUsers = users.filter((u: any) => {
+    // Source filter (client-side, applies to already-loaded list)
+    if (sourceFilter !== 'all') {
+      if (sourceFilter === 'unknown') {
+        if (u.signup_source) return false;
+      } else if (u.signup_source !== sourceFilter) {
+        return false;
+      }
+    }
+
+    // Text search
     const term = searchTerm.toLowerCase();
+    if (!term) return true;
     return (
       u.full_name?.toLowerCase().includes(term) ||
       u.email?.toLowerCase().includes(term) ||
@@ -125,7 +153,7 @@ export default function AdminUsers() {
       <h1 className="text-3xl font-bold text-gray-900 mb-6">Manage Users</h1>
 
       <div className="flex flex-wrap gap-4 mb-6">
-        <div className="flex-1 relative">
+        <div className="flex-1 relative min-w-[240px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
           <input
             type="text"
@@ -145,6 +173,17 @@ export default function AdminUsers() {
           <option value="provider">Providers Only</option>
           <option value="banned">Banned Users</option>
         </select>
+        <select
+          value={sourceFilter}
+          onChange={(e) => setSourceFilter(e.target.value)}
+          className="px-4 py-2 border rounded-lg"
+        >
+          <option value="all">All Sources</option>
+          {Object.entries(SOURCE_LABELS).map(([value, label]) => (
+            <option key={value} value={value}>{label}</option>
+          ))}
+          <option value="unknown">Unknown</option>
+        </select>
       </div>
 
       {loading ? (
@@ -153,77 +192,94 @@ export default function AdminUsers() {
         </div>
       ) : (
         <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b">
-              <tr>
-                <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">User</th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Role</th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Status</th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Joined</th>
-                <th className="px-4 py-3 text-right text-sm font-medium text-gray-600">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {filteredUsers.map((user: any) => (
-                <tr key={user.id} className={cn(user.is_banned && 'bg-red-50')}>
-                  <td className="px-4 py-3">
-                    <div>
-                      <p className="font-medium text-gray-900">{user.full_name || 'Unnamed'}</p>
-                      <p className="text-sm text-gray-500">{user.email}</p>
-                      {user.business_name && (
-                        <p className="text-xs text-primary-600">{user.business_name}</p>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={cn(
-                      'px-2 py-1 rounded-full text-xs font-medium',
-                      user.role === 'provider' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'
-                    )}>
-                      {user.role}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    {user.is_banned ? (
-                      <span className="flex items-center gap-1 text-red-600">
-                        <XCircle className="h-4 w-4" />
-                        Banned
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-1 text-green-600">
-                        <CheckCircle className="h-4 w-4" />
-                        Active
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-500">
-                    {format(new Date(user.created_at), 'MMM d, yyyy')}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <button
-                        onClick={() => handleBanUser(user.id, user.is_banned)}
-                        className={cn(
-                          'p-2 rounded hover:bg-gray-100',
-                          user.is_banned ? 'text-green-600' : 'text-yellow-600'
-                        )}
-                        title={user.is_banned ? 'Unban User' : 'Ban User'}
-                      >
-                        <Ban className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteUser(user.id)}
-                        className="p-2 text-red-600 rounded hover:bg-red-50"
-                        title="Delete User"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b">
+                <tr>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">User</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Role</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Source</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Status</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Joined</th>
+                  <th className="px-4 py-3 text-right text-sm font-medium text-gray-600">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y">
+                {filteredUsers.map((user: any) => (
+                  <tr key={user.id} className={cn(user.is_banned && 'bg-red-50')}>
+                    <td className="px-4 py-3">
+                      <div>
+                        <p className="font-medium text-gray-900">{user.full_name || 'Unnamed'}</p>
+                        <p className="text-sm text-gray-500">{user.email}</p>
+                        {user.business_name && (
+                          <p className="text-xs text-primary-600">{user.business_name}</p>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={cn(
+                        'px-2 py-1 rounded-full text-xs font-medium',
+                        user.role === 'provider' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'
+                      )}>
+                        {user.role}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {user.signup_source ? (
+                        <div>
+                          <span className="px-2 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
+                            {SOURCE_LABELS[user.signup_source] || user.signup_source}
+                          </span>
+                          {user.signup_platform && (
+                            <p className="text-xs text-gray-400 mt-1">{user.signup_platform}</p>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-400">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {user.is_banned ? (
+                        <span className="flex items-center gap-1 text-red-600">
+                          <XCircle className="h-4 w-4" />
+                          Banned
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-1 text-green-600">
+                          <CheckCircle className="h-4 w-4" />
+                          Active
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-500">
+                      {format(new Date(user.created_at), 'MMM d, yyyy')}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => handleBanUser(user.id, user.is_banned)}
+                          className={cn(
+                            'p-2 rounded hover:bg-gray-100',
+                            user.is_banned ? 'text-green-600' : 'text-yellow-600'
+                          )}
+                          title={user.is_banned ? 'Unban User' : 'Ban User'}
+                        >
+                          <Ban className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteUser(user.id)}
+                          className="p-2 text-red-600 rounded hover:bg-red-50"
+                          title="Delete User"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           {filteredUsers.length === 0 && (
             <div className="text-center py-8 text-gray-500">No users found</div>
           )}

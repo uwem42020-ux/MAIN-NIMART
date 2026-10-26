@@ -39,6 +39,8 @@ interface ReferralStats {
   awarded: number;
 }
 
+const MIN_PORTFOLIO_PHOTOS = 3;
+
 export default function ProviderDashboard() {
   const router = useRouter();
   const { user, profile } = useAuth();
@@ -54,6 +56,7 @@ export default function ProviderDashboard() {
   });
   const [isVerified, setIsVerified] = useState(false);
   const [hasPendingVerification, setHasPendingVerification] = useState(false);
+  const [portfolioCount, setPortfolioCount] = useState(0);
 
   const [coinBalance, setCoinBalance] = useState(0);
   const [showBoostModal, setShowBoostModal] = useState(false);
@@ -78,12 +81,13 @@ export default function ProviderDashboard() {
   async function fetchAllData() {
     setLoading(true);
     try {
-      const [providerRes, bookingsRes, reviewsRes, verificationRes, referralsRes] = await Promise.all([
+      const [providerRes, bookingsRes, reviewsRes, verificationRes, referralsRes, portfolioRes] = await Promise.all([
         db.from('providers').select('*').eq('id', user!.id).single(),
         db.from('bookings').select('*').eq('provider_id', user!.id),
         db.from('reviews').select('rating').eq('provider_id', user!.id),
         db.from('verification_documents').select('status').eq('provider_id', user!.id).eq('status', 'pending').limit(1),
         db.from('referrals').select('*', { count: 'exact', head: false }).eq('referrer_id', user!.id),
+        db.from('portfolio_images').select('id', { count: 'exact', head: true }).eq('provider_id', user!.id),
       ]);
 
       const provider = providerRes.data as any;
@@ -91,15 +95,14 @@ export default function ProviderDashboard() {
       const reviews = (reviewsRes.data || []) as any[];
       const pendingVerification = (verificationRes.data || []) as any[];
 
-      // Fetch profile
       const { data: profileData } = await db.from('profiles').select('*').eq('id', user!.id).single();
 
       setProviderData({ ...provider, profile: profileData });
       setIsVerified((profileData as any)?.is_verified || false);
       setHasPendingVerification(pendingVerification.length > 0);
       setCoinBalance(provider?.coin_balance || 0);
+      setPortfolioCount((portfolioRes as any).count || 0);
 
-      // Stats
       setStats({
         totalBookings: bookings.length,
         pendingBookings: bookings.filter((b: any) => b.status === 'pending').length,
@@ -110,7 +113,6 @@ export default function ProviderDashboard() {
         reviewCount: reviews.length,
       });
 
-      // Referral code
       if (provider && !provider.referral_code) {
         const name = provider.business_name || (profileData as any)?.full_name || 'Provider';
         const code = await generateUniqueReferralCode(name);
@@ -120,7 +122,6 @@ export default function ProviderDashboard() {
         setReferralCode(provider.referral_code);
       }
 
-      // Referral stats
       const refs = (referralsRes.data || []) as any[];
       setReferralStats({
         total: refs.length,
@@ -128,7 +129,6 @@ export default function ProviderDashboard() {
         awarded: refs.filter((r: any) => r.status === 'awarded').length,
       });
 
-      // Redirect if profile incomplete
       if (provider && profileData && (!(profileData as any)?.lga_id || !provider.business_name)) {
         router.push('/provider/setup');
       }
@@ -291,6 +291,26 @@ export default function ProviderDashboard() {
         )}
       </div>
 
+      {/* Portfolio nudge — hidden once 3+ photos exist */}
+      {portfolioCount < MIN_PORTFOLIO_PHOTOS && (
+        <div className="bg-red-50 border border-red-200 rounded-2xl p-4 sm:p-5 mb-6 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+              <Image className="h-5 w-5 text-red-600" />
+            </div>
+            <div>
+              <p className="font-semibold text-red-800">Add at least {MIN_PORTFOLIO_PHOTOS} portfolio photos</p>
+              <p className="text-sm text-red-600">
+                You have {portfolioCount} of {MIN_PORTFOLIO_PHOTOS}. Customers can't find you in search until you upload {MIN_PORTFOLIO_PHOTOS} photos of your work.
+              </p>
+            </div>
+          </div>
+          <Link href="/provider/portfolio" className="bg-red-600 text-white px-5 py-2.5 rounded-xl hover:bg-red-700 text-sm font-semibold w-full sm:w-auto text-center transition">
+            Add Photos
+          </Link>
+        </div>
+      )}
+
       {/* Verification Banner */}
       {!isVerified && !hasPendingVerification && (
         <div className="bg-blue-50 rounded-2xl p-4 sm:p-5 mb-6 flex flex-col sm:flex-row items-center justify-between gap-3">
@@ -333,7 +353,7 @@ export default function ProviderDashboard() {
         </div>
       )}
 
-      {/* Quick Actions — Moved up */}
+      {/* Quick Actions */}
       <div className="mb-8">
         <h2 className="text-base font-semibold text-gray-900 mb-3">Quick Actions</h2>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
@@ -361,6 +381,11 @@ export default function ProviderDashboard() {
               <Image className="h-5 w-5 text-purple-600" />
             </div>
             <h3 className="font-semibold text-sm text-gray-900">Portfolio</h3>
+            {portfolioCount < MIN_PORTFOLIO_PHOTOS && (
+              <span className="inline-block mt-1 text-xs font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full">
+                {portfolioCount}/{MIN_PORTFOLIO_PHOTOS}
+              </span>
+            )}
           </Link>
 
           <Link href="/provider/services" className="group bg-white rounded-2xl p-4 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 text-center">
@@ -392,7 +417,6 @@ export default function ProviderDashboard() {
 
       {/* Nicoin Balance + Stats Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-8">
-        {/* Nicoin Card */}
         <div className="lg:col-span-1 bg-gradient-to-br from-amber-400 to-orange-500 rounded-2xl p-5 text-white shadow-lg">
           <div className="flex items-center justify-between mb-3">
             <p className="text-sm font-medium text-white/80">Nicoin Balance</p>
@@ -403,11 +427,10 @@ export default function ProviderDashboard() {
             {coinBalance.toLocaleString()}
           </p>
           <Link href="/provider/payment" className="inline-flex items-center gap-1 text-sm text-white/80 hover:text-white font-medium transition mt-1">
-            Buy more → 
+            Buy more →
           </Link>
         </div>
 
-        {/* Stats */}
         <div className="lg:col-span-2 grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
             { icon: Calendar, color: 'text-primary-600', bg: 'bg-primary-50', label: 'Total Bookings', value: stats.totalBookings },
@@ -429,7 +452,6 @@ export default function ProviderDashboard() {
       {/* Boost Cards */}
       <h2 className="text-base font-semibold text-gray-900 mb-3">Boost Your Visibility</h2>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-        {/* Standard Boost */}
         <div className="bg-white rounded-2xl shadow-sm p-5 hover:shadow-md transition-shadow">
           <div className="w-10 h-10 rounded-xl bg-primary-50 flex items-center justify-center mb-3">
             <TrendingUp className="h-5 w-5 text-primary-600" />
@@ -449,7 +471,6 @@ export default function ProviderDashboard() {
           </button>
         </div>
 
-        {/* Premium Boost */}
         <div className="bg-white rounded-2xl shadow-sm p-5 hover:shadow-md transition-shadow ring-1 ring-amber-200">
           <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center mb-3">
             <Zap className="h-5 w-5 text-amber-500" />
@@ -469,7 +490,6 @@ export default function ProviderDashboard() {
           </button>
         </div>
 
-        {/* Top Placement */}
         <div className="bg-white rounded-2xl shadow-sm p-5 hover:shadow-md transition-shadow">
           <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center mb-3">
             <Tag className="h-5 w-5 text-purple-600" />

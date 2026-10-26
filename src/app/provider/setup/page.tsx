@@ -10,13 +10,20 @@ import toast from 'react-hot-toast';
 import {
   Store, Save, Home, Landmark, Phone,
   Loader2, Camera, Check, ChevronRight, ChevronLeft,
-  Upload, Navigation,
+  Upload, Navigation, Image, Trash2,
 } from 'lucide-react';
 import { TIERS, getCategoriesByTier, getSubcategoriesByCategory } from '@/data/categories';
 import type { Category, Subcategory } from '@/data/categories';
 import { compressImage } from '@/lib/imageUtils';
 
-const STEPS = ['Profile Picture', 'Business & Location', 'Category', 'Contact & Finish'];
+const STEPS = ['Profile Picture', 'Business & Location', 'Category', 'Portfolio', 'Contact & Finish'];
+
+const MIN_PORTFOLIO_PHOTOS = 3;
+
+interface PortfolioImage {
+  id: string;
+  image_url: string;
+}
 
 export default function ProviderSetup() {
   const router = useRouter();
@@ -53,7 +60,11 @@ export default function ProviderSetup() {
   const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
   const [selectedSubcategoryId, setSelectedSubcategoryId] = useState<string>('');
 
-  // Step 3: Contact & Finish
+  // Step 3: Portfolio
+  const [portfolioImages, setPortfolioImages] = useState<PortfolioImage[]>([]);
+  const [portfolioUploading, setPortfolioUploading] = useState(false);
+
+  // Step 4: Contact & Finish
   const [phoneNumber, setPhoneNumber] = useState('');
   const [phoneError, setPhoneError] = useState('');
   const [streetAddress, setStreetAddress] = useState('');
@@ -97,17 +108,17 @@ export default function ProviderSetup() {
   }, [selectedStateId]);
 
   // ── Category chain (Local Data) ──
-  useEffect(() => { 
-    setCategories(getCategoriesByTier(selectedTier)); 
-    setSelectedCategory(''); 
-    setSubcategories([]); 
-    setSelectedSubcategoryId(''); 
+  useEffect(() => {
+    setCategories(getCategoriesByTier(selectedTier));
+    setSelectedCategory('');
+    setSubcategories([]);
+    setSelectedSubcategoryId('');
   }, [selectedTier]);
 
-  useEffect(() => { 
-    if (selectedCategory) { 
-      setSubcategories(getSubcategoriesByCategory(selectedCategory)); 
-      setSelectedSubcategoryId(''); 
+  useEffect(() => {
+    if (selectedCategory) {
+      setSubcategories(getSubcategoriesByCategory(selectedCategory));
+      setSelectedSubcategoryId('');
     } else {
       setSubcategories([]);
     }
@@ -152,6 +163,13 @@ export default function ProviderSetup() {
         if (pr.landmark) setLandmark(pr.landmark);
         if (pr.phone) setPhoneNumber(pr.phone);
       }
+
+      // Load existing portfolio images
+      const { data: portfolioData } = await db.from('portfolio_images')
+        .select('id, image_url')
+        .eq('provider_id', user!.id)
+        .order('created_at', { ascending: false });
+      if (portfolioData) setPortfolioImages((portfolioData as any[]) || []);
     }
     fetchExisting();
   }, [user]);
@@ -218,9 +236,8 @@ export default function ProviderSetup() {
   const uploadAvatar = async (file: File): Promise<string | null> => {
     if (!user) return null;
 
-    // Compress before uploading
     const compressedFile = await compressImage(file);
-    
+
     const fileExt = 'jpg';
     const fileName = `${user.id}/avatar-${Date.now()}.${fileExt}`;
     const { error } = await db.storage
@@ -270,6 +287,58 @@ export default function ProviderSetup() {
     }
   };
 
+  // ── Portfolio upload (Step 3) ──
+  const handlePortfolioUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image must be under 5MB');
+      e.target.value = '';
+      return;
+    }
+
+    setPortfolioUploading(true);
+    try {
+      const compressed = await compressImage(file);
+      const fileName = `${user.id}/portfolio-${Date.now()}.jpg`;
+      const { error: uploadError } = await db.storage
+        .from('portfolio-images')
+        .upload(fileName, compressed, { cacheControl: '3600', upsert: false });
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = db.storage.from('portfolio-images').getPublicUrl(fileName);
+
+      const { data: inserted, error: dbError } = await db
+        .from('portfolio_images')
+        .insert({ provider_id: user.id, image_url: urlData.publicUrl } as any)
+        .select('id, image_url')
+        .single();
+      if (dbError) throw dbError;
+
+      setPortfolioImages(prev => [inserted as any, ...prev]);
+      toast.success('Photo added');
+    } catch (err: any) {
+      toast.error(err?.message || 'Upload failed');
+    } finally {
+      setPortfolioUploading(false);
+      e.target.value = '';
+    }
+  };
+
+  const removePortfolioImage = async (id: string, url: string) => {
+    if (!confirm('Delete this photo?')) return;
+    try {
+      const urlParts = url.split('/');
+      const filePath = urlParts.slice(-2).join('/');
+      await db.storage.from('portfolio-images').remove([filePath]);
+      await db.from('portfolio_images').delete().eq('id', id);
+      setPortfolioImages(prev => prev.filter(p => p.id !== id));
+      toast.success('Photo deleted');
+    } catch (err: any) {
+      toast.error(err?.message || 'Delete failed');
+    }
+  };
+
   // ── Phone validation ──
   const validatePhoneNumber = (phone: string): boolean => {
     const local = phone.replace('+234', '');
@@ -292,13 +361,14 @@ export default function ProviderSetup() {
       case 0: return !!avatarPreview && uploadComplete;
       case 1: return businessName.trim().length > 0 && hasLocation;
       case 2: return !!selectedTier && !!selectedCategory && !!selectedSubcategoryId;
-      case 3: return !!phoneNumber && !phoneError && !!streetAddress.trim() && termsAccepted;
+      case 3: return portfolioImages.length >= MIN_PORTFOLIO_PHOTOS;
+      case 4: return !!phoneNumber && !phoneError && !!streetAddress.trim() && termsAccepted;
       default: return false;
     }
   };
 
   const handleNext = async () => {
-    if (canProceed() && step < 3) {
+    if (canProceed() && step < 4) {
       setStep(step + 1);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
@@ -508,8 +578,69 @@ export default function ProviderSetup() {
           </div>
         )}
 
-        {/* ===== STEP 3: CONTACT & FINISH ===== */}
+        {/* ===== STEP 3: PORTFOLIO ===== */}
         {step === 3 && (
+          <div className="bg-white rounded-2xl shadow-sm border p-6 space-y-5">
+            <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              <Image className="h-5 w-5 text-primary-600" /> Portfolio Photos
+            </h2>
+            <p className="text-sm text-gray-500">
+              Upload at least {MIN_PORTFOLIO_PHOTOS} photos of your previous work. This is required for customers to find you in search.
+            </p>
+
+            {portfolioImages.length > 0 && (
+              <div className="grid grid-cols-3 gap-2">
+                {portfolioImages.map((img) => (
+                  <div key={img.id} className="relative aspect-square bg-gray-100 rounded-lg overflow-hidden group">
+                    <img src={img.image_url} alt="Portfolio" className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => removePortfolioImage(img.id, img.image_url)}
+                      className="absolute top-1 right-1 p-1.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition"
+                      title="Delete"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <label className="w-full flex items-center justify-center gap-2 p-4 border-2 border-dashed border-primary-300 rounded-xl cursor-pointer hover:bg-primary-50 transition">
+              {portfolioUploading ? (
+                <><Loader2 className="h-5 w-5 animate-spin text-primary-600" /><span className="font-medium text-primary-700">Uploading...</span></>
+              ) : (
+                <><Upload className="h-5 w-5 text-primary-600" /><span className="font-medium text-primary-700">
+                  {portfolioImages.length >= MIN_PORTFOLIO_PHOTOS ? 'Add more photos' : 'Upload a photo'}
+                </span></>
+              )}
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handlePortfolioUpload}
+                className="hidden"
+                disabled={portfolioUploading}
+              />
+            </label>
+
+            <div className={`flex items-center justify-between p-3 rounded-xl text-sm ${
+              portfolioImages.length >= MIN_PORTFOLIO_PHOTOS
+                ? 'bg-green-50 text-green-700'
+                : 'bg-amber-50 text-amber-700'
+            }`}>
+              <span>
+                {portfolioImages.length >= MIN_PORTFOLIO_PHOTOS ? (
+                  <>✓ {portfolioImages.length} photos — you're good to go</>
+                ) : (
+                  <>{portfolioImages.length} of {MIN_PORTFOLIO_PHOTOS} minimum — need {MIN_PORTFOLIO_PHOTOS - portfolioImages.length} more</>
+                )}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* ===== STEP 4: CONTACT & FINISH ===== */}
+        {step === 4 && (
           <div className="bg-white rounded-2xl shadow-sm border p-6 space-y-5">
             <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
               <Phone className="h-5 w-5 text-primary-600" /> Contact & Finish
@@ -564,8 +695,8 @@ export default function ProviderSetup() {
             <div />
           )}
 
-          {step < 3 ? (
-            <button type="button" onClick={handleNext} disabled={!canProceed() || uploading} className="flex items-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-xl hover:bg-primary-700 disabled:opacity-50 font-medium">
+          {step < 4 ? (
+            <button type="button" onClick={handleNext} disabled={!canProceed() || uploading || portfolioUploading} className="flex items-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-xl hover:bg-primary-700 disabled:opacity-50 font-medium">
               Continue <ChevronRight className="h-5 w-5" />
             </button>
           ) : (

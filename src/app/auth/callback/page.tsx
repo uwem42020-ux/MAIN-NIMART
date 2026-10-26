@@ -1,36 +1,27 @@
 // src/app/auth/callback/page.tsx
 'use client';
 
-import { useEffect, useState, Suspense } from 'react';
+import { useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { db } from '@/lib/supabase-any';
 import { useAuth } from '@/contexts/AuthContext';
 import toast from 'react-hot-toast';
-import { User, Briefcase, CheckCircle } from 'lucide-react';
 import { NimartSpinner } from '@/components/common/NimartSpinner';
-import { REFERRAL_BONUS } from '@/lib/nicoinConfig';
-import { requestPushPermission } from '@/lib/pushNotifications';
+import { upgradeToProvider } from '@/lib/upgradeProvider';
+
+// Only accounts created within this window are eligible for auto-upgrade.
+// Prevents an existing customer from being upgraded just because they
+// clicked "Sign up" by mistake.
+const FRESH_ACCOUNT_WINDOW_MS = 5 * 60 * 1000;
 
 function CallbackContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { refreshProfile } = useAuth();
-  const [loading, setLoading] = useState(true);
-  const [needsRole, setNeedsRole] = useState(false);
-  const [fullName, setFullName] = useState('');
-  const [role, setRole] = useState<'customer' | 'provider'>('customer');
-  const [submitting, setSubmitting] = useState(false);
-  const [user, setUser] = useState<any>(null);
-  const [referralCode, setReferralCode] = useState('');
 
   useEffect(() => {
     let mounted = true;
-
-    const refParam = searchParams.get('ref');
-    if (refParam) {
-      setReferralCode(refParam.trim().toUpperCase());
-    }
 
     const handleCallback = async () => {
       try {
@@ -38,39 +29,79 @@ function CallbackContent() {
         if (error) throw error;
         if (!session) throw new Error('No session established');
 
-        const currentUser = session.user;
-        if (!mounted) return;
-        setUser(currentUser);
+        const signupIntent = searchParams.get('signup');
+        const signupSource = searchParams.get('signup_source');
 
-        const { data: profile, error: profileError } = await db
+        // Fetch current profile — capability flags are the source of truth.
+        const { data: profileData, error: profileError } = await db
           .from('profiles')
-          .select('role, full_name, is_complete')
-          .eq('id', currentUser.id)
+          .select('is_provider, is_complete, provider_complete, created_at, signup_source')
+          .eq('id', session.user.id)
           .single();
 
         if (profileError && profileError.code !== 'PGRST116') {
           throw profileError;
         }
 
-        if ((profile as any)?.role) {
-          await refreshProfile();
-          const p = profile as any;
-          if (p.role === 'provider' && !p.is_complete) {
-            router.push('/provider/setup');
-          } else {
-            router.push(p.role === 'provider' ? '/provider/dashboard' : '/customer/dashboard');
-          }
-          return;
+        const p = profileData as any;
+
+        // ── Attribution: write source if missing ──
+        // Google OAuth doesn't pass metadata to the trigger, so signup_source
+        // arrives via URL instead. Write it only if not already set, so we
+        // never overwrite a known value.
+        if (p && signupSource && !p.signup_source) {
+          await db
+            .from('profiles')
+            .update({ signup_source: signupSource, signup_platform: 'web' })
+            .eq('id', session.user.id);
         }
 
-        setFullName((profile as any)?.full_name || currentUser.user_metadata?.full_name || '');
-        setNeedsRole(true);
+        // ── Provider upgrade (fresh signups only) ──
+        const isFresh = p?.created_at
+          ? Date.now() - new Date(p.created_at).getTime() < FRESH_ACCOUNT_WINDOW_MS
+          : false;
+
+        if (
+          signupIntent === 'provider' &&
+          p &&
+          !p.is_provider &&
+          isFresh
+        ) {
+          const result = await upgradeToProvider(
+            session.user.id,
+            false,
+            refreshProfile,
+          );
+          if (!result.ok) {
+            console.error('Provider upgrade failed:', result.error);
+          }
+        }
+
+        // Best-effort context sync (onAuthStateChange also fires).
+        await refreshProfile();
+
+        // Re-fetch post-upgrade state for accurate routing.
+        const { data: fresh } = await db
+          .from('profiles')
+          .select('is_provider, is_complete, provider_complete')
+          .eq('id', session.user.id)
+          .single();
+
+        if (!mounted) return;
+
+        const fp = fresh as any;
+        if (fp?.is_provider) {
+          const setupDone = fp.is_complete || fp.provider_complete;
+          router.push(setupDone ? '/provider/dashboard' : '/provider/setup');
+        } else {
+          router.push('/customer/dashboard');
+        }
       } catch (err: any) {
         console.error('Auth callback error:', err);
         toast.error('Authentication failed. Please try again.');
-        router.push('/auth/signin');
-      } finally {
-        if (mounted) setLoading(false);
+        if (mounted) {
+          router.push('/auth/signin');
+        }
       }
     };
 
@@ -81,170 +112,22 @@ function CallbackContent() {
     };
   }, [router, refreshProfile, searchParams]);
 
-  async function completeProfile(e: React.FormEvent) {
-    e.preventDefault();
-    if (!user) return;
-
-    const { data: existingProfile, error: existingError } = await db
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single();
-
-    if (existingError && existingError.code !== 'PGRST116') {
-      toast.error('Failed to check existing profile. Please try again.');
-      return;
-    }
-
-    if ((existingProfile as any)?.role) {
-      toast.error(`This account is already registered as a ${(existingProfile as any).role}. Please sign in.`);
-      await supabase.auth.signOut();
-      router.push('/auth/signin');
-      return;
-    }
-
-    setSubmitting(true);
-    try {
-      if (role === 'customer') {
-        const { error: profileError } = await db
-          .from('profiles')
-          .update({ full_name: fullName, role, is_complete: true })
-          .eq('id', user.id);
-
-        if (profileError) throw profileError;
-        await refreshProfile();
-        await requestPushPermission(user.id);
-        toast.success('Welcome to Nimart!');
-        router.push('/customer/dashboard');
-      } else {
-        if (referralCode.trim()) {
-          const { data: referrer } = await db
-            .from('providers')
-            .select('id')
-            .eq('referral_code', referralCode.trim().toUpperCase())
-            .single();
-
-          if (referrer && referrer.id !== user.id) {
-            await db
-              .from('providers')
-              .update({ referred_by: referrer.id })
-              .eq('id', user.id);
-
-            await db.from('referrals').insert({
-              referrer_id: referrer.id,
-              referred_provider_id: user.id,
-            });
-          }
-        }
-
-        const { error: profileError } = await db
-          .from('profiles')
-          .update({ full_name: fullName, role, is_complete: false })
-          .eq('id', user.id);
-
-        if (profileError) throw profileError;
-        await refreshProfile();
-        await requestPushPermission(user.id);
-        toast.success('Account created! Please complete your business profile.');
-        router.push('/provider/setup');
-      }
-    } catch (error: any) {
-      console.error('Profile completion error:', error);
-      toast.error(error.message || 'Failed to complete profile');
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <NimartSpinner size="lg" />
-      </div>
-    );
-  }
-
-  if (needsRole) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-50 to-primary-100 px-4">
-        <div className="bg-white/90 backdrop-blur-md rounded-2xl shadow-xl p-8 w-full max-w-md">
-          <div className="flex justify-center mb-2">
-            <img
-              src="https://qootzfndochmcoijnwxf.supabase.co/storage/v1/object/public/logo/logo.png"
-              alt="Nimart"
-              className="h-10 w-auto"
-            />
-          </div>
-          <h2 className="text-2xl font-bold text-center mb-2">Welcome to Nimart!</h2>
-          <p className="text-gray-600 text-center mb-6">Just one more step to get started.</p>
-          <form onSubmit={completeProfile} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">Full Name</label>
-              <input
-                type="text"
-                required
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                placeholder="John Doe"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-2">I want to...</label>
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setRole('customer')}
-                  className={`p-4 border-2 rounded-xl flex flex-col items-center transition-all ${
-                    role === 'customer' ? 'border-primary-500 bg-primary-50' : 'border-gray-200'
-                  }`}
-                >
-                  <User className="h-6 w-6 mb-1" />
-                  <span className="font-medium">Hire Services</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setRole('provider')}
-                  className={`p-4 border-2 rounded-xl flex flex-col items-center transition-all ${
-                    role === 'provider' ? 'border-primary-500 bg-primary-50' : 'border-gray-200'
-                  }`}
-                >
-                  <Briefcase className="h-6 w-6 mb-1" />
-                  <span className="font-medium">Offer Services</span>
-                </button>
-              </div>
-            </div>
-
-            {referralCode && role === 'provider' && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">
-                🎁 Referral code <strong>{referralCode}</strong> applied – you'll both earn {REFERRAL_BONUS} Nicoin after your first completed booking.
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={submitting}
-              className="w-full bg-primary-600 text-white py-3 rounded-lg hover:bg-primary-700 flex items-center justify-center gap-2 transition"
-            >
-              <CheckCircle className="h-5 w-5" />
-              {submitting ? 'Saving...' : 'Continue'}
-            </button>
-          </form>
-        </div>
-      </div>
-    );
-  }
-
-  return null;
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      <NimartSpinner size="lg" />
+    </div>
+  );
 }
 
 export default function AuthCallback() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center">
-        <NimartSpinner size="lg" />
-      </div>
-    }>
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center">
+          <NimartSpinner size="lg" />
+        </div>
+      }
+    >
       <CallbackContent />
     </Suspense>
   );

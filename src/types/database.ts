@@ -49,6 +49,8 @@ export interface Database {
           fcm_token: string | null
           has_password: boolean
           has_used_free_location_change: boolean
+          signup_source: string | null
+          signup_platform: string | null
         }
         Insert: {
           id: string
@@ -89,6 +91,8 @@ export interface Database {
           fcm_token?: string | null
           has_password?: boolean
           has_used_free_location_change?: boolean
+          signup_source?: string | null
+          signup_platform?: string | null
         }
         Update: {
           id?: string
@@ -129,6 +133,8 @@ export interface Database {
           fcm_token?: string | null
           has_password?: boolean
           has_used_free_location_change?: boolean
+          signup_source?: string | null
+          signup_platform?: string | null
         }
       }
       providers: {

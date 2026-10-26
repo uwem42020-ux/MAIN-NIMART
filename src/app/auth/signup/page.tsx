@@ -13,6 +13,26 @@ import { NimartSpinner } from '@/components/common/NimartSpinner';
 import { requestPushPermission } from '@/lib/pushNotifications';
 import { REFERRAL_BONUS } from '@/lib/nicoinConfig';
 
+// ── Feature flag: disable customer signup on web ──
+// Set to `true` to re-enable customer signup. When false, all web signups
+// (email + Google) are forced to provider. Reversible with one line.
+const ALLOW_CUSTOMER_SIGNUP = false;
+
+// ── Signup attribution options ──
+// Value stored in `profiles.signup_source`. Label shown to the user.
+const SIGNUP_SOURCES: { value: string; label: string }[] = [
+  { value: 'facebook', label: 'Facebook' },
+  { value: 'instagram', label: 'Instagram' },
+  { value: 'tiktok', label: 'TikTok' },
+  { value: 'google-search', label: 'Google Search' },
+  { value: 'whatsapp', label: 'WhatsApp' },
+  { value: 'twitter', label: 'Twitter / X' },
+  { value: 'youtube', label: 'YouTube' },
+  { value: 'word-of-mouth', label: 'Friend / Family' },
+  { value: 'walk-in', label: 'Saw a provider at work' },
+  { value: 'other', label: 'Other' },
+];
+
 type Step = 'email' | 'otp' | 'profile';
 
 // ── Countdown Timer ──
@@ -51,9 +71,12 @@ function SignUpContent() {
   const [step, setStep] = useState<Step>('email');
   const [email, setEmail] = useState('');
   const [otp, setOtp] = useState('');
-  const [role, setRole] = useState<'customer' | 'provider'>('customer');
+  const [role, setRole] = useState<'customer' | 'provider'>(
+    ALLOW_CUSTOMER_SIGNUP ? 'customer' : 'provider'
+  );
   const [fullName, setFullName] = useState('');
   const [referralCode, setReferralCode] = useState('');
+  const [signupSource, setSignupSource] = useState('');
   const [loading, setLoading] = useState(false);
 
   // Locked at signup when ?role=provider or ?role=customer — can be changed on Step 3
@@ -70,8 +93,8 @@ function SignUpContent() {
 
   // ── Redirect already-registered users away from signup ──
   useEffect(() => {
-    if (authLoading) return;         
-    if (step !== 'email') return;    
+    if (authLoading) return;
+    if (step !== 'email') return;
 
     if (user && profile?.role) {
       const userRole = profile.role as string;
@@ -82,18 +105,27 @@ function SignUpContent() {
     }
   }, [user, profile, authLoading, step, router]);
 
-  // Read role + referral from URL params
+  // Read role + referral + source from URL params
   useEffect(() => {
     const roleParam = searchParams.get('role');
     if (roleParam === 'provider') {
       setRole('provider');
       setRoleLocked(true);
     } else if (roleParam === 'customer') {
-      setRole('customer');
+      if (ALLOW_CUSTOMER_SIGNUP) {
+        setRole('customer');
+      } else {
+        setRole('provider');
+      }
       setRoleLocked(true);
     }
     const refParam = searchParams.get('ref');
     if (refParam) setReferralCode(refParam.trim().toUpperCase());
+    // Pre-fill attribution if present in the URL (e.g. from a campaign landing page).
+    const sourceParam = searchParams.get('source') || searchParams.get('signup_source');
+    if (sourceParam && SIGNUP_SOURCES.some((s) => s.value === sourceParam)) {
+      setSignupSource(sourceParam);
+    }
   }, [searchParams]);
 
   useEffect(() => {
@@ -104,13 +136,21 @@ function SignUpContent() {
 
   const sendOTP = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!signupSource) {
+      toast.error('Please tell us how you heard about Nimart.');
+      return;
+    }
     setLoading(true);
     try {
       const { error } = await supabase.auth.signInWithOtp({
         email,
         options: {
           shouldCreateUser: true,
-          data: { role }, // CRITICAL: Pass role to the database trigger
+          data: {
+            role,
+            signup_source: signupSource,
+            signup_platform: 'web',
+          },
         },
       });
       if (error) throw error;
@@ -174,12 +214,12 @@ function SignUpContent() {
       }
 
       if (role === 'customer') {
-        await db.from('profiles').update({ 
-          full_name: fullName, 
-          role, 
+        await db.from('profiles').update({
+          full_name: fullName,
+          role,
           is_customer: true,
           is_provider: false,
-          is_complete: true 
+          is_complete: true
         }).eq('id', authUser.id);
         await refreshProfile();
         toast.success('Welcome to Nimart!');
@@ -189,12 +229,12 @@ function SignUpContent() {
       }
 
       // Provider flow
-      await db.from('profiles').update({ 
-        full_name: fullName, 
-        role, 
-        is_customer: true, 
-        is_provider: true, 
-        is_complete: false 
+      await db.from('profiles').update({
+        full_name: fullName,
+        role,
+        is_customer: true,
+        is_provider: true,
+        is_complete: false
       }).eq('id', authUser.id);
       await refreshProfile();
       toast.success("Account created! Let's set up your profile.");
@@ -208,10 +248,18 @@ function SignUpContent() {
   };
 
   const handleGoogleSignIn = async () => {
+    if (!signupSource) {
+      toast.error('Please tell us how you heard about Nimart.');
+      return;
+    }
     try {
+      const params = new URLSearchParams();
+      if (!ALLOW_CUSTOMER_SIGNUP) params.set('signup', 'provider');
+      params.set('signup_source', signupSource);
+      const qs = params.toString();
       await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: { redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback` },
+        options: { redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback?${qs}` },
       });
     } catch (error: any) {
       toast.error(error.message);
@@ -289,6 +337,24 @@ function SignUpContent() {
                   </>
                 )}
 
+                {/* ── Signup attribution dropdown ── */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    How did you hear about Nimart?
+                  </label>
+                  <select
+                    value={signupSource}
+                    onChange={(e) => setSignupSource(e.target.value)}
+                    required
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:bg-white transition"
+                  >
+                    <option value="">Select an option...</option>
+                    {SIGNUP_SOURCES.map((s) => (
+                      <option key={s.value} value={s.value}>{s.label}</option>
+                    ))}
+                  </select>
+                </div>
+
                 <button
                   onClick={handleGoogleSignIn}
                   className="w-full flex items-center justify-center gap-3 bg-white border-2 border-primary-500 text-gray-700 py-3 rounded-xl hover:bg-primary-50 transition font-medium shadow-md mb-6"
@@ -358,9 +424,16 @@ function SignUpContent() {
                     type="button"
                     onClick={async () => {
                       setLoading(true);
-                      const { error } = await supabase.auth.signInWithOtp({ 
-                        email, 
-                        options: { shouldCreateUser: true, data: { role } } 
+                      const { error } = await supabase.auth.signInWithOtp({
+                        email,
+                        options: {
+                          shouldCreateUser: true,
+                          data: {
+                            role,
+                            signup_source: signupSource,
+                            signup_platform: 'web',
+                          },
+                        },
                       });
                       setLoading(false);
                       if (error) toast.error(error.message);
@@ -417,8 +490,21 @@ function SignUpContent() {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-3">I want to...</label>
                     <div className="grid grid-cols-2 gap-3">
-                      <button type="button" onClick={() => setRole('customer')} className={`p-4 border-2 rounded-2xl flex flex-col items-center transition-all ${role === 'customer' ? 'border-primary-500 bg-primary-50 text-primary-700 shadow-md scale-[1.02]' : 'border-gray-200 bg-white hover:border-gray-300'}`}>
-                        <User className="h-8 w-8 mb-2" /><span className="font-semibold text-sm">Find services</span><span className="text-xs text-gray-500 mt-1">I'm a customer</span>
+                      <button
+                        type="button"
+                        disabled={!ALLOW_CUSTOMER_SIGNUP}
+                        onClick={() => ALLOW_CUSTOMER_SIGNUP && setRole('customer')}
+                        className={`p-4 border-2 rounded-2xl flex flex-col items-center transition-all ${
+                          role === 'customer'
+                            ? 'border-primary-500 bg-primary-50 text-primary-700 shadow-md scale-[1.02]'
+                            : 'border-gray-200 bg-white'
+                        } ${!ALLOW_CUSTOMER_SIGNUP ? 'opacity-40 cursor-not-allowed' : 'hover:border-gray-300'}`}
+                      >
+                        <User className="h-8 w-8 mb-2" />
+                        <span className="font-semibold text-sm">Find services</span>
+                        <span className="text-xs text-gray-500 mt-1">
+                          {ALLOW_CUSTOMER_SIGNUP ? "I'm a customer" : 'Coming soon'}
+                        </span>
                       </button>
                       <button type="button" onClick={() => setRole('provider')} className={`p-4 border-2 rounded-2xl flex flex-col items-center transition-all ${role === 'provider' ? 'border-primary-500 bg-primary-50 text-primary-700 shadow-md scale-[1.02]' : 'border-gray-200 bg-white hover:border-gray-300'}`}>
                         <Briefcase className="h-8 w-8 mb-2" /><span className="font-semibold text-sm">Offer services</span><span className="text-xs text-gray-500 mt-1">I'm a provider</span>
