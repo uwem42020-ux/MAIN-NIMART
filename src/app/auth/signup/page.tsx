@@ -8,18 +8,15 @@ import { supabase } from '@/lib/supabase';
 import { db } from '@/lib/supabase-any';
 import { useAuth } from '@/contexts/AuthContext';
 import toast from 'react-hot-toast';
-import { User, Briefcase, Mail, CheckCircle, ArrowLeft, ArrowRight } from 'lucide-react';
+import { User, Briefcase, Mail, CheckCircle, ArrowLeft, ArrowRight, AlertCircle } from 'lucide-react';
 import { NimartSpinner } from '@/components/common/NimartSpinner';
 import { requestPushPermission } from '@/lib/pushNotifications';
 import { REFERRAL_BONUS } from '@/lib/nicoinConfig';
 
 // ── Feature flag: disable customer signup on web ──
-// Set to `true` to re-enable customer signup. When false, all web signups
-// (email + Google) are forced to provider. Reversible with one line.
 const ALLOW_CUSTOMER_SIGNUP = false;
 
 // ── Signup attribution options ──
-// Value stored in `profiles.signup_source`. Label shown to the user.
 const SIGNUP_SOURCES: { value: string; label: string }[] = [
   { value: 'facebook', label: 'Facebook' },
   { value: 'instagram', label: 'Instagram' },
@@ -35,7 +32,6 @@ const SIGNUP_SOURCES: { value: string; label: string }[] = [
 
 type Step = 'email' | 'otp' | 'profile';
 
-// ── Countdown Timer ──
 function CountdownTimer({ initialSeconds, onExpire }: { initialSeconds: number; onExpire: () => void }) {
   const [seconds, setSeconds] = useState(initialSeconds);
   const expiredRef = useRef(false);
@@ -77,9 +73,10 @@ function SignUpContent() {
   const [fullName, setFullName] = useState('');
   const [referralCode, setReferralCode] = useState('');
   const [signupSource, setSignupSource] = useState('');
+  const [sourceError, setSourceError] = useState(false);
+  const [shakeKey, setShakeKey] = useState(0);
   const [loading, setLoading] = useState(false);
 
-  // Locked at signup when ?role=provider or ?role=customer — can be changed on Step 3
   const [roleLocked, setRoleLocked] = useState(false);
 
   const emailInputRef = useRef<HTMLInputElement>(null);
@@ -91,7 +88,12 @@ function SignUpContent() {
     document.querySelector('.signup-container')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
   };
 
-  // ── Redirect already-registered users away from signup ──
+  const triggerSourceError = () => {
+    setSourceError(true);
+    setShakeKey(prev => prev + 1); // forces key change → animation replays
+  };
+
+  // Redirect already-registered users
   useEffect(() => {
     if (authLoading) return;
     if (step !== 'email') return;
@@ -105,23 +107,19 @@ function SignUpContent() {
     }
   }, [user, profile, authLoading, step, router]);
 
-  // Read role + referral + source from URL params
+  // URL params
   useEffect(() => {
     const roleParam = searchParams.get('role');
     if (roleParam === 'provider') {
       setRole('provider');
       setRoleLocked(true);
     } else if (roleParam === 'customer') {
-      if (ALLOW_CUSTOMER_SIGNUP) {
-        setRole('customer');
-      } else {
-        setRole('provider');
-      }
+      if (ALLOW_CUSTOMER_SIGNUP) setRole('customer');
+      else setRole('provider');
       setRoleLocked(true);
     }
     const refParam = searchParams.get('ref');
     if (refParam) setReferralCode(refParam.trim().toUpperCase());
-    // Pre-fill attribution if present in the URL (e.g. from a campaign landing page).
     const sourceParam = searchParams.get('source') || searchParams.get('signup_source');
     if (sourceParam && SIGNUP_SOURCES.some((s) => s.value === sourceParam)) {
       setSignupSource(sourceParam);
@@ -137,6 +135,7 @@ function SignUpContent() {
   const sendOTP = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!signupSource) {
+      triggerSourceError();
       toast.error('Please tell us how you heard about Nimart.');
       return;
     }
@@ -194,8 +193,6 @@ function SignUpContent() {
       const { data: { user: authUser } } = await supabase.auth.getUser();
       if (!authUser) throw new Error('Not authenticated');
 
-      // REMOVED: The existingProfile check that was crashing the flow.
-
       if (role === 'provider' && referralCode.trim()) {
         const { data: referrer } = await db
           .from('providers').select('id').eq('referral_code', referralCode.trim().toUpperCase()).single();
@@ -219,7 +216,7 @@ function SignUpContent() {
           role,
           is_customer: true,
           is_provider: false,
-          is_complete: true
+          is_complete: true,
         }).eq('id', authUser.id);
         await refreshProfile();
         toast.success('Welcome to Nimart!');
@@ -228,13 +225,12 @@ function SignUpContent() {
         return;
       }
 
-      // Provider flow
       await db.from('profiles').update({
         full_name: fullName,
         role,
         is_customer: true,
         is_provider: true,
-        is_complete: false
+        is_complete: false,
       }).eq('id', authUser.id);
       await refreshProfile();
       toast.success("Account created! Let's set up your profile.");
@@ -249,6 +245,7 @@ function SignUpContent() {
 
   const handleGoogleSignIn = async () => {
     if (!signupSource) {
+      triggerSourceError();
       toast.error('Please tell us how you heard about Nimart.');
       return;
     }
@@ -279,6 +276,15 @@ function SignUpContent() {
 
   return (
     <div className="relative min-h-screen bg-gradient-to-br from-green-50 via-white to-emerald-50 flex flex-col">
+      {/* Shake animation keyframes (inline, self-contained) */}
+      <style>{`
+        @keyframes nimart-shake {
+          0%, 100% { transform: translateX(0); }
+          20%, 60% { transform: translateX(-8px); }
+          40%, 80% { transform: translateX(8px); }
+        }
+      `}</style>
+
       <Link
         href="/"
         className="absolute top-6 left-6 z-20 p-2 bg-white/80 backdrop-blur-sm rounded-full text-gray-600 hover:text-primary-600 hover:bg-white shadow-sm transition"
@@ -289,7 +295,6 @@ function SignUpContent() {
 
       <div className="flex-1 flex items-center justify-center px-4 py-12 signup-container">
         <div className="w-full max-w-md">
-          {/* ── Progress Steps ── */}
           <div className="flex items-center justify-center gap-2 mb-6">
             {steps.map((s, i) => {
               const isActive = step === s;
@@ -316,7 +321,6 @@ function SignUpContent() {
           </div>
 
           <div className="bg-white/90 backdrop-blur-md rounded-3xl shadow-xl border border-gray-100 p-6 sm:p-8">
-            {/* Step 1: Email */}
             {step === 'email' && (
               <>
                 {isProviderFlow ? (
@@ -337,22 +341,40 @@ function SignUpContent() {
                   </>
                 )}
 
-                {/* ── Signup attribution dropdown ── */}
+                {/* ── Signup attribution dropdown with shake-on-error ── */}
                 <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    How did you hear about Nimart?
+                  <label className={`block text-sm font-medium mb-1 ${sourceError ? 'text-red-600' : 'text-gray-700'}`}>
+                    How did you hear about Nimart? <span className="text-red-500">*</span>
                   </label>
                   <select
+                    key={`source-select-${shakeKey}`}
                     value={signupSource}
-                    onChange={(e) => setSignupSource(e.target.value)}
-                    required
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:bg-white transition"
+                    onChange={(e) => {
+                      setSignupSource(e.target.value);
+                      setSourceError(false);
+                    }}
+                    aria-invalid={sourceError}
+                    aria-describedby={sourceError ? 'source-error' : undefined}
+                    style={{
+                      animation: sourceError ? 'nimart-shake 0.5s ease-in-out' : undefined,
+                    }}
+                    className={`w-full px-4 py-3 rounded-xl focus:outline-none focus:ring-2 transition font-medium ${
+                      sourceError
+                        ? 'bg-red-50 border-2 border-red-500 focus:ring-red-500 focus:bg-white text-red-900'
+                        : 'bg-gray-50 border border-gray-200 focus:ring-primary-500 focus:bg-white text-gray-900'
+                    }`}
                   >
                     <option value="">Select an option...</option>
                     {SIGNUP_SOURCES.map((s) => (
                       <option key={s.value} value={s.value}>{s.label}</option>
                     ))}
                   </select>
+                  {sourceError && (
+                    <p id="source-error" className="flex items-center gap-1 text-sm text-red-600 mt-1.5 font-medium">
+                      <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                      Please select an option above
+                    </p>
+                  )}
                 </div>
 
                 <button
@@ -390,7 +412,6 @@ function SignUpContent() {
               </>
             )}
 
-            {/* Step 2: OTP */}
             {step === 'otp' && (
               <form onSubmit={verifyOTP} className="space-y-5">
                 <h2 className="text-2xl font-bold text-gray-900 text-center mb-2">Check your email</h2>
@@ -451,7 +472,6 @@ function SignUpContent() {
               </form>
             )}
 
-            {/* Step 3: Profile */}
             {step === 'profile' && (
               <form onSubmit={completeProfile} className="space-y-5">
                 {isProviderFlow ? (
