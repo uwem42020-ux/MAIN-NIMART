@@ -2,7 +2,6 @@
 'use client';
 
 import { useEffect, useRef, Suspense } from 'react';
-import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { db } from '@/lib/supabase-any';
 import { useAuth } from '@/contexts/AuthContext';
@@ -25,14 +24,12 @@ function CallbackSkeleton() {
 }
 
 function CallbackContent() {
-  const router = useRouter();
   const { refreshProfile } = useAuth();
   const handledRef = useRef(false);
 
   useEffect(() => {
     let mounted = true;
 
-    // Read URL params once — using window.location avoids dependency churn.
     const params = new URLSearchParams(window.location.search);
     const signupIntent = params.get('signup');
     const signupSource = params.get('signup_source');
@@ -42,7 +39,7 @@ function CallbackContent() {
       handledRef.current = true;
 
       try {
-        // Retry profile fetch — handle_new_user trigger can lag briefly.
+        // Retry profile fetch — trigger can lag briefly.
         let profileData: any = null;
         for (let i = 0; i < 5; i++) {
           const { data, error } = await db
@@ -59,21 +56,22 @@ function CallbackContent() {
         }
 
         const p = profileData;
+        if (!p) throw new Error('Profile not found after retries');
 
-        // Attribution (write once, never overwrite)
-        if (p && signupSource && !p.signup_source) {
+        // Attribution (write once)
+        if (signupSource && !p.signup_source) {
           await db
             .from('profiles')
             .update({ signup_source: signupSource, signup_platform: 'web' })
             .eq('id', userId);
         }
 
-        // Provider upgrade — only for fresh signups
-        const isFresh = p?.created_at
+        // Provider upgrade — fresh signups only
+        const isFresh = p.created_at
           ? Date.now() - new Date(p.created_at).getTime() < FRESH_ACCOUNT_WINDOW_MS
           : false;
 
-        if (signupIntent === 'provider' && p && !p.is_provider && isFresh) {
+        if (signupIntent === 'provider' && !p.is_provider && isFresh) {
           const { error } = await db
             .from('profiles')
             .update({ role: 'provider', is_provider: true })
@@ -81,9 +79,11 @@ function CallbackContent() {
           if (error) console.error('Provider upgrade failed:', error);
         }
 
-        // Sync AuthContext, then route by final capability state
+        // Best-effort — AuthContext's closure here may be stale,
+        // but that's OK because we do a hard navigation below.
         try { await refreshProfile(); } catch {}
 
+        // Final state (post-upgrade)
         const { data: fresh } = await db
           .from('profiles')
           .select('is_provider, is_complete, provider_complete')
@@ -93,36 +93,42 @@ function CallbackContent() {
         if (!mounted) return;
 
         const fp = fresh as any;
+        let destination: string;
         if (fp?.is_provider) {
           const setupDone = fp.is_complete || fp.provider_complete;
-          router.push(setupDone ? '/provider/dashboard' : '/provider/setup');
+          destination = setupDone ? '/provider/dashboard' : '/provider/setup';
         } else {
-          router.push('/customer/dashboard');
+          destination = '/customer/dashboard';
         }
+
+        // Use full page reload, NOT router.push. This forces SSR to re-fetch
+        // the profile (is_provider, provider_complete) so AuthContext initializes
+        // with the correct state and ProtectedRoute won't bounce us to "/".
+        window.location.href = destination;
       } catch (err: any) {
         console.error('Auth callback error:', err);
         toast.error('Authentication failed. Please try again.');
-        if (mounted) router.push('/auth/signin');
+        if (mounted) window.location.href = '/auth/signin';
       }
     };
 
-    // Method 1: session might already be ready (fast path)
+    // Fast path
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user && mounted) doRedirect(session.user.id);
     });
 
-    // Method 2: wait for the OAuth hash/code to be processed → SIGNED_IN fires
+    // Detects OAuth completion
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_IN' && session?.user && mounted) {
         doRedirect(session.user.id);
       }
     });
 
-    // Method 3: 10s safety net — never spin forever
+    // Safety net
     const timeout = setTimeout(() => {
       if (mounted && !handledRef.current) {
         toast.error('Authentication timed out. Please try again.');
-        router.push('/auth/signin');
+        window.location.href = '/auth/signin';
       }
     }, 10000);
 
@@ -132,7 +138,7 @@ function CallbackContent() {
       clearTimeout(timeout);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // intentionally run once — handledRef prevents duplicates
+  }, []);
 
   return <CallbackSkeleton />;
 }
