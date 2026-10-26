@@ -1,4 +1,3 @@
-// src/app/layout.tsx
 import '@/styles/globals.css';
 import type { Metadata } from 'next';
 import { Providers } from '@/components/Providers';
@@ -56,7 +55,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   if (user) {
     const { data: profile } = await supabase
       .from('profiles')
-      .select('role, is_verified, avatar_url, full_name')
+      .select('role, is_verified, avatar_url, full_name, is_customer, is_provider, is_complete, provider_complete, customer_complete')
       .eq('id', user.id)
       .single();
     initialProfile = profile;
