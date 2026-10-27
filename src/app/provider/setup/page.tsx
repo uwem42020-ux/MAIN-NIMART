@@ -164,7 +164,6 @@ export default function ProviderSetup() {
         if (pr.phone) setPhoneNumber(pr.phone);
       }
 
-      // Load existing portfolio images
       const { data: portfolioData } = await db.from('portfolio_images')
         .select('id, image_url')
         .eq('provider_id', user!.id)
@@ -287,7 +286,7 @@ export default function ProviderSetup() {
     }
   };
 
-  // ── Portfolio upload (Step 3) ──
+  // ── Portfolio upload (Step 3) — bucket: 'portfolio' ──
   const handlePortfolioUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user) return;
@@ -302,11 +301,11 @@ export default function ProviderSetup() {
       const compressed = await compressImage(file);
       const fileName = `${user.id}/portfolio-${Date.now()}.jpg`;
       const { error: uploadError } = await db.storage
-        .from('portfolio-images')
+        .from('portfolio')
         .upload(fileName, compressed, { cacheControl: '3600', upsert: false });
       if (uploadError) throw uploadError;
 
-      const { data: urlData } = db.storage.from('portfolio-images').getPublicUrl(fileName);
+      const { data: urlData } = db.storage.from('portfolio').getPublicUrl(fileName);
 
       const { data: inserted, error: dbError } = await db
         .from('portfolio_images')
@@ -330,7 +329,7 @@ export default function ProviderSetup() {
     try {
       const urlParts = url.split('/');
       const filePath = urlParts.slice(-2).join('/');
-      await db.storage.from('portfolio-images').remove([filePath]);
+      await db.storage.from('portfolio').remove([filePath]);
       await db.from('portfolio_images').delete().eq('id', id);
       setPortfolioImages(prev => prev.filter(p => p.id !== id));
       toast.success('Photo deleted');
@@ -678,14 +677,12 @@ export default function ProviderSetup() {
           </div>
         )}
 
-        {/* ===== ERROR ===== */}
         {submitError && (
           <div className="bg-red-50 border border-red-200 rounded-xl p-4">
             <p className="text-red-800 text-sm">{submitError}</p>
           </div>
         )}
 
-        {/* ===== NAVIGATION ===== */}
         <div className="flex justify-between pt-4">
           {step > 0 ? (
             <button type="button" onClick={handleBack} className="flex items-center gap-2 px-5 py-3 border border-gray-300 rounded-xl hover:bg-gray-50 font-medium text-gray-700">
