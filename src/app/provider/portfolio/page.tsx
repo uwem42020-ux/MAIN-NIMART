@@ -126,9 +126,10 @@ export default function ProviderPortfolio() {
       const fileExt = fileToUpload.name.split('.').pop();
       const fileName = `${user!.id}/${Date.now()}.${fileExt}`;
 
+      // Bucket name: 'portfolio'
       const { error: uploadError } = await (db as any)
         .storage
-        .from('portfolio-images')
+        .from('portfolio')
         .upload(fileName, fileToUpload, { cacheControl: '3600', upsert: false });
 
       if (uploadError) throw uploadError;
@@ -139,7 +140,7 @@ export default function ProviderPortfolio() {
 
       const { data: urlData } = (db as any)
         .storage
-        .from('portfolio-images')
+        .from('portfolio')
         .getPublicUrl(fileName);
 
       const { error: dbError } = await db
@@ -171,7 +172,7 @@ export default function ProviderPortfolio() {
     try {
       const urlParts = url.split('/');
       const filePath = urlParts.slice(-2).join('/');
-      await (db as any).storage.from('portfolio-images').remove([filePath]);
+      await (db as any).storage.from('portfolio').remove([filePath]);
       await db.from('portfolio_images').delete().eq('id', id);
       queryClient.invalidateQueries({ queryKey: ['provider-portfolio', user?.id] });
       toast.success('Image deleted');
