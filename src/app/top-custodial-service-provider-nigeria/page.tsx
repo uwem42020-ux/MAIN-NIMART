@@ -1,89 +1,86 @@
 // src/app/top-custodial-service-provider-nigeria/page.tsx
-import type { Metadata } from 'next';
 import Link from 'next/link';
-import { db } from '@/lib/supabase-any';
+import type { Metadata } from 'next';
+import { buildMetadata } from '@/lib/seo';
 import {
   ShieldCheck,
   Star,
   Users,
   Briefcase,
-  CheckCircle2,
   Search,
   Sparkles,
   Clock,
   MapPin,
+  CheckCircle2,
 } from 'lucide-react';
 
-export const metadata: Metadata = {
-  title: 'Top Custodial Service Provider in Nigeria | Nimart',
+export const metadata: Metadata = buildMetadata({
+  title: 'Custodial Services in Nigeria - Join Nimart as a Custodial Provider',
   description:
-    'Looking for the top custodial service provider in Nigeria? Nimart connects you with verified cleaning and facility maintenance professionals across Nigeria. Book trusted custodial services today.',
-  openGraph: {
-    title: 'Top Custodial Service Provider in Nigeria | Nimart',
-    description:
-      'Looking for the top custodial service provider in Nigeria? Nimart connects you with verified cleaning and facility maintenance professionals across Nigeria.',
-    url: 'https://www.nimart.ng/top-custodial-service-provider-nigeria',
-    siteName: 'Nimart',
-    images: ['/og-image.png'],
-  },
-  twitter: {
-    card: 'summary_large_image',
-    title: 'Top Custodial Service Provider in Nigeria | Nimart',
-    description:
-      'Looking for the top custodial service provider in Nigeria? Nimart connects you with verified cleaning and facility maintenance professionals.',
-    images: ['/og-image.png'],
-  },
-};
+    "Nimart is expanding into custodial and facility services across Nigeria. If you're a cleaning or facility maintenance professional, join Nimart for free and get discovered by customers.",
+  path: '/top-custodial-service-provider-nigeria',
+});
 
-function slugify(str: string) {
-  return str.toLowerCase().replace(/\s+/g, '-');
-}
-
-export default async function TopCustodialServiceProviderPage() {
-  const { data: providersData } = await db.rpc('get_search_providers');
-  const allProviders = Array.isArray(providersData) ? (providersData as any[]) : [];
-
-  const custodialKeywords = ['custod', 'clean', 'janitor', 'facility', 'maintenance'];
-  const custodialProviders = allProviders.filter((p) => {
-    const text = `${p.business_name} ${p.description} ${p.tags ? p.tags.join(' ') : ''}`.toLowerCase();
-    return custodialKeywords.some((kw) => text.includes(kw));
-  });
-
-  const totalProviders = custodialProviders.length || allProviders.length;
-
-  const categories = new Set(allProviders.map((p) => p.selected_category_slug).filter(Boolean));
-  const categoryList = [...categories].slice(0, 8);
-
-  const jsonLd = {
-    '@context': 'https://schema.org',
-    '@graph': [
-      {
-        '@type': 'Product',
-        name: 'Top Custodial Service Provider in Nigeria - Nimart',
-        description:
-          'Nimart is Nigeria’s trusted marketplace for custodial and facility services. Find verified cleaning and maintenance professionals across Nigeria.',
-        url: 'https://www.nimart.ng/top-custodial-service-provider-nigeria',
-        image: 'https://www.nimart.ng/og-image.png',
-        brand: {
-          '@type': 'Brand',
-          name: 'Nimart',
-        },
-        aggregateRating: {
-          '@type': 'AggregateRating',
-          ratingValue: '4.8',
-          reviewCount: '150',
-        },
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'WebPage',
+      name: 'Custodial Services in Nigeria - Nimart',
+      description:
+        'Nimart is expanding into custodial and facility services across Nigeria. Join as a custodial provider today.',
+      url: 'https://www.nimart.ng/top-custodial-service-provider-nigeria',
+      isPartOf: {
+        '@type': 'WebSite',
+        name: 'Nimart',
+        url: 'https://www.nimart.ng',
       },
-      {
+      breadcrumb: {
         '@type': 'BreadcrumbList',
         itemListElement: [
           { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://www.nimart.ng' },
-          { '@type': 'ListItem', position: 2, name: 'Custodial Services Nigeria', item: 'https://www.nimart.ng/top-custodial-service-provider-nigeria' },
+          {
+            '@type': 'ListItem',
+            position: 2,
+            name: 'Custodial Services',
+            item: 'https://www.nimart.ng/top-custodial-service-provider-nigeria',
+          },
         ],
       },
-    ],
-  };
+    },
+    {
+      '@type': 'FAQPage',
+      mainEntity: [
+        {
+          '@type': 'Question',
+          name: 'What is a custodial service provider?',
+          acceptedAnswer: {
+            '@type': 'Answer',
+            text: 'A custodial service provider offers cleaning, janitorial, and facility maintenance services for homes, offices, schools, and commercial buildings.',
+          },
+        },
+        {
+          '@type': 'Question',
+          name: 'Are custodial providers available on Nimart right now?',
+          acceptedAnswer: {
+            '@type': 'Answer',
+            text: 'Nimart is currently onboarding custodial providers. As cleaning and facility maintenance professionals join, they will appear in search results. In the meantime, browse other verified services across Nigeria.',
+          },
+        },
+        {
+          '@type': 'Question',
+          name: 'How do I join Nimart as a custodial provider?',
+          acceptedAnswer: {
+            '@type': 'Answer',
+            text: 'Create a free account at nimart.ng/auth/signup, complete your provider profile, and customers will be able to find and book you. Joining is 100% free.',
+          },
+        },
+      ],
+    },
+  ],
+};
 
+export default function TopCustodialServiceProviderPage() {
   return (
     <>
       <script
@@ -91,129 +88,144 @@ export default async function TopCustodialServiceProviderPage() {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
 
-      {/* Hero */}
+      {/* Hero - Honest messaging */}
       <section className="bg-gradient-to-br from-primary-700 via-primary-600 to-green-600 text-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 md:py-24">
           <div className="max-w-3xl">
             <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm px-4 py-2 rounded-full text-sm mb-6">
               <Sparkles className="h-4 w-4" />
-              Top-Rated Custodial Services in Nigeria
+              Now expanding into custodial services
             </div>
             <h1 className="text-4xl md:text-5xl font-extrabold leading-tight mb-4">
-              Top Custodial Service Provider in Nigeria
+              Custodial Services in Nigeria
             </h1>
             <p className="text-lg md:text-xl text-primary-100 mb-8 max-w-2xl">
-              Find verified custodial and facility maintenance professionals across Nigeria.
-              Compare ratings, read reviews, and book trusted services for your home, office,
-              and commercial spaces.
+              Nimart is building Nigeria's most trusted marketplace for cleaning, janitorial, and
+              facility maintenance services. We're currently onboarding custodial professionals across the country.
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
               <Link
-                href="/search?q=custodial"
+                href="/auth/signup?role=provider"
                 className="inline-flex items-center justify-center gap-2 bg-white text-primary-700 px-6 py-3 rounded-xl font-semibold hover:bg-gray-100 transition"
               >
-                <Search className="h-5 w-5" />
-                Find Custodial Services
+                <Briefcase className="h-5 w-5" />
+                Join as a Custodial Provider
               </Link>
               <Link
-                href="/auth/signup?role=provider"
+                href="/search"
                 className="inline-flex items-center justify-center gap-2 bg-primary-900/20 border border-white/30 text-white px-6 py-3 rounded-xl font-semibold hover:bg-primary-900/40 transition"
               >
-                <Briefcase className="h-5 w-5" />
-                Join as a Provider
+                <Search className="h-5 w-5" />
+                Browse Other Services
               </Link>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Stats */}
-      <section className="bg-white border-b border-gray-100">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
-            <div>
-              <Users className="h-8 w-8 mx-auto text-primary-600 mb-2" />
-              <p className="text-3xl font-bold text-gray-900">{totalProviders}</p>
-              <p className="text-sm text-gray-500">Custodial Providers</p>
-            </div>
-            <div>
-              <Briefcase className="h-8 w-8 mx-auto text-primary-600 mb-2" />
-              <p className="text-3xl font-bold text-gray-900">{categoryList.length}</p>
-              <p className="text-sm text-gray-500">Service Categories</p>
-            </div>
-            <div>
-              <Star className="h-8 w-8 mx-auto text-yellow-400 fill-yellow-400 mb-2" />
-              <p className="text-3xl font-bold text-gray-900">4.8</p>
-              <p className="text-sm text-gray-500">Average Rating</p>
-            </div>
-            <div>
-              <Clock className="h-8 w-8 mx-auto text-primary-600 mb-2" />
-              <p className="text-3xl font-bold text-gray-900">24/7</p>
-              <p className="text-sm text-gray-500">Availability</p>
-            </div>
+      {/* Honest "coming soon" message */}
+      <section className="bg-white py-16">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary-50 mb-6">
+            <Users className="h-8 w-8 text-primary-600" />
           </div>
+          <h2 className="text-3xl font-bold text-gray-900 mb-4">
+            We're onboarding custodial providers
+          </h2>
+          <p className="text-lg text-gray-600 mb-8">
+            Nimart is actively recruiting cleaning, janitorial, and facility maintenance professionals
+            across Nigeria. If you're a custodial service provider, this is the perfect time to join
+            for free and be among the first listed.
+          </p>
+          <Link
+            href="/auth/signup?role=provider"
+            className="inline-flex items-center gap-2 bg-primary-600 text-white px-8 py-3 rounded-xl font-semibold hover:bg-primary-700 transition"
+          >
+            <Briefcase className="h-5 w-5" />
+            Join Nimart for Free
+          </Link>
         </div>
       </section>
 
-      {/* Why Choose */}
+      {/* Why Join - focused on providers */}
       <section className="bg-gray-50 py-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <h2 className="text-3xl font-bold text-gray-900 text-center mb-12">
-            Why Nimart for Custodial Services?
+            Why Join Nimart as a Custodial Provider?
           </h2>
           <div className="grid md:grid-cols-3 gap-8">
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
               <div className="w-12 h-12 rounded-xl bg-primary-50 flex items-center justify-center mb-4">
-                <ShieldCheck className="h-6 w-6 text-primary-600" />
+                <CheckCircle2 className="h-6 w-6 text-primary-600" />
               </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Verified Professionals</h3>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">100% Free to Join</h3>
               <p className="text-gray-600 text-sm">
-                All custodial providers are background-checked and verified for quality service.
-              </p>
-            </div>
-            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-              <div className="w-12 h-12 rounded-xl bg-primary-50 flex items-center justify-center mb-4">
-                <Star className="h-6 w-6 text-primary-600" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Trusted Reviews</h3>
-              <p className="text-gray-600 text-sm">
-                Read real reviews from other customers to make an informed decision.
+                No registration fee. No commission on your first bookings. Create your profile
+                and start getting discovered by customers across Nigeria.
               </p>
             </div>
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
               <div className="w-12 h-12 rounded-xl bg-primary-50 flex items-center justify-center mb-4">
                 <MapPin className="h-6 w-6 text-primary-600" />
               </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Local Coverage</h3>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Reach Customers Locally</h3>
               <p className="text-gray-600 text-sm">
-                Find custodial providers near you across all major cities in Nigeria.
+                Set your service area and get matched with customers in your city or LGA
+                who are actively searching for cleaning and facility services.
+              </p>
+            </div>
+            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+              <div className="w-12 h-12 rounded-xl bg-primary-50 flex items-center justify-center mb-4">
+                <Star className="h-6 w-6 text-primary-600" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Build Your Reputation</h3>
+              <p className="text-gray-600 text-sm">
+                Get reviews from real customers. Build a verified profile. Grow your
+                cleaning business through word-of-mouth on Nimart.
               </p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Service Areas / Popular Categories */}
+      {/* What counts as custodial */}
       <section className="bg-white py-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <h2 className="text-3xl font-bold text-gray-900 text-center mb-8">
-            Explore Custodial & Facility Services
+            What We Mean by "Custodial Services"
           </h2>
-          <div className="flex flex-wrap justify-center gap-3">
-            {categoryList.map((catSlug) => (
-              <Link
-                key={catSlug}
-                href={`/categories/${slugify(catSlug)}`}
-                className="px-5 py-2.5 bg-gray-50 rounded-full text-sm font-medium text-gray-700 border border-gray-200 hover:border-primary-300 hover:text-primary-600 transition"
-              >
-                {catSlug.split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
-              </Link>
-            ))}
+          <div className="grid md:grid-cols-2 gap-6">
+            <div className="bg-gray-50 rounded-2xl p-6">
+              <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                <ShieldCheck className="h-5 w-5 text-primary-600" />
+                Cleaning & Janitorial
+              </h3>
+              <ul className="text-sm text-gray-600 space-y-2">
+                <li>• Residential cleaning</li>
+                <li>• Commercial office cleaning</li>
+                <li>• Post-construction cleanup</li>
+                <li>• Deep cleaning services</li>
+                <li>• Pest control & fumigation</li>
+              </ul>
+            </div>
+            <div className="bg-gray-50 rounded-2xl p-6">
+              <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                <Clock className="h-5 w-5 text-primary-600" />
+                Facility Maintenance
+              </h3>
+              <ul className="text-sm text-gray-600 space-y-2">
+                <li>• Building maintenance</li>
+                <li>• Groundskeeping</li>
+                <li>• Equipment servicing</li>
+                <li>• Waste management</li>
+                <li>• Security & access control</li>
+              </ul>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* FAQ */}
+      {/* FAQ - honest */}
       <section className="bg-gray-50 py-16">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <h2 className="text-3xl font-bold text-gray-900 text-center mb-8">
@@ -228,46 +240,44 @@ export default async function TopCustodialServiceProviderPage() {
               </p>
             </div>
             <div className="bg-white rounded-2xl p-6 shadow-sm">
-              <h3 className="font-semibold text-gray-900">How do I find the top custodial provider near me?</h3>
+              <h3 className="font-semibold text-gray-900">Are custodial providers available on Nimart right now?</h3>
               <p className="text-gray-600 mt-2 text-sm">
-                Use Nimart's search to filter by location, compare ratings, and read reviews from
-                other customers to find the best custodial provider in your area.
+                Nimart is currently onboarding custodial providers. As cleaning and facility
+                maintenance professionals join, they will appear in search results. In the
+                meantime, browse other verified services across Nigeria.
               </p>
             </div>
             <div className="bg-white rounded-2xl p-6 shadow-sm">
-              <h3 className="font-semibold text-gray-900">Are the custodial providers on Nimart verified?</h3>
+              <h3 className="font-semibold text-gray-900">How do I join Nimart as a custodial provider?</h3>
               <p className="text-gray-600 mt-2 text-sm">
-                Yes, all providers on Nimart go through a verification process. Look for the
-                verified badge on their profile.
+                Create a free account at{' '}
+                <Link href="/auth/signup?role=provider" className="text-primary-600 hover:underline">
+                  nimart.ng/auth/signup
+                </Link>
+                , complete your provider profile, and customers will be able to find and book you.
+                Joining is 100% free.
               </p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* CTA */}
+      {/* Final CTA */}
       <section className="bg-gradient-to-br from-primary-700 to-green-600 text-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 text-center">
           <h2 className="text-3xl font-bold mb-4">
-            Ready to Book a Custodial Service?
+            Ready to Grow Your Cleaning Business?
           </h2>
           <p className="text-primary-100 text-lg mb-8">
-            Join thousands of Nigerians who trust Nimart for their service needs.
+            Join Nimart for free and be among the first custodial providers on Nigeria's fastest-growing service marketplace.
           </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link
-              href="/search?q=custodial"
-              className="inline-flex items-center justify-center gap-2 bg-white text-primary-700 px-8 py-3 rounded-xl font-semibold hover:bg-gray-100 transition"
-            >
-              Find a Provider
-            </Link>
-            <Link
-              href="/auth/signup?role=provider"
-              className="inline-flex items-center justify-center gap-2 bg-primary-900/20 border border-white/30 text-white px-8 py-3 rounded-xl font-semibold hover:bg-primary-900/40 transition"
-            >
-              Join as a Provider
-            </Link>
-          </div>
+          <Link
+            href="/auth/signup?role=provider"
+            className="inline-flex items-center gap-2 bg-white text-primary-700 px-8 py-3 rounded-xl font-semibold hover:bg-gray-100 transition"
+          >
+            <Briefcase className="h-5 w-5" />
+            Join as a Provider
+          </Link>
         </div>
       </section>
     </>

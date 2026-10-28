@@ -3,6 +3,10 @@ import { MetadataRoute } from 'next';
 import { db } from '@/lib/supabase-any';
 import { TIERS } from '@/data/categories';
 
+// Regenerate sitemap at most once per hour. Keeps URLs fresh
+// when providers join or leave without waiting for the next deploy.
+export const revalidate = 3600;
+
 const BASE_URL = 'https://www.nimart.ng';
 
 function slugify(str: string) {
@@ -64,6 +68,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   }));
 
   // ── Fetch all available providers once ──
+  // Note: get_search_providers() already filters by is_available = true,
+  // so all providers here are guaranteed to be live and indexable.
   const { data: allProvidersData } = await db.rpc('get_search_providers');
   const allProviders = Array.isArray(allProvidersData) ? (allProvidersData as any[]) : [];
 
