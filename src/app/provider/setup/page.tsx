@@ -156,14 +156,25 @@ export default function ProviderSetup() {
       const { data: provider } = await db.from('providers')
         .select('business_name, description, selected_tier_slug, selected_category_slug, selected_subcategory_id')
         .eq('id', user!.id).single();
-      if (provider) {
-        const p = provider as any;
-        if (p.business_name) setBusinessName(p.business_name);
-        if (p.description) setDescription(p.description);
-        if (p.selected_tier_slug) setSelectedTier(p.selected_tier_slug);
-        if (p.selected_category_slug) setSelectedCategory(p.selected_category_slug);
-        if (p.selected_subcategory_id) setSelectedSubcategoryId(p.selected_subcategory_id.toString());
-      }
+        if (provider) {
+          const p = provider as any;
+          if (p.business_name) setBusinessName(p.business_name);
+  
+          // Detect trigger-created defaults and skip pre-filling them.
+          // The ensure_complete_provider trigger writes fake placeholder data
+          // ('vehicle-mechanics' + "Professional service provider") before the
+          // user finishes setup. Pre-filling those makes users unknowingly
+          // submit fake data as their own choice.
+          const isTriggerDefault =
+            p.description === 'Professional service provider' &&
+            p.selected_tier_slug === 'automotive' &&
+            p.selected_category_slug === 'vehicle-mechanics';
+  
+          if (p.description && !isTriggerDefault) setDescription(p.description);
+          if (p.selected_tier_slug && !isTriggerDefault) setSelectedTier(p.selected_tier_slug);
+          if (p.selected_category_slug && !isTriggerDefault) setSelectedCategory(p.selected_category_slug);
+          if (p.selected_subcategory_id && !isTriggerDefault) setSelectedSubcategoryId(p.selected_subcategory_id.toString());
+        }
       const { data: profileData } = await db.from('profiles')
         .select('lga_id, lga_name, street_address, landmark, phone, lat, lng, avatar_url')
         .eq('id', user!.id).single();
