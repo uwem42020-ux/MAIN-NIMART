@@ -19,6 +19,7 @@ import { compressImage } from '@/lib/imageUtils';
 const STEPS = ['Profile Picture', 'Business & Location', 'Category', 'Portfolio', 'Contact & Finish'];
 
 const MIN_PORTFOLIO_PHOTOS = 3;
+const MIN_DESCRIPTION_LENGTH = 30;
 
 interface PortfolioImage {
   id: string;
@@ -358,7 +359,9 @@ export default function ProviderSetup() {
   const canProceed = (): boolean => {
     switch (step) {
       case 0: return !!avatarPreview && uploadComplete;
-      case 1: return businessName.trim().length > 0 && hasLocation;
+      case 1: return businessName.trim().length > 0
+                && hasLocation
+                && description.trim().length >= MIN_DESCRIPTION_LENGTH;
       case 2: return !!selectedTier && !!selectedCategory && !!selectedSubcategoryId;
       case 3: return portfolioImages.length >= MIN_PORTFOLIO_PHOTOS;
       case 4: return !!phoneNumber && !phoneError && !!streetAddress.trim() && termsAccepted;
@@ -418,6 +421,9 @@ export default function ProviderSetup() {
       setLoading(false);
     }
   };
+
+  const descriptionLength = description.trim().length;
+  const descriptionMet = descriptionLength >= MIN_DESCRIPTION_LENGTH;
 
   return (
     <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -505,8 +511,17 @@ export default function ProviderSetup() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Description (optional)</label>
-              <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500" placeholder="Briefly describe your services..." />
+              <label className="block text-sm font-medium text-gray-700 mb-1">Description *</label>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={3}
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500"
+                placeholder="Short description about you or your skill. E.g., I fix leaking pipes, install taps, and repair water tanks in Lagos."
+              />
+              <p className={`text-xs mt-1 ${descriptionMet ? 'text-green-600 font-medium' : 'text-gray-500'}`}>
+                {descriptionLength}/{MIN_DESCRIPTION_LENGTH} characters{descriptionMet ? ' ✓' : ` — need ${MIN_DESCRIPTION_LENGTH - descriptionLength} more`}
+              </p>
             </div>
 
             <div>
