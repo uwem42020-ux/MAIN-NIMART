@@ -39,7 +39,6 @@ function CallbackContent() {
       handledRef.current = true;
 
       try {
-        // Retry profile fetch — trigger can lag briefly.
         let profileData: any = null;
         for (let i = 0; i < 5; i++) {
           const { data, error } = await db
@@ -58,19 +57,20 @@ function CallbackContent() {
         const p = profileData;
         if (!p) throw new Error('Profile not found after retries');
 
-        // Attribution (write once)
-        if (signupSource && !p.signup_source) {
+        // Compute freshness ONCE — used to gate both attribution and upgrade.
+        const isFresh = p.created_at
+          ? Date.now() - new Date(p.created_at).getTime() < FRESH_ACCOUNT_WINDOW_MS
+          : false;
+
+        // Attribution: only for fresh accounts, never overwrite existing.
+        if (isFresh && signupSource && !p.signup_source) {
           await db
             .from('profiles')
             .update({ signup_source: signupSource, signup_platform: 'web' })
             .eq('id', userId);
         }
 
-        // Provider upgrade — fresh signups only
-        const isFresh = p.created_at
-          ? Date.now() - new Date(p.created_at).getTime() < FRESH_ACCOUNT_WINDOW_MS
-          : false;
-
+        // Provider upgrade — fresh + provider-intent + not already provider.
         if (signupIntent === 'provider' && !p.is_provider && isFresh) {
           const { error } = await db
             .from('profiles')
@@ -79,11 +79,8 @@ function CallbackContent() {
           if (error) console.error('Provider upgrade failed:', error);
         }
 
-        // Best-effort — AuthContext's closure here may be stale,
-        // but that's OK because we do a hard navigation below.
         try { await refreshProfile(); } catch {}
 
-        // Final state (post-upgrade)
         const { data: fresh } = await db
           .from('profiles')
           .select('is_provider, is_complete, provider_complete')
@@ -101,9 +98,6 @@ function CallbackContent() {
           destination = '/customer/dashboard';
         }
 
-        // Use full page reload, NOT router.push. This forces SSR to re-fetch
-        // the profile (is_provider, provider_complete) so AuthContext initializes
-        // with the correct state and ProtectedRoute won't bounce us to "/".
         window.location.href = destination;
       } catch (err: any) {
         console.error('Auth callback error:', err);
@@ -112,19 +106,16 @@ function CallbackContent() {
       }
     };
 
-    // Fast path
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user && mounted) doRedirect(session.user.id);
     });
 
-    // Detects OAuth completion
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_IN' && session?.user && mounted) {
         doRedirect(session.user.id);
       }
     });
 
-    // Safety net
     const timeout = setTimeout(() => {
       if (mounted && !handledRef.current) {
         toast.error('Authentication timed out. Please try again.');

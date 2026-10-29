@@ -81,7 +81,12 @@ export function SignInClient({ next }: SignInClientProps = {}) {
     e.preventDefault();
     setLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithOtp({ email });
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          data: { role: 'provider', signup_source: 'signin-otp', signup_platform: 'web' },
+        },
+      });
       if (error) throw error;
       toast.success('OTP sent to your email');
       setStep('otp');
@@ -122,7 +127,7 @@ export function SignInClient({ next }: SignInClientProps = {}) {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`,
+          redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback?signup=provider&signup_source=signin-page`,
         },
       });
       if (error) throw error;
