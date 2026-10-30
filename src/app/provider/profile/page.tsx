@@ -9,7 +9,6 @@ import { supabase } from '@/lib/supabase';
 import { db } from '@/lib/supabase-any';
 import { SetPasswordForm } from '@/components/profile/SetPasswordForm';
 import { LocationPickerModal } from '@/components/provider/LocationPickerModal';
-import { NimartSpinner } from '@/components/common/NimartSpinner';
 import toast from 'react-hot-toast';
 import {
   User, Phone, Store, FileText, Save, Camera, AlertCircle,
@@ -73,12 +72,21 @@ export default function ProviderProfile() {
     if (!user) return;
 
     const fetchData = async () => {
-      // Provider business info
-      const { data: providerData } = await db
-        .from('providers')
-        .select('business_name, description')
-        .eq('id', user.id)
-        .single();
+      // Fetch provider + profile in parallel (halves load time)
+      const [providerRes, profileRes] = await Promise.all([
+        db.from('providers')
+          .select('business_name, description')
+          .eq('id', user.id)
+          .single(),
+        db.from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single(),
+      ]);
+
+      const providerData = providerRes.data;
+      const profileData = profileRes.data;
+
       if (providerData) {
         setBusinessName((providerData as any).business_name || '');
         const desc = (providerData as any).description || '';
@@ -86,12 +94,6 @@ export default function ProviderProfile() {
         setInitialDescription(desc);
       }
 
-      // Profile data
-      const { data: profileData } = await db
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single();
       if (profileData) {
         const p = profileData as any;
         setFullName(p.full_name || '');
@@ -323,8 +325,73 @@ export default function ProviderProfile() {
 
   if (!initialDataLoaded || !profile) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <NimartSpinner size="md" />
+      <div className="max-w-5xl mx-auto px-4 py-8 animate-pulse">
+        {/* Header skeleton */}
+        <div className="h-7 bg-gray-200 rounded-md w-64 mb-2" />
+        <div className="h-4 bg-gray-200 rounded-md w-96 mb-6" />
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* LEFT column */}
+          <div className="space-y-6">
+            {/* Business info card */}
+            <div className="bg-white rounded-lg shadow-sm border p-6">
+              <div className="h-5 bg-gray-200 rounded-md w-48 mb-4" />
+              <div className="space-y-3">
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <div key={i}>
+                    <div className="h-3 bg-gray-200 rounded-md w-24 mb-1.5" />
+                    <div className="h-10 bg-gray-100 rounded-lg" />
+                  </div>
+                ))}
+                <div>
+                  <div className="h-3 bg-gray-200 rounded-md w-40 mb-1.5" />
+                  <div className="h-20 bg-gray-100 rounded-lg" />
+                </div>
+              </div>
+            </div>
+            {/* Location card */}
+            <div className="bg-white rounded-lg shadow-sm border p-6">
+              <div className="h-5 bg-gray-200 rounded-md w-40 mb-4" />
+              <div className="h-16 bg-gray-100 rounded-lg" />
+            </div>
+          </div>
+
+          {/* RIGHT column */}
+          <div className="space-y-6">
+            {/* Profile picture card */}
+            <div className="bg-white rounded-lg shadow-sm border p-6">
+              <div className="h-5 bg-gray-200 rounded-md w-36 mb-4" />
+              <div className="flex items-center gap-6">
+                <div className="h-24 w-24 bg-gray-200 rounded-full" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-3 bg-gray-200 rounded-md w-3/4" />
+                  <div className="h-3 bg-gray-200 rounded-md w-1/2" />
+                </div>
+              </div>
+            </div>
+            {/* Password card */}
+            <div className="bg-white rounded-lg shadow-sm border p-6">
+              <div className="h-5 bg-gray-200 rounded-md w-32 mb-4" />
+              <div className="space-y-3">
+                <div className="h-10 bg-gray-100 rounded-lg" />
+                <div className="h-10 bg-gray-100 rounded-lg" />
+                <div className="h-10 bg-gray-200 rounded-lg w-32" />
+              </div>
+            </div>
+            {/* Additional info card */}
+            <div className="bg-white rounded-lg shadow-sm border p-6">
+              <div className="h-5 bg-gray-200 rounded-md w-56 mb-4" />
+              <div className="grid grid-cols-2 gap-4">
+                {[1, 2, 3, 4].map((i) => (
+                  <div key={i}>
+                    <div className="h-3 bg-gray-200 rounded-md w-16 mb-1.5" />
+                    <div className="h-10 bg-gray-100 rounded-lg" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
