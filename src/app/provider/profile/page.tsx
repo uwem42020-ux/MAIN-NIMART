@@ -29,6 +29,7 @@ export default function ProviderProfile() {
   const [addressArea, setAddressArea] = useState('');
   const [fullName, setFullName] = useState('');
   const [description, setDescription] = useState('');
+  const [initialDescription, setInitialDescription] = useState('');
   const [lgaName, setLgaName] = useState('');
   const [stateName, setStateName] = useState('');
   const [lat, setLat] = useState<number | null>(null);
@@ -46,6 +47,7 @@ export default function ProviderProfile() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [uploadingCover, setUploadingCover] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [savingDescription, setSavingDescription] = useState(false);
   const [phoneError, setPhoneError] = useState('');
   const [initialDataLoaded, setInitialDataLoaded] = useState(false);
   const [isSetupComplete, setIsSetupComplete] = useState(true);
@@ -79,7 +81,9 @@ export default function ProviderProfile() {
         .single();
       if (providerData) {
         setBusinessName((providerData as any).business_name || '');
-        setDescription((providerData as any).description || '');
+        const desc = (providerData as any).description || '';
+        setDescription(desc);
+        setInitialDescription(desc);
       }
 
       // Profile data
@@ -172,7 +176,7 @@ export default function ProviderProfile() {
     else setPhoneError('');
   };
 
-  // --- Avatar upload (storage uses supabase directly) ---
+  // --- Avatar upload ---
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -214,6 +218,30 @@ export default function ProviderProfile() {
     }
   };
 
+  // --- Save description (independent of avatar/password) ---
+  const handleSaveDescription = async () => {
+    if (!user) return;
+    const trimmed = description.trim();
+    if (trimmed === initialDescription.trim()) {
+      toast.success('No changes to save');
+      return;
+    }
+    setSavingDescription(true);
+    try {
+      const { error } = await db
+        .from('providers')
+        .update({ description: trimmed || null })
+        .eq('id', user.id);
+      if (error) throw error;
+      setInitialDescription(trimmed);
+      toast.success('Description saved');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to save description');
+    } finally {
+      setSavingDescription(false);
+    }
+  };
+
   // --- Final save (profile completion) ---
   const handleFinalSubmit = async () => {
     if (!avatarUrl) {
@@ -228,9 +256,6 @@ export default function ProviderProfile() {
     setSaving(true);
     try {
       // Mark onboarding complete across all flags.
-      // - is_complete: legacy flag, kept for old app compat
-      // - provider_complete: new source of truth the guard reads
-      // - is_provider: capability flag (defensive — should already be true)
       await updateProfile({
         is_complete: true,
         provider_complete: true,
@@ -246,7 +271,7 @@ export default function ProviderProfile() {
     }
   };
 
-  // --- Location change handler (uses RPCs) ---
+  // --- Location change handler ---
   const handleLocationChange = async (data: {
     lat: number;
     lng: number;
@@ -316,9 +341,8 @@ export default function ProviderProfile() {
   }
 
   const showWarning = !avatarUrl || !hasPassword;
-  // Show the customer-side cross-promo only until the user completes
-  // customer onboarding (via the mobile Nimart app).
   const showCustomerPromo = (profile as any)?.customer_complete !== true;
+  const descriptionChanged = description.trim() !== initialDescription.trim();
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
@@ -327,7 +351,6 @@ export default function ProviderProfile() {
         Please upload a profile picture and set a password to activate your account.
       </p>
 
-      {/* Customer-side cross-promo — links to search, not to onboarding */}
       {showCustomerPromo && (
         <div className="bg-primary-50 border border-primary-200 rounded-lg p-4 mb-6 flex items-start gap-3">
           <div className="flex-shrink-0 w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center">
@@ -363,20 +386,45 @@ export default function ProviderProfile() {
         </div>
       )}
 
-      {/* Two-column layout on desktop */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* LEFT COLUMN */}
         <div className="space-y-6">
-          {/* Business Information (read-only) */}
+          {/* Business Information */}
           <div className="bg-white rounded-lg shadow-sm border p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Business Information (from setup)</h2>
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Business Information</h2>
             <div className="space-y-3">
               <div><label className="block text-sm font-medium text-gray-700 mb-1">Business Name</label><input type="text" value={businessName} disabled className="w-full px-3 py-2 bg-gray-100 border border-gray-200 rounded-lg" /></div>
               <div><label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label><input type="tel" value={phone} disabled className="w-full px-3 py-2 bg-gray-100 border border-gray-200 rounded-lg" /></div>
               <div><label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label><input type="text" value={fullName} disabled className="w-full px-3 py-2 bg-gray-100 border border-gray-200 rounded-lg" /></div>
               <div><label className="block text-sm font-medium text-gray-700 mb-1">Street Address</label><input type="text" value={streetAddress} disabled className="w-full px-3 py-2 bg-gray-100 border border-gray-200 rounded-lg" /></div>
               <div><label className="block text-sm font-medium text-gray-700 mb-1">Area / Neighbourhood</label><input type="text" value={addressArea} disabled className="w-full px-3 py-2 bg-gray-100 border border-gray-200 rounded-lg" /></div>
-              <div><label className="block text-sm font-medium text-gray-700 mb-1">Service Description</label><textarea value={description} disabled rows={2} className="w-full px-3 py-2 bg-gray-100 border border-gray-200 rounded-lg" /></div>
+
+              {/* Editable description */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Service Description
+                  <span className="ml-2 text-xs font-normal text-gray-400">(editable — customers see this)</span>
+                </label>
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  rows={3}
+                  maxLength={500}
+                  className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  placeholder="Short description about you or your skill"
+                />
+                <div className="flex items-center justify-between mt-2">
+                  <p className="text-xs text-gray-400">{description.length}/500</p>
+                  <button
+                    type="button"
+                    onClick={handleSaveDescription}
+                    disabled={savingDescription || !descriptionChanged}
+                    className="px-4 py-1.5 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 transition"
+                  >
+                    {savingDescription ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Saving...</> : 'Save Description'}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -454,7 +502,7 @@ export default function ProviderProfile() {
             />
           </div>
 
-          {/* Additional Information (optional) */}
+          {/* Additional Information */}
           <div className="bg-white rounded-lg shadow-sm border p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Additional Information (optional)</h2>
             <div className="grid grid-cols-2 gap-4">
@@ -465,7 +513,7 @@ export default function ProviderProfile() {
             </div>
           </div>
 
-          {/* Cover Photo (optional) */}
+          {/* Cover Photo */}
           <div className="bg-white rounded-lg shadow-sm border p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Cover Photo (optional)</h2>
             <div className="relative h-32 bg-gray-100 rounded-lg overflow-hidden">
@@ -490,7 +538,6 @@ export default function ProviderProfile() {
         </button>
       </div>
 
-      {/* Location Picker Modal */}
       <LocationPickerModal
         isOpen={showLocationPicker}
         onClose={() => setShowLocationPicker(false)}
