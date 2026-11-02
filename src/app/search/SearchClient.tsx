@@ -11,7 +11,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { EnhancedFilterSidebar } from '@/components/search/EnhancedFilterSidebar';
 import { SortDropdown } from '@/components/search/SortDropdown';
 import { ProviderGridSkeleton } from '@/components/skeletons/ProviderGridSkeleton';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react'; // Added useMemo
 import { useDebounce } from '@/hooks/useDebounce';
 import { useSmartSort } from '@/hooks/useSmartSort';
 import {
@@ -184,7 +184,8 @@ export function SearchClient({ initialProviders, searchParams: initialSearchPara
   };
 
   const { data: providers, isLoading } = useQuery({
-    queryKey: ['search-providers', keyword, tier, category, subcategory, state, lga, userLat, userLng, sortBy, smartSortData],
+    // 1. Removed sortBy and smartSortData from the queryKey so changing sort doesn't refetch from DB
+    queryKey: ['search-providers', keyword, tier, category, subcategory, state, lga, userLat, userLng],
     queryFn: async () => {
       let query = db
         .from('providers')
@@ -311,48 +312,58 @@ export function SearchClient({ initialProviders, searchParams: initialSearchPara
         } as ProviderWithProfile;
       });
 
-      const now = new Date();
-      const boosted = providersWithDetails.filter((p: any) => p.boost_until && new Date(p.boost_until) > now);
-      const notBoosted = providersWithDetails.filter((p: any) => !p.boost_until || new Date(p.boost_until) <= now);
-
-      const statusPriority = (s: string) => {
-        if (s === 'available') return 0;
-        if (s === 'busy') return 1;
-        return 2;
-      };
-
-      const sortGroup = (group: ProviderWithProfile[]) => {
-        group.sort((a, b) => {
-          const statusA = statusPriority(a.status);
-          const statusB = statusPriority(b.status);
-          if (statusA !== statusB) return statusA - statusB;
-
-          if (sortBy === 'recommended' && smartSortData?.length) {
-            const scoreMap = new Map(smartSortData.map(s => [s.provider_id, s.score]));
-            return (scoreMap.get(b.id) || 0) - (scoreMap.get(a.id) || 0);
-          }
-
-          switch (sortBy) {
-            case 'distance':
-              return (a.distance ?? Infinity) - (b.distance ?? Infinity);
-            case 'rating':
-              return (b.average_rating ?? 0) - (a.average_rating ?? 0);
-            case 'availability':
-              return 0;
-            default:
-              return (b.average_rating ?? 0) - (a.average_rating ?? 0);
-          }
-        });
-      };
-
-      sortGroup(boosted);
-      sortGroup(notBoosted);
-
-      return [...boosted, ...notBoosted];
+      // 2. Removed the sorting logic here. We just return the data.
+      return providersWithDetails;
     },
-    initialData: initialProviders,
+    // 3. Removed initialData and added placeholderData to prevent the flash
+    placeholderData: (previousData) => previousData ?? initialProviders,
     staleTime: 1000 * 60 * 2,
   });
+
+  // 4. Added useMemo to sort the data instantly on the client side
+  const sortedProviders = useMemo(() => {
+    if (!providers) return [];
+    const sorted = [...providers];
+    
+    const now = new Date();
+    const boosted = sorted.filter((p: any) => p.boost_until && new Date(p.boost_until) > now);
+    const notBoosted = sorted.filter((p: any) => !p.boost_until || new Date(p.boost_until) <= now);
+
+    const statusPriority = (s: string) => {
+      if (s === 'available') return 0;
+      if (s === 'busy') return 1;
+      return 2;
+    };
+
+    const sortGroup = (group: ProviderWithProfile[]) => {
+      group.sort((a, b) => {
+        const statusA = statusPriority(a.status);
+        const statusB = statusPriority(b.status);
+        if (statusA !== statusB) return statusA - statusB;
+
+        if (sortBy === 'recommended' && smartSortData?.length) {
+          const scoreMap = new Map(smartSortData.map(s => [s.provider_id, s.score]));
+          return (scoreMap.get(b.id) || 0) - (scoreMap.get(a.id) || 0);
+        }
+
+        switch (sortBy) {
+          case 'distance':
+            return (a.distance ?? Infinity) - (b.distance ?? Infinity);
+          case 'rating':
+            return (b.average_rating ?? 0) - (a.average_rating ?? 0);
+          case 'availability':
+            return 0;
+          default:
+            return (b.average_rating ?? 0) - (a.average_rating ?? 0);
+        }
+      });
+    };
+
+    sortGroup(boosted);
+    sortGroup(notBoosted);
+
+    return [...boosted, ...notBoosted];
+  }, [providers, sortBy, smartSortData]);
 
   const formatCategoryName = (slug?: string) =>
     slug ? slug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') : '';
@@ -491,9 +502,10 @@ export function SearchClient({ initialProviders, searchParams: initialSearchPara
             </div>
           </div>
 
-          {isLoading ? (
+          {/* 5. Updated skeleton logic to only show if we have no data at all */}
+          {isLoading && sortedProviders.length === 0 ? (
             <ProviderGridSkeleton />
-          ) : !providers || providers.length === 0 ? (
+          ) : !sortedProviders || sortedProviders.length === 0 ? (
             <div className="text-center py-16 bg-white rounded-xl border border-gray-200 shadow-sm px-4">
               <img src="/logo.png" alt="Nimart" className="h-12 w-auto mx-auto mb-4" />
               <h3 className="text-xl font-bold text-gray-900 mb-2">
@@ -527,7 +539,8 @@ export function SearchClient({ initialProviders, searchParams: initialSearchPara
             <>
               <div className="block sm:hidden">
                 <div className="columns-2 gap-2">
-                  {providers.map((provider) => (
+                  {/* 6. Changed providers.map to sortedProviders.map */}
+                  {sortedProviders.map((provider) => (
                     <div key={provider.id} className="mb-2 break-inside-avoid">
                       <ProviderCardPortrait provider={provider} />
                     </div>
@@ -538,7 +551,8 @@ export function SearchClient({ initialProviders, searchParams: initialSearchPara
               <div className="hidden sm:block">
                 {viewMode === 'grid' ? (
                   <div className="columns-2 md:columns-3 lg:columns-4 gap-4">
-                    {providers.map((provider) => (
+                    {/* 7. Changed providers.map to sortedProviders.map */}
+                    {sortedProviders.map((provider) => (
                       <div key={provider.id} className="mb-4 break-inside-avoid">
                         <ProviderCardPortrait provider={provider} />
                       </div>
@@ -546,7 +560,8 @@ export function SearchClient({ initialProviders, searchParams: initialSearchPara
                   </div>
                 ) : (
                   <div className="flex flex-col gap-3">
-                    {providers.map((provider) => (
+                    {/* 8. Changed providers.map to sortedProviders.map */}
+                    {sortedProviders.map((provider) => (
                       <ProviderCardHorizontal key={provider.id} provider={provider} />
                     ))}
                   </div>

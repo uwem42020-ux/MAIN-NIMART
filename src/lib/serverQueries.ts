@@ -1,4 +1,4 @@
-// lib/serverQueries.ts
+// src/lib/serverQueries.ts
 import { db } from '@/lib/supabase-any';
 import type { ProviderWithProfile } from '@/components/provider/ProviderCardPortrait';
 
@@ -29,6 +29,15 @@ export async function fetchInitialProviders(): Promise<ProviderWithProfile[]> {
   })) as unknown as ProviderWithProfile[];
 }
 
+/**
+ * Server-side search providers with DB-level filtering.
+ *
+ * NOTE: Previously this called `db.rpc('get_search_providers')` which returned
+ * EVERY provider in the database, then filtered in JS. That was the root cause
+ * of the 2-5s "View all →" hang. Now it filters at the DB level using direct
+ * Supabase queries (matching SearchClient's client-side behavior for
+ * consistency between SSR and hydration).
+ */
 export async function fetchSearchProviders(searchParams: {
   q?: string;
   tier?: string;
@@ -37,30 +46,54 @@ export async function fetchSearchProviders(searchParams: {
   state?: string;
   lga?: string;
 }): Promise<ProviderWithProfile[]> {
-  const { data, error } = await db.rpc('get_search_providers');
-  if (error || !data) return [];
-
-  const providers: any[] = Array.isArray(data) ? data : [];
-
-  let filtered = providers;
   const { q, tier, category, subcategory, state, lga } = searchParams;
 
+  let query = db
+    .from('providers')
+    .select(`
+      id, business_name, description, status, is_available,
+      selected_tier_slug, selected_category_slug, selected_subcategory_id,
+      tags, boost_until, top_placement_until
+    `)
+    .eq('is_available', true);
+
   if (q) {
-    const pattern = q.toLowerCase();
-    filtered = filtered.filter(p =>
-      (p.business_name && p.business_name.toLowerCase().includes(pattern)) ||
-      (p.description && p.description.toLowerCase().includes(pattern))
-    );
+    const pattern = `%${q}%`;
+    // Match full_name too (matches SearchClient's behavior)
+    const { data: profilesByName } = await db
+      .from('profiles')
+      .select('id')
+      .ilike('full_name', pattern);
+
+    const providerIdsFromName = ((profilesByName as any[]) ?? []).map((p: any) => p.id);
+
+    if (providerIdsFromName.length > 0) {
+      query = query.or(
+        `business_name.ilike.${pattern},description.ilike.${pattern},id.in.(${providerIdsFromName.join(',')})`
+      );
+    } else {
+      query = query.or(`business_name.ilike.${pattern},description.ilike.${pattern}`);
+    }
   }
 
-  if (tier) filtered = filtered.filter(p => p.selected_tier_slug === tier);
-  if (category) filtered = filtered.filter(p => p.selected_category_slug === category);
-  if (subcategory) filtered = filtered.filter(p => p.selected_subcategory_id === parseInt(subcategory));
+  if (tier) query = query.eq('selected_tier_slug', tier);
+  if (category) query = query.eq('selected_category_slug', category);
+  if (subcategory) query = query.eq('selected_subcategory_id', parseInt(subcategory));
 
+  // Location filtering — resolve profile IDs first, then filter providers by id
   if (lga) {
-    const lgaNum = parseInt(lga);
-    filtered = filtered.filter(p => p.profile?.lga_id === lgaNum);
+    const lgaId = parseInt(lga);
+    if (!isNaN(lgaId)) {
+      const { data: profilesInLga } = await db
+        .from('profiles')
+        .select('id')
+        .eq('lga_id', lgaId);
+      const ids = ((profilesInLga as any[]) ?? []).map((p: any) => p.id);
+      if (ids.length === 0) return [];
+      query = query.in('id', ids);
+    }
   } else if (state) {
+    // state can arrive as numeric ID or as state name (SEO URLs)
     let stateId: number | null = null;
     const parsed = parseInt(state);
     if (!isNaN(parsed)) {
@@ -71,47 +104,95 @@ export async function fetchSearchProviders(searchParams: {
         .select('state_id')
         .eq('state_name', state)
         .limit(1);
-      if (stateData && (stateData as any[]).length > 0) {
+      if ((stateData as any[])?.length) {
         stateId = (stateData as any[])[0].state_id;
       }
     }
+    if (stateId === null) return [];
 
-    if (stateId !== null) {
-      const { data: lgasInState } = await db
-        .from('lga_centers')
-        .select('lga_id')
-        .eq('state_id', stateId);
+    const { data: lgasInState } = await db
+      .from('lga_centers')
+      .select('lga_id')
+      .eq('state_id', stateId);
+    const lgaIds = ((lgasInState as any[]) ?? []).map((l: any) => l.lga_id);
+    if (lgaIds.length === 0) return [];
 
-      if (lgasInState?.length) {
-        const lgaIds = (lgasInState as any[]).map(l => l.lga_id);
-        filtered = filtered.filter(p => lgaIds.includes(p.profile?.lga_id));
-      } else {
-        return [];
-      }
-    } else {
-      return [];
-    }
+    const { data: profilesInState } = await db
+      .from('profiles')
+      .select('id')
+      .in('lga_id', lgaIds);
+    const ids = ((profilesInState as any[]) ?? []).map((p: any) => p.id);
+    if (ids.length === 0) return [];
+    query = query.in('id', ids);
   }
 
-  return filtered.map(item => ({
-    id: item.id,
-    business_name: item.business_name,
-    description: item.description,
-    status: item.status,
-    is_available: item.is_available,
-    selected_tier_slug: item.selected_tier_slug,
-    selected_category_slug: item.selected_category_slug,
-    selected_subcategory_id: item.selected_subcategory_id,
-    tags: item.tags,
-    boost_until: item.boost_until,
-    top_placement_until: item.top_placement_until,
-    profile: item.profile || {},
-    portfolio_images: item.portfolio_images || [],
-    average_rating: item.review_stats?.average_rating ?? 0,
-    review_count: item.review_stats?.review_count ?? 0,
-    distance: undefined,
-    lastSignInAt: null,
-  })) as unknown as ProviderWithProfile[];
+  // Bound the result set — the client only ever displays this many anyway
+  const { data: providersData, error } = await query.limit(100);
+  if (error || !(providersData as any[])?.length) return [];
+
+  const providerIds = (providersData as any[]).map((p: any) => p.id);
+
+  const [profilesRes, portfolioRes, reviewsRes] = await Promise.all([
+    db.from('profiles').select('*').in('id', providerIds),
+    db.from('portfolio_images').select('*').in('provider_id', providerIds),
+    db.from('reviews').select('provider_id, rating').in('provider_id', providerIds),
+  ]);
+
+  const profiles = (profilesRes.data as any[]) ?? [];
+  const portfolioImages = (portfolioRes.data as any[]) ?? [];
+  const allReviews = (reviewsRes.data as any[]) ?? [];
+
+  const profilesMap = new Map<string, any>();
+  profiles.forEach((p: any) => profilesMap.set(p.id, p));
+
+  const portfolioMap = new Map<string, any[]>();
+  portfolioImages.forEach((img: any) => {
+    const arr = portfolioMap.get(img.provider_id) ?? [];
+    arr.push(img);
+    portfolioMap.set(img.provider_id, arr);
+  });
+
+  const reviewsMap = new Map<string, { sum: number; count: number }>();
+  allReviews.forEach((r: any) => {
+    const curr = reviewsMap.get(r.provider_id) ?? { sum: 0, count: 0 };
+    curr.sum += r.rating;
+    curr.count += 1;
+    reviewsMap.set(r.provider_id, curr);
+  });
+
+  const providersWithDetails = (providersData as any[]).map((provider: any) => {
+    const reviewStats = reviewsMap.get(provider.id);
+    const avgRating = reviewStats ? reviewStats.sum / reviewStats.count : 0;
+    const reviewCount = reviewStats?.count ?? 0;
+
+    return {
+      ...provider,
+      profile: profilesMap.get(provider.id) ?? {},
+      portfolio_images: portfolioMap.get(provider.id) ?? [],
+      distance: undefined,
+      average_rating: avgRating,
+      review_count: reviewCount,
+      lastSignInAt: null,
+    } as ProviderWithProfile;
+  });
+
+  // Sort: boosted first, then by rating (matches client default sort)
+  const now = new Date();
+  const boosted: ProviderWithProfile[] = [];
+  const notBoosted: ProviderWithProfile[] = [];
+
+  providersWithDetails.forEach((p: any) => {
+    if (p.boost_until && new Date(p.boost_until) > now) {
+      boosted.push(p);
+    } else {
+      notBoosted.push(p);
+    }
+  });
+
+  boosted.sort((a, b) => (b.average_rating ?? 0) - (a.average_rating ?? 0));
+  notBoosted.sort((a, b) => (b.average_rating ?? 0) - (a.average_rating ?? 0));
+
+  return [...boosted, ...notBoosted];
 }
 
 export async function fetchPopularCombos(): Promise<{ cat: string; lga: string; lgaId: number; count: number }[]> {
