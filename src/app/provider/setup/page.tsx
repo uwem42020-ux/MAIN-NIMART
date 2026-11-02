@@ -84,6 +84,8 @@ export default function ProviderSetup() {
   const [selectedCategory, setSelectedCategory] = useState('');
   const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
   const [selectedSubcategoryId, setSelectedSubcategoryId] = useState<string>('');
+  const [startingPrice, setStartingPrice] = useState('');
+  const [priceType, setPriceType] = useState<'fixed' | 'hourly' | 'negotiable'>('fixed');
 
   // Step 3: Portfolio
   const [portfolioImages, setPortfolioImages] = useState<PortfolioImage[]>([]);
@@ -830,6 +832,31 @@ export default function ProviderSetup() {
                       <option key={sub.id} value={sub.id}>{sub.name}</option>
                     ))}
                   </select>
+                </div>
+                <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-gray-100">
+                  <div>
+                    <label className={LABEL_CLS}>Starting Price (₦) <span className="text-red-500">*</span></label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={startingPrice}
+                      onChange={(e) => setStartingPrice(e.target.value)}
+                      className={INPUT_CLS}
+                      placeholder="e.g. 5000"
+                    />
+                  </div>
+                  <div>
+                    <label className={LABEL_CLS}>Price Type <span className="text-red-500">*</span></label>
+                    <select
+                      value={priceType}
+                      onChange={(e) => setPriceType(e.target.value as any)}
+                      className={INPUT_CLS}
+                    >
+                      <option value="fixed">Fixed Price</option>
+                      <option value="hourly">Per Hour</option>
+                      <option value="negotiable">Negotiable</option>
+                    </select>
+                  </div>
                 </div>
               </div>
             )}
