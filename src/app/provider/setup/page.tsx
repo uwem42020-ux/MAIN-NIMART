@@ -395,11 +395,14 @@ export default function ProviderSetup() {
   // ── Step validation ──
   const canProceed = (): boolean => {
     switch (step) {
-      case 0: return !!avatarPreview && uploadComplete;
+      // Phone number is now collected here (Step 1 = index 0) so we capture
+      // the contact info before the user reaches the later wizard steps.
+      case 0: return !!avatarPreview && uploadComplete && phoneNumber.length === 14 && !phoneError;
       case 1: return businessName.trim().length > 0 && hasLocation;
-      case 2: return !!selectedTier && !!selectedCategory && !!selectedSubcategoryId;
+      case 2: return !!selectedTier && !!selectedCategory && !!selectedSubcategoryId && !!startingPrice && parseFloat(startingPrice) > 0;
       case 3: return portfolioImages.length >= MIN_PORTFOLIO_PHOTOS;
-      case 4: return !!phoneNumber && !phoneError && !!streetAddress.trim() && termsAccepted;
+      // Phone is no longer validated here — it lives in Step 1 now.
+      case 4: return !!streetAddress.trim() && termsAccepted;
       default: return false;
     }
   };
@@ -463,6 +466,15 @@ export default function ProviderSetup() {
       const { data, error } = await db.rpc('complete_provider_setup', params as any);
       if (error) throw error;
       if (!(data as any).success) throw new Error((data as any).error);
+            // Save the initial service with the price
+            const { error: svcError } = await db.from('provider_services').insert({
+              provider_id: user!.id,
+              name: `${selectedCategory} Service`, 
+              description: description.trim(),
+              price: parseFloat(startingPrice),
+              price_type: priceType,
+            });
+            if (svcError) console.error('Failed to save initial service:', svcError);
 
       try { await refreshProfile(); } catch {}
 
@@ -638,6 +650,24 @@ export default function ProviderSetup() {
                   </button>
                 )}
                 <p className="text-xs text-gray-400 mt-4">JPEG or PNG · max 5MB</p>
+
+                {/* ── Phone Number (moved from Contact & Finish) ── */}
+                <div className="mt-8 text-left border-t border-gray-100 pt-6">
+                  <label className={LABEL_CLS}>Phone Number <span className="text-red-500">*</span></label>
+                  <input
+                    type="tel"
+                    value={phoneNumber}
+                    onChange={handlePhoneChange}
+                    required
+                    className={INPUT_CLS}
+                    placeholder="+234 123 456 7890"
+                    maxLength={14}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">We&apos;ll use this to send you booking alerts.</p>
+                  {phoneError && (
+                    <p className="mt-1.5 text-xs text-red-600 font-medium animate-fade-up">{phoneError}</p>
+                  )}
+                </div>
               </div>
             )}
 
@@ -946,21 +976,7 @@ export default function ProviderSetup() {
                   <Phone className="h-5 w-5 text-primary-600" /> Contact & Finish
                 </h2>
 
-                <div>
-                  <label className={LABEL_CLS}>Phone Number <span className="text-red-500">*</span></label>
-                  <input
-                    type="tel"
-                    value={phoneNumber}
-                    onChange={handlePhoneChange}
-                    required
-                    className={INPUT_CLS}
-                    placeholder="+234 123 456 7890"
-                    maxLength={14}
-                  />
-                  {phoneError && (
-                    <p className="mt-1.5 text-xs text-red-600 font-medium animate-fade-up">{phoneError}</p>
-                  )}
-                </div>
+                {/* Phone Number block intentionally removed — it now lives in Step 1 (Profile Picture) */}
 
                 <div>
                   <label className={LABEL_CLS}>
@@ -1034,9 +1050,9 @@ export default function ProviderSetup() {
                 type="button"
                 onClick={handleNext}
                 disabled={
-                  step === 0
-                    ? (!avatarPreview || !uploadComplete || uploading)
-                    : (step !== 1 && !canProceed()) || uploading || portfolioUploading
+                  step === 1
+                    ? uploading || portfolioUploading
+                    : !canProceed() || uploading || portfolioUploading
                 }
                 className={`${BTN_PRIMARY} flex-1 sm:flex-initial`}
               >
