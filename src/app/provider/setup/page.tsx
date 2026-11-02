@@ -135,17 +135,17 @@ export default function ProviderSetup() {
   }, [selectedStateId]);
 
   // ── Category chain (Local Data) ──
+  // NOTE: Do NOT wipe category/subcategory here. Prefill sets tier+category+subcategory
+  // together, and wiping on tier change destroys the prefilled selection for returning
+  // providers on non-automotive tiers. Wipes happen in the dropdown onChange handlers
+  // instead — i.e. only when the user manually changes a field.
   useEffect(() => {
     setCategories(getCategoriesByTier(selectedTier));
-    setSelectedCategory('');
-    setSubcategories([]);
-    setSelectedSubcategoryId('');
   }, [selectedTier]);
 
   useEffect(() => {
     if (selectedCategory) {
       setSubcategories(getSubcategoriesByCategory(selectedCategory));
-      setSelectedSubcategoryId('');
     } else {
       setSubcategories([]);
     }
@@ -825,7 +825,12 @@ export default function ProviderSetup() {
                   <label className={LABEL_CLS}>Tier <span className="text-red-500">*</span></label>
                   <select
                     value={selectedTier}
-                    onChange={(e) => setSelectedTier(e.target.value)}
+                    onChange={(e) => {
+                      setSelectedTier(e.target.value);
+                      setSelectedCategory('');
+                      setSubcategories([]);
+                      setSelectedSubcategoryId('');
+                    }}
                     className={INPUT_CLS}
                   >
                     {TIERS.map(tier => (
@@ -838,7 +843,10 @@ export default function ProviderSetup() {
                   <label className={LABEL_CLS}>Category <span className="text-red-500">*</span></label>
                   <select
                     value={selectedCategory}
-                    onChange={(e) => setSelectedCategory(e.target.value)}
+                    onChange={(e) => {
+                      setSelectedCategory(e.target.value);
+                      setSelectedSubcategoryId(''); // Clear subcategory ONLY when user manually changes category
+                    }}
                     className={INPUT_CLS}
                     disabled={categories.length === 0}
                   >
