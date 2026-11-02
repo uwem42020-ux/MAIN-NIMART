@@ -14,7 +14,6 @@ import { TopProvidersSlider } from '@/components/common/TopProvidersSlider';
 import { CategoryButtons } from '@/components/common/CategoryButtons';
 import { CategorySidebar } from '@/components/common/CategorySidebar';
 import { FindProvidersRadar } from '@/components/customer/FindProvidersRadar';
-import { PopularServicesSlider } from '@/components/home/PopularServicesSlider';
 import { MapPin, ChevronDown, Search, WifiOff, LayoutGrid, List, Crosshair, X } from 'lucide-react';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useLocationStore } from '@/stores/locationStore';
@@ -36,11 +35,14 @@ interface Suggestion {
 
 interface HomeClientProps {
   initialProviders: ProviderWithProfile[];
-  initialPopularCombos: { cat: string; lga: string; lgaId: number; count: number }[];
+  initialPopularCombos?: { cat: string; lga: string; lgaId: number; count: number }[];
   initialTopProviders: any[];
 }
 
-export function HomeClient({ initialProviders, initialPopularCombos, initialTopProviders }: HomeClientProps) {
+export function HomeClient({ initialProviders, initialTopProviders }: HomeClientProps) {
+  // NOTE: `initialPopularCombos` is no longer used (PopularServicesSlider removed).
+  // It's kept in HomeClientProps for backward compat with the parent (app/page.tsx).
+  // Follow-up: remove it from the interface AND stop computing it in the parent.
   const { profile } = useAuth();
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -69,6 +71,9 @@ export function HomeClient({ initialProviders, initialPopularCombos, initialTopP
 
   const [isClient, setIsClient] = useState(false);
   useEffect(() => { setIsClient(true); }, []);
+  // Fix: `mounted` was declared but never set. This broke every
+  // `isClientMounted` check downstream (offline banner never showed).
+  useEffect(() => { setMounted(true); }, []);
 
   useGeolocation();
   const { lat: globalLat, lng: globalLng } = useLocationStore();
@@ -452,6 +457,14 @@ export function HomeClient({ initialProviders, initialPopularCombos, initialTopP
 
   return (
     <>
+      <style>{`
+        @keyframes nimart-gentle-float {
+          0%, 100% { transform: translateY(0); opacity: 0.7; }
+          50% { transform: translateY(-6px); opacity: 1; }
+        }
+        .animate-nimart-gentle-float { animation: nimart-gentle-float 2.5s ease-in-out infinite; }
+      `}</style>
+
       <section className="w-full bg-gray-50 py-6 md:py-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <p className="text-base md:text-lg text-[#008751] text-center mb-4 font-medium">
@@ -564,8 +577,6 @@ export function HomeClient({ initialProviders, initialPopularCombos, initialTopP
         </div>
       </section>
 
-      <PopularServicesSlider initialCombos={initialPopularCombos} />
-
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="hidden md:flex gap-6">
           <div className="w-64 flex-shrink-0 self-start">
@@ -574,13 +585,27 @@ export function HomeClient({ initialProviders, initialPopularCombos, initialTopP
           <div className="flex-1">
             <TopProvidersSlider initialData={initialTopProviders} />
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-gray-900">
-                {lgaFilter
-                  ? `Providers in ${locationName}`
-                  : stateFilter
-                  ? `Providers in ${locationName}`
-                  : 'Recommended Providers'}
-              </h2>
+              {/* Pill header (replaces the old <h2>Recommended Providers</h2>) */}
+              <div className="flex items-center gap-3">
+                <img
+                  src="/top.png"
+                  alt=""
+                  className="h-7 w-7 object-contain animate-nimart-gentle-float flex-shrink-0"
+                />
+                <div
+                  className="px-4 py-1.5 rounded-full text-sm font-semibold text-white shadow-md"
+                  style={{
+                    background: 'linear-gradient(to left, #597400, #98BC00)',
+                    boxShadow: '0 4px 12px rgba(89, 116, 0, 0.25)',
+                  }}
+                >
+                  {lgaFilter
+                    ? `Popular Providers in ${locationName}`
+                    : stateFilter
+                    ? `Popular Providers in ${locationName}`
+                    : 'Popular Providers in Nigeria'}
+                </div>
+              </div>
               <div className="flex items-center gap-2">
                 <div className="flex border border-gray-200 rounded-lg overflow-hidden">
                   <button onClick={() => setViewMode('grid')} className={cn('p-2 text-gray-500 hover:text-primary-600', viewMode === 'grid' && 'bg-primary-50 text-primary-600')} title="Grid view"><LayoutGrid className="h-5 w-5" /></button>
@@ -600,9 +625,27 @@ export function HomeClient({ initialProviders, initialPopularCombos, initialTopP
           </div>
           <section>
             <div className="flex items-center justify-between mb-3 px-4">
-              <h2 className="text-lg font-bold text-gray-900">
-                {lgaFilter ? `Providers in ${locationName}` : stateFilter ? `Providers in ${locationName}` : 'Recommended'}
-              </h2>
+              {/* Pill header (replaces the old <h2>Recommended</h2>) */}
+              <div className="flex items-center gap-2">
+                <img
+                  src="/top.png"
+                  alt=""
+                  className="h-6 w-6 object-contain animate-nimart-gentle-float flex-shrink-0"
+                />
+                <div
+                  className="px-3 py-1 rounded-full text-xs font-semibold text-white shadow-md"
+                  style={{
+                    background: 'linear-gradient(to left, #597400, #98BC00)',
+                    boxShadow: '0 4px 12px rgba(89, 116, 0, 0.25)',
+                  }}
+                >
+                  {lgaFilter
+                    ? `Popular in ${locationName}`
+                    : stateFilter
+                    ? `Popular in ${locationName}`
+                    : 'Popular Providers'}
+                </div>
+              </div>
               <div className="flex items-center gap-2">
                 <div className="flex border border-gray-200 rounded-lg overflow-hidden">
                   <button onClick={() => setViewMode('grid')} className={cn('p-2', viewMode === 'grid' && 'bg-primary-50 text-primary-600')} title="Grid view"><LayoutGrid className="h-4 w-4" /></button>
