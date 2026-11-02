@@ -469,7 +469,7 @@ export default function ProviderSetup() {
             // Save the initial service with the price
             const { error: svcError } = await db.from('provider_services').insert({
               provider_id: user!.id,
-              name: `${selectedCategory} Service`, 
+              name: `${subcategories.find(s => s.id.toString() === selectedSubcategoryId)?.name || selectedCategory} Service`,
               description: description.trim(),
               price: parseFloat(startingPrice),
               price_type: priceType,

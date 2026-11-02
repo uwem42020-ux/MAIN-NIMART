@@ -11,7 +11,7 @@ import { ProviderStatusToggle } from '@/components/provider/ProviderStatusToggle
 import {
   Calendar, Star, Settings, Image, Package, Shield, Coins,
   TrendingUp, Zap, Tag, Users, Copy, Share2,
-  MessageCircle, Eye, UserCheck,
+  MessageCircle, Eye, UserCheck, FileText,
 } from 'lucide-react';
 import { NimartSpinner } from '@/components/common/NimartSpinner';
 import toast from 'react-hot-toast';
@@ -57,6 +57,7 @@ export default function ProviderDashboard() {
   const [isVerified, setIsVerified] = useState(false);
   const [hasPendingVerification, setHasPendingVerification] = useState(false);
   const [portfolioCount, setPortfolioCount] = useState(0);
+  const [servicesCount, setServicesCount] = useState(0);
 
   const [coinBalance, setCoinBalance] = useState(0);
   const [showBoostModal, setShowBoostModal] = useState(false);
@@ -81,13 +82,14 @@ export default function ProviderDashboard() {
   async function fetchAllData() {
     setLoading(true);
     try {
-      const [providerRes, bookingsRes, reviewsRes, verificationRes, referralsRes, portfolioRes] = await Promise.all([
+      const [providerRes, bookingsRes, reviewsRes, verificationRes, referralsRes, portfolioRes, servicesRes] = await Promise.all([
         db.from('providers').select('*').eq('id', user!.id).single(),
         db.from('bookings').select('*').eq('provider_id', user!.id),
         db.from('reviews').select('rating').eq('provider_id', user!.id),
         db.from('verification_documents').select('status').eq('provider_id', user!.id).eq('status', 'pending').limit(1),
         db.from('referrals').select('*', { count: 'exact', head: false }).eq('referrer_id', user!.id),
         db.from('portfolio_images').select('id', { count: 'exact', head: true }).eq('provider_id', user!.id),
+        db.from('provider_services').select('id', { count: 'exact', head: true }).eq('provider_id', user!.id),
       ]);
 
       const provider = providerRes.data as any;
@@ -102,6 +104,7 @@ export default function ProviderDashboard() {
       setHasPendingVerification(pendingVerification.length > 0);
       setCoinBalance(provider?.coin_balance || 0);
       setPortfolioCount((portfolioRes as any).count || 0);
+      setServicesCount((servicesRes as any).count || 0);
 
       setStats({
         totalBookings: bookings.length,
@@ -290,6 +293,46 @@ export default function ProviderDashboard() {
           </div>
         )}
       </div>
+
+      {/* Description Nudge */}
+      {(!providerData?.description || providerData.description === 'Professional service provider' || providerData.description.length < 30) && (
+        <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 sm:p-5 mb-6 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+              <FileText className="h-5 w-5 text-blue-600" />
+            </div>
+            <div>
+              <p className="font-semibold text-blue-800">Add a description to your profile</p>
+              <p className="text-sm text-blue-600">
+                A good description helps customers understand your skills and builds trust.
+              </p>
+            </div>
+          </div>
+          <Link href="/provider/profile" className="bg-blue-600 text-white px-5 py-2.5 rounded-xl hover:bg-blue-700 text-sm font-semibold w-full sm:w-auto text-center transition">
+            Edit Profile
+          </Link>
+        </div>
+      )}
+
+      {/* Services Nudge */}
+      {servicesCount === 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 sm:p-5 mb-6 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+              <Package className="h-5 w-5 text-amber-600" />
+            </div>
+            <div>
+              <p className="font-semibold text-amber-800">Add your prices to get booked</p>
+              <p className="text-sm text-amber-600">
+                You haven't listed any services. Customers need to know what you charge before they can book you.
+              </p>
+            </div>
+          </div>
+          <Link href="/provider/services" className="bg-amber-600 text-white px-5 py-2.5 rounded-xl hover:bg-amber-700 text-sm font-semibold w-full sm:w-auto text-center transition">
+            Add Prices
+          </Link>
+        </div>
+      )}
 
       {/* Portfolio nudge — hidden once 3+ photos exist */}
       {portfolioCount < MIN_PORTFOLIO_PHOTOS && (
