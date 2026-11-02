@@ -26,12 +26,6 @@ const SolidBellIcon = ({ className }: { className?: string }) => (
   </svg>
 );
 
-const SolidMapIcon = ({ className }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-    <path d="M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z"/>
-  </svg>
-);
-
 interface NavItem {
   id: string;
   label: string;
@@ -116,12 +110,6 @@ export function MobileBottomNav() {
       icon: <SolidBellIcon className="w-6 h-6" />,
       onClick: () => navigate('/notifications', markSystemAsSeen),
     },
-    {
-      id: 'map',
-      label: 'Map',
-      icon: <SolidMapIcon className="w-6 h-6" />,
-      onClick: () => navigate('/map'),
-    },
   ];
 
   if (tierPanelOpen) return null;
@@ -141,8 +129,6 @@ export function MobileBottomNav() {
           let active = false;
           if (item.id === 'home') {
             active = pathname === '/' || pathname === '/search';
-          } else if (item.id === 'map') {
-            active = pathname.startsWith('/map');
           } else if (item.id === 'notifications') {
             active = pathname.startsWith('/notifications');
           } else {

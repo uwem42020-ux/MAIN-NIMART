@@ -2,78 +2,10 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import Link from 'next/link';
 import { db } from '@/lib/supabase-any';
-import { MapPin } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLocationStore } from '@/stores/locationStore';
-import { useState, useEffect, useRef } from 'react';
-import { cn } from '@/lib/utils';
-
-const categoryIcons: Record<string, string> = {
-  'vehicle-mechanics': '/auto/vehicle.png',
-  'roadside-emergencies': '/auto/emergencies.png',
-  'auto-repair': '/auto/autorepair.png',
-  'auto-maintenance': '/auto/automaintenace.png',
-  'auto-parts': '/auto/parts.png',
-  'commercial-vehicles': '/auto/commercial.png',
-  'official-vehicle': '/auto/official.png',
-  plumbing: '/auto/plumber.png',
-  electrical: '/auto/electrical.png',
-  construction: '/auto/construction.png',
-  carpentry: '/auto/capentary.png',
-  painting: '/auto/painter.png',
-  'metal-works': '/auto/metalwork.png',
-  glass: '/auto/glasswork.png',
-  'appliance-repair': '/auto/eletronicsrepair.png',
-  'home-security': '/auto/homesecurity.png',
-  'medical-emergency': '/auto/medicalemergency.png',
-  'fire-rescue': '/auto/fireextinguisher.png',
-  'security-guarding': '/auto/security.png',
-  legal: '/auto/legal.png',
-  financial: '/auto/financial.png',
-  business: '/auto/business.png',
-  'real-estate': '/auto/realestate.png',
-  architecture: '/auto/architectate.png',
-  'computer-it': '/auto/computer.png',
-  'mobile-phone': '/auto/phone.png',
-  'digital-creative': '/auto/digitalcreative.png',
-  printing: '/auto/printing.png',
-  hair: '/auto/hairservices.png',
-  makeup: '/auto/makeup.png',
-  nail: '/auto/nail.png',
-  spa: '/auto/spaandwellness.png',
-  fashion: '/auto/fashion.png',
-  catering: '/auto/cateringservices.png',
-  'private-chef': '/auto/privatechef.png',
-  'food-delivery': '/auto/fooddelivery.png',
-  drinks: '/auto/drinks.png',
-  'professional-food': '/auto/professional food services.png',
-  photography: '/auto/Event photographer.png',
-  'event-planning': '/auto/event planning.png',
-  entertainment: '/auto/music and arts.png',
-  weddings: '/auto/weddings.png',
-  tutoring: '/auto/ucational support.png',
-  skills: '/auto/skill.png',
-  'music-arts': '/auto/music and arts.png',
-  'special-needs': '/auto/special need education.png',
-  'edu-support': '/auto/ucational support.png',
-  'medical-home': '/auto/medical professional home visit.png',
-  'alternative-medicine': '/auto/alternative medicine.png',
-  'mental-health': '/auto/mental health.png',
-  fitness: '/auto/fitness and sport.png',
-  moving: '/auto/moving and relocation.png',
-  delivery: '/auto/delivery and courer.png',
-  rentals: '/auto/rentals.png',
-  'social-groups': '/auto/social groups.png',
-  venues: '/auto/events space.png',
-  'b2b-partners': '/auto/business partner B2B.png',
-  'sme-services': '/auto/business services SME.png',
-  'creative-partners': '/auto/creativeeconomy partner.png',
-  export: '/auto/export services.png',
-  import: '/auto/import services.png',
-  'cross-border': '/auto/cross border trade.png',
-};
+import { useState, useEffect } from 'react';
 
 async function reverseGeocodeState(lat: number, lng: number): Promise<string | null> {
   try {
@@ -203,57 +135,6 @@ export function PopularServicesSlider({ initialCombos = [] }: { initialCombos?: 
           >
             Popular Services {userState ? `in ${userState}` : 'in Nigeria'}
           </div>
-        </div>
-
-        {/* Mobile */}
-        <div className="flex gap-3 overflow-x-auto hide-scrollbar pb-2 snap-x snap-mandatory sm:hidden pl-2">
-          {displayCombos.map((combo) => {
-            const iconSrc = categoryIcons[combo.cat] || '/auto/vehicle.png';
-            const displayName = combo.cat.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-            return (
-              <Link
-                key={`${combo.cat}-${combo.lgaId}`}
-                href={`/services/${combo.cat}/in/${combo.lgaId}`}
-                className="flex-shrink-0 w-[170px] snap-start"
-              >
-                <div className="bg-white rounded-xl p-3 shadow-sm border border-gray-100 hover:shadow-md hover:border-primary-200 transition-all">
-                  <img src={iconSrc} alt="" className="w-8 h-8 object-contain mb-2" width={32} height={32} />
-                  <h3 className="font-semibold text-sm text-gray-900 truncate">{displayName}</h3>
-                  <div className="flex items-center gap-1 text-xs text-gray-500 mt-1">
-                    <MapPin className="h-3 w-3 flex-shrink-0" />
-                    <span className="truncate">{combo.lga}</span>
-                  </div>
-                  <p className="text-xs font-medium text-primary-600 mt-0.5">{combo.count} provider{combo.count !== 1 ? 's' : ''}</p>
-                </div>
-              </Link>
-            );
-          })}
-        </div>
-
-        {/* Desktop */}
-        <div className="hidden sm:grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-          {displayCombos.map((combo) => {
-            const iconSrc = categoryIcons[combo.cat] || '/auto/vehicle.png';
-            const displayName = combo.cat.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-            return (
-              <Link
-                key={`${combo.cat}-${combo.lgaId}`}
-                href={`/services/${combo.cat}/in/${combo.lgaId}`}
-              >
-                <div className="bg-white rounded-xl p-3 shadow-sm border border-gray-100 hover:shadow-md hover:border-primary-200 transition-all h-full flex items-center gap-3">
-                  <img src={iconSrc} alt="" className="w-10 h-10 object-contain flex-shrink-0" width={40} height={40} />
-                  <div className="min-w-0">
-                    <h3 className="font-semibold text-sm text-gray-900 truncate">{displayName}</h3>
-                    <div className="flex items-center gap-1 text-xs text-gray-500 mt-0.5">
-                      <MapPin className="h-3 w-3 flex-shrink-0" />
-                      <span className="truncate">{combo.lga}</span>
-                    </div>
-                    <p className="text-xs font-medium text-primary-600 mt-0.5">{combo.count} provider{combo.count !== 1 ? 's' : ''}</p>
-                  </div>
-                </div>
-              </Link>
-            );
-          })}
         </div>
       </div>
     </section>
