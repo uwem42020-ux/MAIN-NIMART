@@ -56,7 +56,7 @@ const SolidMapIcon = ({ className }: { className?: string }) => (
 export function Header() {
   const router = useRouter();
   const pathname = usePathname();
-  const { user, profile, isProvider } = useAuth();
+  const { user, profile, isProvider, isLoading: authLoading } = useAuth();
   const { counts } = useNotifications();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [mobileProfileOpen, setMobileProfileOpen] = useState(false);
@@ -64,6 +64,7 @@ export function Header() {
   const [signingOut, setSigningOut] = useState(false);
   const [isDesktop, setIsDesktop] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
+  const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Detect desktop viewport. Needed because a phone in "desktop view" has
   // hover-less touch input — the hover-based dropdown never opens, and the
@@ -88,6 +89,28 @@ export function Header() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isUserMenuOpen]);
 
+  // Escape key closes dropdown / mobile panel. One listener handles both.
+  useEffect(() => {
+    if (!isUserMenuOpen && !mobileProfileOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      setIsUserMenuOpen(false);
+      if (mobileProfileOpen) {
+        setMobileProfileOpen(false);
+        setMobileView('main');
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [isUserMenuOpen, mobileProfileOpen]);
+
+  // Cancel any pending dropdown-close timer on unmount.
+  useEffect(() => {
+    return () => {
+      if (closeTimeoutRef.current) clearTimeout(closeTimeoutRef.current);
+    };
+  }, []);
+
   const isProviderUser = isProvider;
 
   const handleSignOut = async () => {
@@ -97,13 +120,15 @@ export function Header() {
       await supabase.auth.signOut();
       toast.success('Signed out');
       router.push('/');
-    } catch (error) {
-      toast.error('Failed to sign out. Please try again.');
-    } finally {
-      setSigningOut(false);
+      // Close UI only on success. On failure, keep the panel open so the
+      // user can retry without reopening the menu.
       setIsUserMenuOpen(false);
       setMobileProfileOpen(false);
       setMobileView('main');
+    } catch {
+      toast.error('Failed to sign out. Please try again.');
+    } finally {
+      setSigningOut(false);
     }
   };
 
@@ -155,12 +180,21 @@ export function Header() {
   };
 
   const handleMouseEnter = () => {
+    if (closeTimeoutRef.current) {
+      clearTimeout(closeTimeoutRef.current);
+      closeTimeoutRef.current = null;
+    }
     if (user && isDesktop) setIsUserMenuOpen(true);
   };
 
   const handleMouseLeave = () => {
     if (!user || !isDesktop) return;
-    setIsUserMenuOpen(false);
+    if (closeTimeoutRef.current) clearTimeout(closeTimeoutRef.current);
+    // 150ms grace period: prevents accidental 1px-overshoot closes.
+    closeTimeoutRef.current = setTimeout(() => {
+      setIsUserMenuOpen(false);
+      closeTimeoutRef.current = null;
+    }, 150);
   };
 
   const mobileMainItems = [
@@ -217,7 +251,7 @@ export function Header() {
     <>
       <header
         className="sticky top-0 z-50 bg-white/70 backdrop-blur-md border-b border-gray-200/50"
-        style={{ transform: 'translateZ(0)', willChange: 'transform', position: 'sticky' }}
+        style={{ transform: 'translateZ(0)' }}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
@@ -282,24 +316,7 @@ export function Header() {
               </button>
 
               {/* Auth buttons */}
-              {!user ? (
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => router.push('/auth/signin')}
-                    className="flex items-center gap-1 px-1.5 py-1.5 rounded-full border border-[#008751] text-[#008751] hover:bg-green-50 active:scale-95 transition text-xs sm:text-sm font-medium"
-                  >
-                    <LogIn className="h-4 w-4" />
-                    <span>Sign In</span>
-                  </button>
-                  <button
-                    onClick={() => router.push('/auth/signup')}
-                    className="flex items-center gap-1 px-1.5 py-1.5 rounded-full bg-[#008751] text-white hover:bg-green-700 active:scale-95 transition text-xs sm:text-sm font-medium"
-                  >
-                    <UserPlus className="h-4 w-4" />
-                    <span>Register</span>
-                  </button>
-                </div>
-              ) : (
+              {user ? (
                 <div
                   className="relative"
                   ref={userMenuRef}
@@ -357,6 +374,31 @@ export function Header() {
                       </div>
                     </div>
                   )}
+                </div>
+              ) : authLoading ? (
+                // Skeleton placeholder — shown only while auth state is resolving.
+                // Prevents the "Sign In / Register flash" that logged-in users
+                // currently see for ~150ms on every hard refresh.
+                <div className="flex items-center gap-1" aria-hidden="true">
+                  <div className="h-8 w-[72px] rounded-full bg-gray-200/70 animate-pulse" />
+                  <div className="h-8 w-[88px] rounded-full bg-gray-200/70 animate-pulse" />
+                </div>
+              ) : (
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => router.push('/auth/signin')}
+                    className="flex items-center gap-1 px-1.5 py-1.5 rounded-full border border-[#008751] text-[#008751] hover:bg-green-50 active:scale-95 transition text-xs sm:text-sm font-medium"
+                  >
+                    <LogIn className="h-4 w-4" />
+                    <span>Sign In</span>
+                  </button>
+                  <button
+                    onClick={() => router.push('/auth/signup')}
+                    className="flex items-center gap-1 px-1.5 py-1.5 rounded-full bg-[#008751] text-white hover:bg-green-700 active:scale-95 transition text-xs sm:text-sm font-medium"
+                  >
+                    <UserPlus className="h-4 w-4" />
+                    <span>Register</span>
+                  </button>
                 </div>
               )}
             </div>
