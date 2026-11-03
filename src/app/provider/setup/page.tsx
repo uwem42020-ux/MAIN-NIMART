@@ -410,6 +410,7 @@ export default function ProviderSetup() {
   const handleNext = async () => {
     if (step >= 4) return;
 
+    // Step 1 has an extra description-length check beyond canProceed()
     if (step === 1) {
       if (businessName.trim().length === 0 || !hasLocation) return;
       if (description.trim().length < MIN_DESCRIPTION_LENGTH) {
@@ -421,6 +422,65 @@ export default function ProviderSetup() {
       if (!canProceed()) return;
     }
 
+    // --- SILENT SAVE LOGIC ---
+    // Persist the current step's data to Supabase so abandoned wizards still
+    // leave behind phone number, business name, category, etc.
+    // NOTE: provider_complete is NOT set here — that happens only in handleSubmit.
+    try {
+      if (step === 0) {
+        // Step 0: Save Phone Number to profiles
+        if (user && phoneNumber) {
+          await db.from('profiles').update({ phone: phoneNumber }).eq('id', user.id);
+        }
+      }
+      else if (step === 1) {
+        // Step 1: Save Business Name & Description to providers, Location to profiles
+        if (user) {
+          await db.from('providers').update({
+            business_name: businessName,
+            description: description.trim(),
+          }).eq('id', user.id);
+
+          await db.from('profiles').update({
+            lga_id: parseInt(selectedLgaId),
+            lga_name: selectedLgaName,
+            street_address: streetAddress || null,
+            landmark: landmark || null,
+            lat: mapLat,
+            lng: mapLng,
+          }).eq('id', user.id);
+        }
+      }
+      else if (step === 2) {
+        // Step 2: Save Category & Price to providers, and the initial service
+        if (user) {
+          await db.from('providers').update({
+            selected_tier_slug: selectedTier,
+            selected_category_slug: selectedCategory,
+            selected_subcategory_id: parseInt(selectedSubcategoryId),
+          }).eq('id', user.id);
+
+          // Delete any existing service(s) for this provider from a previous
+          // wizard attempt, then insert fresh — avoids duplicate rows since the
+          // wizard only ever manages a single "starting" service.
+          await db.from('provider_services').delete().eq('provider_id', user.id);
+          await db.from('provider_services').insert({
+            provider_id: user.id,
+            name: `${subcategories.find(s => s.id.toString() === selectedSubcategoryId)?.name || selectedCategory} Service`,
+            description: description.trim(),
+            price: parseFloat(startingPrice),
+            price_type: priceType,
+          });
+        }
+      }
+      // Step 3 (Portfolio) already saves instantly on image upload, so no action needed here.
+    } catch (err) {
+      console.error('Failed to auto-save step:', err);
+      // We don't block the user if the auto-save fails, we just log it.
+    }
+    // --- END SILENT SAVE LOGIC ---
+
+    // Move to next step
     setStep(step + 1);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -466,15 +526,18 @@ export default function ProviderSetup() {
       const { data, error } = await db.rpc('complete_provider_setup', params as any);
       if (error) throw error;
       if (!(data as any).success) throw new Error((data as any).error);
-            // Save the initial service with the price
-            const { error: svcError } = await db.from('provider_services').insert({
-              provider_id: user!.id,
-              name: `${subcategories.find(s => s.id.toString() === selectedSubcategoryId)?.name || selectedCategory} Service`,
-              description: description.trim(),
-              price: parseFloat(startingPrice),
-              price_type: priceType,
-            });
-            if (svcError) console.error('Failed to save initial service:', svcError);
+
+      // Save the initial service with the final price.
+      // Delete any silent-saved row first so we end up with exactly one service.
+      await db.from('provider_services').delete().eq('provider_id', user!.id);
+      const { error: svcError } = await db.from('provider_services').insert({
+        provider_id: user!.id,
+        name: `${subcategories.find(s => s.id.toString() === selectedSubcategoryId)?.name || selectedCategory} Service`,
+        description: description.trim(),
+        price: parseFloat(startingPrice),
+        price_type: priceType,
+      });
+      if (svcError) console.error('Failed to save initial service:', svcError);
 
       try { await refreshProfile(); } catch {}
 
