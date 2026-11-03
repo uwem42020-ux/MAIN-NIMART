@@ -22,6 +22,7 @@ const SOURCE_LABELS: Record<string, string> = {
   'word-of-mouth': 'Friend / Family',
   'walk-in': 'Saw a provider',
   other: 'Other',
+  'upgraded-from-dashboard': 'Customer Upgrade',
 };
 
 interface AdminUser {
@@ -35,6 +36,7 @@ interface AdminUser {
   business_name: string | null;
   signup_source: string | null;
   signup_platform: string | null;
+  provider_complete: boolean;
 }
 
 export default function AdminUsers() {
@@ -53,7 +55,7 @@ export default function AdminUsers() {
 
     const { data: profiles, error: profilesError } = await db
       .from('profiles')
-      .select('id, full_name, phone, role, is_banned, created_at, email, signup_source, signup_platform')
+      .select('id, full_name, phone, role, is_banned, created_at, email, signup_source, signup_platform, provider_complete')
       .order('created_at', { ascending: false });
 
     if (profilesError) {
@@ -217,12 +219,19 @@ export default function AdminUsers() {
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <span className={cn(
-                        'px-2 py-1 rounded-full text-xs font-medium',
-                        user.role === 'provider' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'
-                      )}>
-                        {user.role}
-                      </span>
+                      <div className="flex flex-col gap-1 items-start">
+                        <span className={cn(
+                          'px-2 py-1 rounded-full text-xs font-medium',
+                          user.role === 'provider' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'
+                        )}>
+                          {user.role}
+                        </span>
+                        {user.role === 'provider' && user.provider_complete === false && (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 uppercase tracking-wider">
+                            Setup Incomplete
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       {user.signup_source ? (
