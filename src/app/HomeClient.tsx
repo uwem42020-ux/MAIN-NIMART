@@ -1,7 +1,7 @@
 // app/HomeClient.tsx
 'use client';
 
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
@@ -14,7 +14,7 @@ import { TopProvidersSlider } from '@/components/common/TopProvidersSlider';
 import { CategoryButtons } from '@/components/common/CategoryButtons';
 import { CategorySidebar } from '@/components/common/CategorySidebar';
 import { FindProvidersRadar } from '@/components/customer/FindProvidersRadar';
-import { MapPin, ChevronDown, Search, WifiOff, LayoutGrid, List, Crosshair, X } from 'lucide-react';
+import { MapPin, ChevronDown, Search, WifiOff, LayoutGrid, List, Crosshair, X, Loader2 } from 'lucide-react';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useLocationStore } from '@/stores/locationStore';
 import { useGeolocation } from '@/hooks/useGeolocation';
@@ -40,9 +40,6 @@ interface HomeClientProps {
 }
 
 export function HomeClient({ initialProviders, initialTopProviders }: HomeClientProps) {
-  // NOTE: `initialPopularCombos` is no longer used (PopularServicesSlider removed).
-  // It's kept in HomeClientProps for backward compat with the parent (app/page.tsx).
-  // Follow-up: remove it from the interface AND stop computing it in the parent.
   const { profile } = useAuth();
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -58,7 +55,6 @@ export function HomeClient({ initialProviders, initialTopProviders }: HomeClient
   const searchInputRef = useRef<HTMLInputElement>(null);
   const locationButtonRef = useRef<HTMLButtonElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
-  const autoLocationApplied = useRef(false);
   const isOffline = useOffline();
   const [mounted, setMounted] = useState(false);
 
@@ -67,12 +63,8 @@ export function HomeClient({ initialProviders, initialTopProviders }: HomeClient
   const [showSuggestions, setShowSuggestions] = useState(false);
   const debouncedSearchTerm = useDebounce(searchInput, 300);
 
-  const cachedProvidersRef = useRef<ProviderWithProfile[]>(initialProviders);
-
   const [isClient, setIsClient] = useState(false);
   useEffect(() => { setIsClient(true); }, []);
-  // Fix: `mounted` was declared but never set. This broke every
-  // `isClientMounted` check downstream (offline banner never showed).
   useEffect(() => { setMounted(true); }, []);
 
   useGeolocation();
@@ -197,12 +189,23 @@ export function HomeClient({ initialProviders, initialTopProviders }: HomeClient
     preloadLocations();
   }, []);
 
-  const { data: featuredProviders, isLoading } = useQuery({
+  // ── The Infinite Query ──
+  const {
+    data: featuredProvidersData,
+    isLoading,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage
+  } = useInfiniteQuery({
     queryKey: ['featured-providers', userLat, userLng, stateFilter, lgaFilter],
-    queryFn: async () => {
-      const { data, error } = await db.rpc('get_featured_providers', { limit_count: 40 });
+    queryFn: async ({ pageParam = 0 }) => {
+      const { data, error } = await db.rpc('get_featured_providers', {
+        limit_count: 20,
+        offset_count: pageParam
+      });
+
       if (error || !data) {
-        return cachedProvidersRef.current.length > 0 ? cachedProvidersRef.current : [] as ProviderWithProfile[];
+        return { items: [] as ProviderWithProfile[], rawCount: 0 };
       }
 
       const providers: any[] = Array.isArray(data) ? data : [];
@@ -211,9 +214,11 @@ export function HomeClient({ initialProviders, initialTopProviders }: HomeClient
       if (lgaFilter) {
         filtered = providers.filter((p: any) => p.profile?.lga_id?.toString() === lgaFilter);
       } else if (stateFilter) {
-        filtered = providers.filter((p: any) => p.profile?.state_id?.toString() === stateFilter);
+        filtered = providers.filter((p: any) => 
+          p.profile?.state_name?.toLowerCase() === locationLabel.toLowerCase() || 
+          p.profile?.lga_id?.toString() === stateFilter
+        );
       }
-      if (filtered.length === 0) return [] as ProviderWithProfile[];
 
       let result = (filtered.map((item: any) => ({
         id: item.id,
@@ -278,12 +283,24 @@ export function HomeClient({ initialProviders, initialTopProviders }: HomeClient
         return (b.average_rating ?? 0) - (a.average_rating ?? 0);
       });
 
-      cachedProvidersRef.current = result;
-      return result;
+      return { items: result, rawCount: providers.length };
     },
-    initialData: initialProviders,
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) => {
+      if (lastPage.rawCount < 20) return undefined; // No more pages
+      const totalFetched = allPages.reduce((sum, page) => sum + page.rawCount, 0);
+      return totalFetched;
+    },
+    initialData: {
+      pages: [{ items: initialProviders, rawCount: initialProviders.length }],
+      pageParams: [0],
+    },
     staleTime: 1000 * 60 * 5,
   });
+
+  const featuredProviders = useMemo(() => {
+    return featuredProvidersData?.pages.flatMap((page) => page.items) ?? [];
+  }, [featuredProvidersData]);
 
   const { data: allProviderCounts } = useQuery({
     queryKey: ['provider-counts'],
@@ -350,14 +367,12 @@ export function HomeClient({ initialProviders, initialTopProviders }: HomeClient
     }
     router.push(`?${params.toString()}`);
     setShowLocationDropdown(false);
-    autoLocationApplied.current = true;
   };
 
   const clearLocation = () => {
     router.push('/');
     setLocationLabel('All Nigeria');
     setShowLocationDropdown(false);
-    autoLocationApplied.current = true;
   };
 
   const handleSearch = (e?: React.FormEvent) => {
@@ -421,7 +436,7 @@ export function HomeClient({ initialProviders, initialTopProviders }: HomeClient
     const show = isClient ? featuredProviders : initialProviders;
     const isClientMounted = isClient && mounted;
 
-    if (isClient && isLoading && cachedProvidersRef.current.length === 0) {
+    if (isClient && isLoading && featuredProviders.length === 0) {
       return <ProviderGridSkeleton />;
     }
 
@@ -449,6 +464,23 @@ export function HomeClient({ initialProviders, initialTopProviders }: HomeClient
             {show.map(provider => (
               <ProviderCardHorizontal key={provider.id} provider={provider} />
             ))}
+          </div>
+        )}
+        
+        {/* Load More Button */}
+        {hasNextPage && (
+          <div className="flex justify-center mt-8 w-full">
+            <button
+              onClick={() => fetchNextPage()}
+              disabled={isFetchingNextPage}
+              className="flex items-center gap-2 bg-white border border-gray-200 shadow-sm text-gray-800 px-8 py-3 rounded-full font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
+            >
+              {isFetchingNextPage ? (
+                <><Loader2 className="h-5 w-5 animate-spin" /> Loading...</>
+              ) : (
+                'Load More Providers'
+              )}
+            </button>
           </div>
         )}
       </>
