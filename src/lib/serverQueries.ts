@@ -25,6 +25,7 @@ export async function fetchInitialProviders(): Promise<ProviderWithProfile[]> {
     average_rating: item.review_stats?.average_rating ?? 0,
     review_count: item.review_stats?.review_count ?? 0,
     distance: undefined,
+    starting_price: item.starting_price ?? undefined,
     lastSignInAt: null,
   })) as unknown as ProviderWithProfile[];
 }
