@@ -56,7 +56,7 @@ export default function ProviderSetup() {
   const [loading, setLoading] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   
-  // ✅ NEW: Prevents multiple clicks while auto-saving
+  // ✅ Prevents multiple clicks while auto-saving
   const [savingStep, setSavingStep] = useState(false);
 
   // Step 0: Profile Picture
@@ -454,7 +454,7 @@ export default function ProviderSetup() {
           await db.from('provider_services').insert({
             provider_id: user.id,
             name: `${subcategories.find(s => s.id.toString() === selectedSubcategoryId)?.name || selectedCategory} Service`,
-            description: description.trim(),
+            description: null, // ✅ Leave blank so it doesn't duplicate the bio
             price: parseFloat(startingPrice),
             price_type: priceType,
           });
@@ -518,7 +518,7 @@ export default function ProviderSetup() {
       const { error: svcError } = await db.from('provider_services').insert({
         provider_id: user!.id,
         name: `${subcategories.find(s => s.id.toString() === selectedSubcategoryId)?.name || selectedCategory} Service`,
-        description: description.trim(),
+        description: null, // ✅ Leave blank so it doesn't duplicate the bio
         price: parseFloat(startingPrice),
         price_type: priceType,
       });

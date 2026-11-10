@@ -469,8 +469,8 @@ export default function ProviderProfile() {
               {/* Editable description */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Service Description
-                  <span className="ml-2 text-xs font-normal text-gray-400">(editable — customers see this)</span>
+                  About Me (Business Bio)
+                  <span className="ml-2 text-xs font-normal text-gray-400">(This appears in the "About" section on your public profile)</span>
                 </label>
                 <textarea
                   value={description}
