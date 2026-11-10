@@ -13,7 +13,7 @@ import toast from 'react-hot-toast';
 import {
   User, Phone, Store, FileText, Save, Camera, AlertCircle,
   Home, Landmark, Image, Languages, GraduationCap, Calendar,
-  CheckCircle, Loader2, MapPin, Search, ArrowRight
+  CheckCircle, Loader2, MapPin, Search, ArrowRight, Briefcase
 } from 'lucide-react';
 
 export default function ProviderProfile() {
@@ -41,12 +41,14 @@ export default function ProviderProfile() {
   const [age, setAge] = useState('');
   const [education, setEducation] = useState('');
   const [languages, setLanguages] = useState('');
+  const [experienceYears, setExperienceYears] = useState(''); // NEW
 
   // --- UI states ---
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [uploadingCover, setUploadingCover] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savingDescription, setSavingDescription] = useState(false);
+  const [savingAdditional, setSavingAdditional] = useState(false); // NEW
   const [phoneError, setPhoneError] = useState('');
   const [initialDataLoaded, setInitialDataLoaded] = useState(false);
   const [isSetupComplete, setIsSetupComplete] = useState(true);
@@ -72,16 +74,9 @@ export default function ProviderProfile() {
     if (!user) return;
 
     const fetchData = async () => {
-      // Fetch provider + profile in parallel (halves load time)
       const [providerRes, profileRes] = await Promise.all([
-        db.from('providers')
-          .select('business_name, description')
-          .eq('id', user.id)
-          .single(),
-        db.from('profiles')
-          .select('*')
-          .eq('id', user.id)
-          .single(),
+        db.from('providers').select('business_name, description').eq('id', user.id).single(),
+        db.from('profiles').select('*').eq('id', user.id).single(),
       ]);
 
       const providerData = providerRes.data;
@@ -107,25 +102,20 @@ export default function ProviderProfile() {
         setAge(p.age ? String(p.age) : '');
         setEducation(p.education || '');
         setLanguages(p.languages || '');
+        setExperienceYears(p.experience_years ? String(p.experience_years) : ''); // NEW
         setLgaName(p.lga_name || '');
         setLat(p.lat);
         setLng(p.lng);
         setHasPassword(p.has_password || false);
 
-        // Get state name from lga_centers if not directly stored
         if (p.lga_id && !p.state_name) {
-          const { data: lgaInfo } = await db
-            .from('lga_centers')
-            .select('state_name')
-            .eq('lga_id', p.lga_id)
-            .single();
+          const { data: lgaInfo } = await db.from('lga_centers').select('state_name').eq('lga_id', p.lga_id).single();
           if (lgaInfo) setStateName((lgaInfo as any).state_name);
         } else {
           setStateName(p.state_name || '');
         }
       }
 
-      // Check if setup is incomplete
       if (!providerData?.business_name || !profileData?.lga_id || !profileData?.street_address) {
         setIsSetupComplete(false);
       }
@@ -159,24 +149,6 @@ export default function ProviderProfile() {
     }, 1000);
     return () => clearInterval(interval);
   }, [locationStatus]);
-
-  // --- Phone validation ---
-  const validatePhoneNumber = (phoneNumber: string): boolean => {
-    const local = phoneNumber.replace('+234', '');
-    const isValid = /^\d{10}$/.test(local);
-    setPhoneError(isValid ? '' : 'Enter a valid 10-digit Nigerian phone number');
-    return isValid;
-  };
-
-  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let val = e.target.value;
-    if (!val.startsWith('+234')) val = '+234' + val.replace(/\D/g, '');
-    const digits = val.slice(4).replace(/\D/g, '').slice(0, 10);
-    const final = '+234' + digits;
-    setPhone(final);
-    if (digits.length === 10) validatePhoneNumber(final);
-    else setPhoneError('');
-  };
 
   // --- Avatar upload ---
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -220,7 +192,7 @@ export default function ProviderProfile() {
     }
   };
 
-  // --- Save description (independent of avatar/password) ---
+  // --- Save description ---
   const handleSaveDescription = async () => {
     if (!user) return;
     const trimmed = description.trim();
@@ -230,10 +202,7 @@ export default function ProviderProfile() {
     }
     setSavingDescription(true);
     try {
-      const { error } = await db
-        .from('providers')
-        .update({ description: trimmed || null })
-        .eq('id', user.id);
+      const { error } = await db.from('providers').update({ description: trimmed || null }).eq('id', user.id);
       if (error) throw error;
       setInitialDescription(trimmed);
       toast.success('Description saved');
@@ -241,6 +210,30 @@ export default function ProviderProfile() {
       toast.error(err.message || 'Failed to save description');
     } finally {
       setSavingDescription(false);
+    }
+  };
+
+  // --- NEW: Save Additional Info (Gender, Age, Education, Languages, Experience) ---
+  const handleSaveAdditionalInfo = async () => {
+    if (!user) return;
+    setSavingAdditional(true);
+    try {
+      const { error } = await db.from('profiles').update({
+        gender: gender.trim() || null,
+        age: age ? parseInt(age) : null,
+        education: education.trim() || null,
+        languages: languages.trim() || null,
+        experience_years: experienceYears ? parseInt(experienceYears) : null, // NEW
+      }).eq('id', user.id);
+      
+      if (error) throw error;
+      
+      await refreshProfile();
+      toast.success('Additional information saved');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to save information');
+    } finally {
+      setSavingAdditional(false);
     }
   };
 
@@ -257,7 +250,6 @@ export default function ProviderProfile() {
 
     setSaving(true);
     try {
-      // Mark onboarding complete across all flags.
       await updateProfile({
         is_complete: true,
         provider_complete: true,
@@ -274,14 +266,7 @@ export default function ProviderProfile() {
   };
 
   // --- Location change handler ---
-  const handleLocationChange = async (data: {
-    lat: number;
-    lng: number;
-    lgaId: number;
-    lgaName: string;
-    stateName: string;
-    area: string;
-  }) => {
+  const handleLocationChange = async (data: any) => {
     setChangingLocation(true);
     try {
       let rpcName: string;
@@ -326,14 +311,10 @@ export default function ProviderProfile() {
   if (!initialDataLoaded || !profile) {
     return (
       <div className="max-w-5xl mx-auto px-4 py-8 animate-pulse">
-        {/* Header skeleton */}
         <div className="h-7 bg-gray-200 rounded-md w-64 mb-2" />
         <div className="h-4 bg-gray-200 rounded-md w-96 mb-6" />
-
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* LEFT column */}
           <div className="space-y-6">
-            {/* Business info card */}
             <div className="bg-white rounded-lg shadow-sm border p-6">
               <div className="h-5 bg-gray-200 rounded-md w-48 mb-4" />
               <div className="space-y-3">
@@ -343,22 +324,10 @@ export default function ProviderProfile() {
                     <div className="h-10 bg-gray-100 rounded-lg" />
                   </div>
                 ))}
-                <div>
-                  <div className="h-3 bg-gray-200 rounded-md w-40 mb-1.5" />
-                  <div className="h-20 bg-gray-100 rounded-lg" />
-                </div>
               </div>
             </div>
-            {/* Location card */}
-            <div className="bg-white rounded-lg shadow-sm border p-6">
-              <div className="h-5 bg-gray-200 rounded-md w-40 mb-4" />
-              <div className="h-16 bg-gray-100 rounded-lg" />
-            </div>
           </div>
-
-          {/* RIGHT column */}
           <div className="space-y-6">
-            {/* Profile picture card */}
             <div className="bg-white rounded-lg shadow-sm border p-6">
               <div className="h-5 bg-gray-200 rounded-md w-36 mb-4" />
               <div className="flex items-center gap-6">
@@ -367,27 +336,6 @@ export default function ProviderProfile() {
                   <div className="h-3 bg-gray-200 rounded-md w-3/4" />
                   <div className="h-3 bg-gray-200 rounded-md w-1/2" />
                 </div>
-              </div>
-            </div>
-            {/* Password card */}
-            <div className="bg-white rounded-lg shadow-sm border p-6">
-              <div className="h-5 bg-gray-200 rounded-md w-32 mb-4" />
-              <div className="space-y-3">
-                <div className="h-10 bg-gray-100 rounded-lg" />
-                <div className="h-10 bg-gray-100 rounded-lg" />
-                <div className="h-10 bg-gray-200 rounded-lg w-32" />
-              </div>
-            </div>
-            {/* Additional info card */}
-            <div className="bg-white rounded-lg shadow-sm border p-6">
-              <div className="h-5 bg-gray-200 rounded-md w-56 mb-4" />
-              <div className="grid grid-cols-2 gap-4">
-                {[1, 2, 3, 4].map((i) => (
-                  <div key={i}>
-                    <div className="h-3 bg-gray-200 rounded-md w-16 mb-1.5" />
-                    <div className="h-10 bg-gray-100 rounded-lg" />
-                  </div>
-                ))}
               </div>
             </div>
           </div>
@@ -430,10 +378,7 @@ export default function ProviderProfile() {
             <p className="text-sm text-primary-800 mb-3">
               Find trusted providers near you and book a service in minutes.
             </p>
-            <Link
-              href="/search"
-              className="inline-flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary-700 transition"
-            >
+            <Link href="/search" className="inline-flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary-700 transition">
               Browse services <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
@@ -454,7 +399,6 @@ export default function ProviderProfile() {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* LEFT COLUMN */}
         <div className="space-y-6">
           {/* Business Information */}
           <div className="bg-white rounded-lg shadow-sm border p-6">
@@ -466,11 +410,10 @@ export default function ProviderProfile() {
               <div><label className="block text-sm font-medium text-gray-700 mb-1">Street Address</label><input type="text" value={streetAddress} disabled className="w-full px-3 py-2 bg-gray-100 border border-gray-200 rounded-lg" /></div>
               <div><label className="block text-sm font-medium text-gray-700 mb-1">Area / Neighbourhood</label><input type="text" value={addressArea} disabled className="w-full px-3 py-2 bg-gray-100 border border-gray-200 rounded-lg" /></div>
 
-              {/* Editable description */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   About Me (Business Bio)
-                  <span className="ml-2 text-xs font-normal text-gray-400">(This appears in the "About" section on your public profile)</span>
+                  <span className="ml-2 text-xs font-normal text-gray-400">(This appears at the top of your public profile)</span>
                 </label>
                 <textarea
                   value={description}
@@ -488,7 +431,7 @@ export default function ProviderProfile() {
                     disabled={savingDescription || !descriptionChanged}
                     className="px-4 py-1.5 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 transition"
                   >
-                    {savingDescription ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Saving...</> : 'Save Description'}
+                    {savingDescription ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Saving...</> : 'Save Bio'}
                   </button>
                 </div>
               </div>
@@ -523,17 +466,10 @@ export default function ProviderProfile() {
                   {changingLocation ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Change Location'}
                 </button>
               </div>
-              <p className="text-xs text-gray-500">
-                You can change your location once every 30 days for free, or pay 5000 Nicoin to change anytime.
-                {!locationStatus?.free_available && !locationStatus?.paid_possible && (
-                  <span className="block text-red-600 mt-1">Insufficient Nicoin to change now. Earn more by completing bookings.</span>
-                )}
-              </p>
             </div>
           </div>
         </div>
 
-        {/* RIGHT COLUMN */}
         <div className="space-y-6">
           {/* Profile Picture */}
           <div className="bg-white rounded-lg shadow-sm border p-6">
@@ -562,21 +498,38 @@ export default function ProviderProfile() {
           {/* Set Password */}
           <div className="bg-white rounded-lg shadow-sm border p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Set a Password *</h2>
-            <SetPasswordForm
-              onSuccess={() => setHasPassword(true)}
-              initialCompleted={hasPassword}
-              userId={user?.id}
-            />
+            <SetPasswordForm onSuccess={() => setHasPassword(true)} initialCompleted={hasPassword} userId={user?.id} />
           </div>
 
           {/* Additional Information */}
           <div className="bg-white rounded-lg shadow-sm border p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Additional Information (optional)</h2>
             <div className="grid grid-cols-2 gap-4">
-              <div><label className="block text-sm font-medium text-gray-700 mb-1">Gender</label><select value={gender} onChange={(e) => setGender(e.target.value)} className="w-full px-3 py-2 border rounded-lg"><option value="">Select</option><option value="Male">Male</option><option value="Female">Female</option><option value="Other">Other</option></select></div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Years of Experience</label>
+                <input type="number" value={experienceYears} onChange={(e) => setExperienceYears(e.target.value)} className="w-full px-3 py-2 border rounded-lg" min={0} max={50} placeholder="e.g. 5" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Gender</label>
+                <select value={gender} onChange={(e) => setGender(e.target.value)} className="w-full px-3 py-2 border rounded-lg">
+                  <option value="">Select</option>
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
               <div><label className="block text-sm font-medium text-gray-700 mb-1">Age</label><input type="number" value={age} onChange={(e) => setAge(e.target.value)} className="w-full px-3 py-2 border rounded-lg" min={16} max={100} /></div>
               <div><label className="block text-sm font-medium text-gray-700 mb-1">Education</label><input type="text" value={education} onChange={(e) => setEducation(e.target.value)} className="w-full px-3 py-2 border rounded-lg" /></div>
-              <div><label className="block text-sm font-medium text-gray-700 mb-1">Languages</label><input type="text" value={languages} onChange={(e) => setLanguages(e.target.value)} className="w-full px-3 py-2 border rounded-lg" /></div>
+              <div className="col-span-2"><label className="block text-sm font-medium text-gray-700 mb-1">Languages</label><input type="text" value={languages} onChange={(e) => setLanguages(e.target.value)} className="w-full px-3 py-2 border rounded-lg" placeholder="e.g. English, Yoruba, Igbo" /></div>
+            </div>
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={handleSaveAdditionalInfo}
+                disabled={savingAdditional}
+                className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center gap-1.5 transition"
+              >
+                {savingAdditional ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving...</> : <><Save className="h-4 w-4" /> Save Additional Info</>}
+              </button>
             </div>
           </div>
 
@@ -594,7 +547,6 @@ export default function ProviderProfile() {
         </div>
       </div>
 
-      {/* Final button */}
       <div className="flex justify-end mt-6">
         <button
           onClick={handleFinalSubmit}
@@ -605,13 +557,7 @@ export default function ProviderProfile() {
         </button>
       </div>
 
-      <LocationPickerModal
-        isOpen={showLocationPicker}
-        onClose={() => setShowLocationPicker(false)}
-        onLocationSelected={handleLocationChange}
-        currentLat={lat || 9.0556}
-        currentLng={lng || 7.4914}
-      />
+      <LocationPickerModal isOpen={showLocationPicker} onClose={() => setShowLocationPicker(false)} onLocationSelected={handleLocationChange} currentLat={lat || 9.0556} currentLng={lng || 7.4914} />
     </div>
   );
 }

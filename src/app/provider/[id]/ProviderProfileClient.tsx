@@ -34,6 +34,7 @@ import {
   ExternalLink,
   Search,
   Compass,
+  Briefcase, // NEW IMPORT
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
@@ -639,8 +640,18 @@ export function ProviderProfileClient({
 
         <div className="px-4 mb-6">
           <Card>
-            <h2 className="text-base font-bold text-gray-900 mb-3">About</h2>
-            {provider?.description && <p className="text-sm text-gray-600 mb-4 leading-relaxed break-words">{provider.description}</p>}
+            <h2 className="text-base font-bold text-gray-900 mb-3 flex items-center gap-2">
+              <span className="w-1 h-5 bg-gray-300 rounded-full" /> Experience
+            </h2>
+            {/* NEW EXPERIENCE BADGE */}
+            {(provider?.profile as any)?.experience_years ? (
+              <span className="inline-flex items-center gap-1.5 bg-green-50 text-green-700 px-3 py-1.5 text-sm font-medium rounded-lg border border-green-200 mb-4">
+                <Briefcase className="h-4 w-4" /> {(provider.profile as any).experience_years} {(provider.profile as any).experience_years === 1 ? 'Year' : 'Years'} of Experience
+              </span>
+            ) : (
+              <p className="text-sm text-gray-500 mb-4">No Experience Listed</p>
+            )}
+            
             <div className="flex flex-wrap gap-2">
               {provider?.profile?.education && <span className="inline-flex items-center gap-1.5 bg-primary-50 text-primary-700 rounded-full px-3 py-1.5 text-xs font-medium border border-primary-200"><GraduationCap className="h-3.5 w-3.5" />{provider.profile.education}</span>}
               {provider?.profile?.languages && <span className="inline-flex items-center gap-1.5 bg-primary-50 text-primary-700 rounded-full px-3 py-1.5 text-xs font-medium border border-primary-200"><Languages className="h-3.5 w-3.5" />{provider.profile.languages}</span>}
@@ -790,8 +801,16 @@ export function ProviderProfileClient({
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
           <Card>
-            <h2 className="text-lg font-bold text-gray-900 mb-4">About</h2>
-            {provider?.description && <p className="text-sm text-gray-600 mb-4 leading-relaxed">{provider.description}</p>}
+            <h2 className="text-lg font-bold text-gray-900 mb-4">Experience</h2>
+            {/* NEW EXPERIENCE BADGE */}
+            {(provider?.profile as any)?.experience_years ? (
+              <span className="inline-flex items-center gap-1.5 bg-green-50 text-green-700 px-3 py-1.5 text-sm font-medium rounded-lg border border-green-200 mb-4">
+                <Briefcase className="h-4 w-4" /> {(provider.profile as any).experience_years} {(provider.profile as any).experience_years === 1 ? 'Year' : 'Years'} of Experience
+              </span>
+            ) : (
+              <p className="text-sm text-gray-500 mb-4">No Experience Listed</p>
+            )}
+
             <div className="flex flex-wrap gap-2">
               {provider?.profile?.education && <span className="inline-flex items-center gap-1.5 bg-primary-50 text-primary-700 rounded-full px-3 py-1.5 text-xs font-medium border border-primary-200"><GraduationCap className="h-4 w-4" />{provider.profile.education}</span>}
               {provider?.profile?.languages && <span className="inline-flex items-center gap-1.5 bg-primary-50 text-primary-700 rounded-full px-3 py-1.5 text-xs font-medium border border-primary-200"><Languages className="h-4 w-4" />{provider.profile.languages}</span>}

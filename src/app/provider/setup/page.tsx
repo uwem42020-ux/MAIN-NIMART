@@ -10,7 +10,7 @@ import toast from 'react-hot-toast';
 import {
   Store, Save, Home, Landmark, Phone,
   Loader2, Camera, Check, ChevronRight, ChevronLeft,
-  Upload, Navigation, Image, Trash2,
+  Upload, Navigation, Image, Trash2, Briefcase
 } from 'lucide-react';
 import { TIERS, getCategoriesByTier, getSubcategoriesByCategory } from '@/data/categories';
 import type { Category, Subcategory } from '@/data/categories';
@@ -26,7 +26,6 @@ interface PortfolioImage {
   image_url: string;
 }
 
-// ── Reusable style tokens (so styling stays consistent) ──
 const INPUT_CLS =
   'w-full px-4 py-3 rounded-xl bg-white border border-gray-200 text-gray-900 text-base ' +
   'placeholder:text-gray-400 transition-all duration-200 outline-none ' +
@@ -55,8 +54,6 @@ export default function ProviderSetup() {
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  
-  // ✅ Prevents multiple clicks while auto-saving
   const [savingStep, setSavingStep] = useState(false);
 
   // Step 0: Profile Picture
@@ -69,6 +66,7 @@ export default function ProviderSetup() {
   // Step 1: Business & Location
   const [businessName, setBusinessName] = useState('');
   const [description, setDescription] = useState('');
+  const [experienceYears, setExperienceYears] = useState(''); // NEW
   const [descShake, setDescShake] = useState(false);
   const [selectedLgaId, setSelectedLgaId] = useState<string>('');
   const [selectedLgaName, setSelectedLgaName] = useState<string>('');
@@ -101,7 +99,6 @@ export default function ProviderSetup() {
   const [landmark, setLandmark] = useState('');
   const [termsAccepted, setTermsAccepted] = useState(false);
 
-  // ── Fetch states on mount ──
   useEffect(() => {
     async function fetchStates() {
       const { data } = await db.from('lga_centers').select('state_id, state_name').order('state_name');
@@ -124,7 +121,6 @@ export default function ProviderSetup() {
     fetchStates();
   }, []);
 
-  // ── Load LGAs when state changes ──
   useEffect(() => {
     if (!selectedStateId) { setLgas([]); return; }
     async function fetchLgas() {
@@ -137,7 +133,6 @@ export default function ProviderSetup() {
     fetchLgas();
   }, [selectedStateId]);
 
-  // ── Category chain (Local Data) ──
   useEffect(() => {
     setCategories(getCategoriesByTier(selectedTier));
   }, [selectedTier]);
@@ -150,7 +145,6 @@ export default function ProviderSetup() {
     }
   }, [selectedCategory]);
 
-  // ── Pre-fill existing data ──
   useEffect(() => {
     if (!user) return;
     async function fetchExisting() {
@@ -172,7 +166,7 @@ export default function ProviderSetup() {
           if (p.selected_subcategory_id && !isTriggerDefault) setSelectedSubcategoryId(p.selected_subcategory_id.toString());
         }
       const { data: profileData } = await db.from('profiles')
-        .select('lga_id, lga_name, street_address, landmark, phone, lat, lng, avatar_url')
+        .select('lga_id, lga_name, street_address, landmark, phone, lat, lng, avatar_url, experience_years')
         .eq('id', user!.id).single();
       if (profileData) {
         const pr = profileData as any;
@@ -180,6 +174,7 @@ export default function ProviderSetup() {
           setAvatarPreview(pr.avatar_url);
           setUploadComplete(true);
         }
+        if (pr.experience_years) setExperienceYears(String(pr.experience_years)); // NEW
         if (pr.lga_id) {
           setSelectedLgaId(pr.lga_id.toString());
           setSelectedLgaName(pr.lga_name || '');
@@ -205,7 +200,6 @@ export default function ProviderSetup() {
     fetchExisting();
   }, [user]);
 
-  // ── GPS auto-detect ──
   const detectLocation = useCallback(() => {
     if (!navigator.geolocation) {
       toast.error('Geolocation not supported on this device');
@@ -263,12 +257,9 @@ export default function ProviderSetup() {
     );
   }, [states]);
 
-  // ── Avatar upload (WITH COMPRESSION) ──
   const uploadAvatar = async (file: File): Promise<string | null> => {
     if (!user) return null;
-
     const compressedFile = await compressImage(file);
-
     const fileExt = 'jpg';
     const fileName = `${user.id}/avatar-${Date.now()}.${fileExt}`;
     const { error } = await db.storage
@@ -318,7 +309,6 @@ export default function ProviderSetup() {
     }
   };
 
-  // ── Portfolio upload (Step 3) — bucket: 'portfolio' ──
   const handlePortfolioUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user) return;
@@ -336,7 +326,6 @@ export default function ProviderSetup() {
         .from('portfolio')
         .upload(fileName, compressed, { cacheControl: '3600', upsert: false });
       if (uploadError) throw uploadError;
-
       const { data: urlData } = db.storage.from('portfolio').getPublicUrl(fileName);
 
       const { data: inserted, error: dbError } = await db
@@ -370,13 +359,13 @@ export default function ProviderSetup() {
     }
   };
 
-  // ── Phone validation ──
   const validatePhoneNumber = (phone: string): boolean => {
     const local = phone.replace('+234', '');
     const ok = /^\d{10}$/.test(local);
     setPhoneError(ok ? '' : 'Enter valid 10-digit Nigerian phone number');
     return ok;
   };
+  
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let val = e.target.value;
     if (!val.startsWith('+234')) val = '+234' + val.replace(/\D/g, '');
@@ -386,7 +375,6 @@ export default function ProviderSetup() {
     else setPhoneError('');
   };
 
-  // ── Step validation ──
   const canProceed = (): boolean => {
     switch (step) {
       case 0: return !!avatarPreview && uploadComplete && phoneNumber.length === 14 && !phoneError;
@@ -399,9 +387,8 @@ export default function ProviderSetup() {
   };
 
   const handleNext = async () => {
-    if (step >= 4 || savingStep) return; // ✅ Check savingStep here
+    if (step >= 4 || savingStep) return;
 
-    // Step 1 has an extra description-length check beyond canProceed()
     if (step === 1) {
       if (businessName.trim().length === 0 || !hasLocation) return;
       if (description.trim().length < MIN_DESCRIPTION_LENGTH) {
@@ -413,18 +400,15 @@ export default function ProviderSetup() {
       if (!canProceed()) return;
     }
 
-    setSavingStep(true); // ✅ Lock the button
+    setSavingStep(true);
 
-    // --- SILENT SAVE LOGIC ---
     try {
       if (step === 0) {
-        // Step 0: Save Phone Number to profiles
         if (user && phoneNumber) {
           await db.from('profiles').update({ phone: phoneNumber }).eq('id', user.id);
         }
       }
       else if (step === 1) {
-        // Step 1: Save Business Name & Description to providers, Location to profiles
         if (user) {
           await db.from('providers').update({
             business_name: businessName,
@@ -438,11 +422,11 @@ export default function ProviderSetup() {
             landmark: landmark || null,
             lat: mapLat,
             lng: mapLng,
+            experience_years: experienceYears ? parseInt(experienceYears) : null, // NEW
           }).eq('id', user.id);
         }
       }
       else if (step === 2) {
-        // Step 2: Save Category & Price to providers, and the initial service
         if (user) {
           await db.from('providers').update({
             selected_tier_slug: selectedTier,
@@ -454,7 +438,7 @@ export default function ProviderSetup() {
           await db.from('provider_services').insert({
             provider_id: user.id,
             name: `${subcategories.find(s => s.id.toString() === selectedSubcategoryId)?.name || selectedCategory} Service`,
-            description: null, // ✅ Leave blank so it doesn't duplicate the bio
+            description: null,
             price: parseFloat(startingPrice),
             price_type: priceType,
           });
@@ -463,11 +447,9 @@ export default function ProviderSetup() {
     } catch (err) {
       console.error('Failed to auto-save step:', err);
     } finally {
-      setSavingStep(false); // ✅ Unlock button
+      setSavingStep(false);
     }
-    // --- END SILENT SAVE LOGIC ---
 
-    // Move to next step
     setStep(step + 1);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -479,7 +461,6 @@ export default function ProviderSetup() {
     }
   };
 
-  // ── Final submit ──
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitError(null);
@@ -514,11 +495,16 @@ export default function ProviderSetup() {
       if (error) throw error;
       if (!(data as any).success) throw new Error((data as any).error);
 
+      // Save the optional experience years if they filled it in
+      await db.from('profiles').update({
+        experience_years: experienceYears ? parseInt(experienceYears) : null
+      }).eq('id', user!.id);
+
       await db.from('provider_services').delete().eq('provider_id', user!.id);
       const { error: svcError } = await db.from('provider_services').insert({
         provider_id: user!.id,
         name: `${subcategories.find(s => s.id.toString() === selectedSubcategoryId)?.name || selectedCategory} Service`,
-        description: null, // ✅ Leave blank so it doesn't duplicate the bio
+        description: null,
         price: parseFloat(startingPrice),
         price_type: priceType,
       });
@@ -568,7 +554,6 @@ export default function ProviderSetup() {
 
       <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10">
 
-        {/* Header */}
         <div className="mb-6 sm:mb-8 animate-fade-up">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary-50 text-primary-700 text-xs font-semibold mb-3">
             <span className="w-1.5 h-1.5 rounded-full bg-primary-500 animate-pulse-soft" />
@@ -582,7 +567,6 @@ export default function ProviderSetup() {
           </p>
         </div>
 
-        {/* Progress Bar */}
         <div className="flex gap-1.5 sm:gap-2 mb-6 sm:mb-8">
           {STEPS.map((label, idx) => {
             const isComplete = idx < step;
@@ -803,6 +787,25 @@ export default function ProviderSetup() {
                         ? `${descriptionLength} chars ✓`
                         : `${descriptionLength}/${MIN_DESCRIPTION_LENGTH}`}
                     </span>
+                  </div>
+                </div>
+
+                {/* NEW: Optional Experience Years */}
+                <div>
+                  <label className={LABEL_CLS}>
+                    Years of Experience <span className="text-gray-400 font-normal">(Optional but recommended)</span>
+                  </label>
+                  <div className="relative">
+                    <Briefcase className="absolute left-4 top-3.5 h-5 w-5 text-gray-400" />
+                    <input
+                      type="number"
+                      min="0"
+                      max="50"
+                      value={experienceYears}
+                      onChange={(e) => setExperienceYears(e.target.value)}
+                      className={INPUT_CLS + " pl-11"}
+                      placeholder="e.g., 5"
+                    />
                   </div>
                 </div>
 
@@ -1082,7 +1085,6 @@ export default function ProviderSetup() {
             </div>
           )}
 
-          {/* ── Action Bar (sticky on mobile) ── */}
           <div
             className="sticky bottom-0 -mx-4 px-4 py-3 mt-6 bg-white/85 backdrop-blur-md border-t border-gray-100
                        sm:static sm:mx-0 sm:px-0 sm:py-0 sm:mt-4 sm:bg-transparent sm:backdrop-blur-none sm:border-0
