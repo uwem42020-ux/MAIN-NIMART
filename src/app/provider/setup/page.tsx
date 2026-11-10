@@ -55,6 +55,9 @@ export default function ProviderSetup() {
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  
+  // ✅ NEW: Prevents multiple clicks while auto-saving
+  const [savingStep, setSavingStep] = useState(false);
 
   // Step 0: Profile Picture
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
@@ -135,10 +138,6 @@ export default function ProviderSetup() {
   }, [selectedStateId]);
 
   // ── Category chain (Local Data) ──
-  // NOTE: Do NOT wipe category/subcategory here. Prefill sets tier+category+subcategory
-  // together, and wiping on tier change destroys the prefilled selection for returning
-  // providers on non-automotive tiers. Wipes happen in the dropdown onChange handlers
-  // instead — i.e. only when the user manually changes a field.
   useEffect(() => {
     setCategories(getCategoriesByTier(selectedTier));
   }, [selectedTier]);
@@ -162,11 +161,6 @@ export default function ProviderSetup() {
           const p = provider as any;
           if (p.business_name) setBusinessName(p.business_name);
   
-          // Detect trigger-created defaults and skip pre-filling them.
-          // The ensure_complete_provider trigger writes fake placeholder data
-          // ('vehicle-mechanics' + "Professional service provider") before the
-          // user finishes setup. Pre-filling those makes users unknowingly
-          // submit fake data as their own choice.
           const isTriggerDefault =
             p.description === 'Professional service provider' &&
             p.selected_tier_slug === 'automotive' &&
@@ -395,20 +389,17 @@ export default function ProviderSetup() {
   // ── Step validation ──
   const canProceed = (): boolean => {
     switch (step) {
-      // Phone number is now collected here (Step 1 = index 0) so we capture
-      // the contact info before the user reaches the later wizard steps.
       case 0: return !!avatarPreview && uploadComplete && phoneNumber.length === 14 && !phoneError;
       case 1: return businessName.trim().length > 0 && hasLocation;
       case 2: return !!selectedTier && !!selectedCategory && !!selectedSubcategoryId && !!startingPrice && parseFloat(startingPrice) > 0;
       case 3: return portfolioImages.length >= MIN_PORTFOLIO_PHOTOS;
-      // Phone is no longer validated here — it lives in Step 1 now.
       case 4: return !!streetAddress.trim() && termsAccepted;
       default: return false;
     }
   };
 
   const handleNext = async () => {
-    if (step >= 4) return;
+    if (step >= 4 || savingStep) return; // ✅ Check savingStep here
 
     // Step 1 has an extra description-length check beyond canProceed()
     if (step === 1) {
@@ -422,10 +413,9 @@ export default function ProviderSetup() {
       if (!canProceed()) return;
     }
 
+    setSavingStep(true); // ✅ Lock the button
+
     // --- SILENT SAVE LOGIC ---
-    // Persist the current step's data to Supabase so abandoned wizards still
-    // leave behind phone number, business name, category, etc.
-    // NOTE: provider_complete is NOT set here — that happens only in handleSubmit.
     try {
       if (step === 0) {
         // Step 0: Save Phone Number to profiles
@@ -460,9 +450,6 @@ export default function ProviderSetup() {
             selected_subcategory_id: parseInt(selectedSubcategoryId),
           }).eq('id', user.id);
 
-          // Delete any existing service(s) for this provider from a previous
-          // wizard attempt, then insert fresh — avoids duplicate rows since the
-          // wizard only ever manages a single "starting" service.
           await db.from('provider_services').delete().eq('provider_id', user.id);
           await db.from('provider_services').insert({
             provider_id: user.id,
@@ -473,10 +460,10 @@ export default function ProviderSetup() {
           });
         }
       }
-      // Step 3 (Portfolio) already saves instantly on image upload, so no action needed here.
     } catch (err) {
       console.error('Failed to auto-save step:', err);
-      // We don't block the user if the auto-save fails, we just log it.
+    } finally {
+      setSavingStep(false); // ✅ Unlock button
     }
     // --- END SILENT SAVE LOGIC ---
 
@@ -527,8 +514,6 @@ export default function ProviderSetup() {
       if (error) throw error;
       if (!(data as any).success) throw new Error((data as any).error);
 
-      // Save the initial service with the final price.
-      // Delete any silent-saved row first so we end up with exactly one service.
       await db.from('provider_services').delete().eq('provider_id', user!.id);
       const { error: svcError } = await db.from('provider_services').insert({
         provider_id: user!.id,
@@ -630,7 +615,6 @@ export default function ProviderSetup() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">
-          {/* keyed wrapper → re-triggers fade-up animation on step change */}
           <div key={step} className="animate-fade-up">
 
             {/* ===== STEP 0: PROFILE PICTURE ===== */}
@@ -714,7 +698,6 @@ export default function ProviderSetup() {
                 )}
                 <p className="text-xs text-gray-400 mt-4">JPEG or PNG · max 5MB</p>
 
-                {/* ── Phone Number (moved from Contact & Finish) ── */}
                 <div className="mt-8 text-left border-t border-gray-100 pt-6">
                   <label className={LABEL_CLS}>Phone Number <span className="text-red-500">*</span></label>
                   <input
@@ -908,7 +891,7 @@ export default function ProviderSetup() {
                     value={selectedCategory}
                     onChange={(e) => {
                       setSelectedCategory(e.target.value);
-                      setSelectedSubcategoryId(''); // Clear subcategory ONLY when user manually changes category
+                      setSelectedSubcategoryId('');
                     }}
                     className={INPUT_CLS}
                     disabled={categories.length === 0}
@@ -1047,8 +1030,6 @@ export default function ProviderSetup() {
                   <Phone className="h-5 w-5 text-primary-600" /> Contact & Finish
                 </h2>
 
-                {/* Phone Number block intentionally removed — it now lives in Step 1 (Profile Picture) */}
-
                 <div>
                   <label className={LABEL_CLS}>
                     <Home className="inline h-4 w-4 mr-1 -mt-0.5" /> Street Address <span className="text-red-500">*</span>
@@ -1108,7 +1089,7 @@ export default function ProviderSetup() {
                        flex justify-between items-center gap-3 pt-4"
           >
             {step > 0 ? (
-              <button type="button" onClick={handleBack} className={BTN_SECONDARY}>
+              <button type="button" onClick={handleBack} className={BTN_SECONDARY} disabled={savingStep}>
                 <ChevronLeft className="h-5 w-5" />
                 <span className="hidden sm:inline">Back</span>
               </button>
@@ -1121,13 +1102,17 @@ export default function ProviderSetup() {
                 type="button"
                 onClick={handleNext}
                 disabled={
-                  step === 1
+                  savingStep || (step === 1
                     ? uploading || portfolioUploading
-                    : !canProceed() || uploading || portfolioUploading
+                    : !canProceed() || uploading || portfolioUploading)
                 }
                 className={`${BTN_PRIMARY} flex-1 sm:flex-initial`}
               >
-                Continue <ChevronRight className="h-5 w-5" />
+                {savingStep ? (
+                  <><Loader2 className="h-5 w-5 animate-spin" /> Saving...</>
+                ) : (
+                  <>Continue <ChevronRight className="h-5 w-5" /></>
+                )}
               </button>
             ) : (
               <button
