@@ -13,8 +13,7 @@ import { LocationDropdown } from '@/components/common/LocationDropdown';
 import { TopProvidersSlider } from '@/components/common/TopProvidersSlider';
 import { CategoryButtons } from '@/components/common/CategoryButtons';
 import { CategorySidebar } from '@/components/common/CategorySidebar';
-import { FindProvidersRadar } from '@/components/customer/FindProvidersRadar';
-import { MapPin, ChevronDown, Search, WifiOff, LayoutGrid, List, Crosshair, X, Loader2 } from 'lucide-react';
+import { MapPin, ChevronDown, Search, WifiOff, LayoutGrid, List, X, Loader2 } from 'lucide-react';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useLocationStore } from '@/stores/locationStore';
 import { useGeolocation } from '@/hooks/useGeolocation';
@@ -50,7 +49,6 @@ export function HomeClient({ initialProviders, initialTopProviders }: HomeClient
   const [locationLabel, setLocationLabel] = useState('All Nigeria');
   const [states, setStates] = useState<any[]>([]);
   const [preloadedLgas, setPreloadedLgas] = useState<Record<string, any[]>>({});
-  const [radarOpen, setRadarOpen] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const searchInputRef = useRef<HTMLInputElement>(null);
   const locationButtonRef = useRef<HTMLButtonElement>(null);
@@ -189,38 +187,44 @@ export function HomeClient({ initialProviders, initialTopProviders }: HomeClient
     preloadLocations();
   }, []);
 
+  // 🔥 RACE CONDITION FIX: Derive the state name directly from the URL, not from the UI label
+  const currentStateName = useMemo(() => {
+    if (!stateFilter) return null;
+    const state = states.find(s => s.state_id.toString() === stateFilter);
+    return state ? state.state_name : null;
+  }, [stateFilter, states]);
+
   // ── The Infinite Query ──
   const {
     data: featuredProvidersData,
     isLoading,
+    isFetching,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage
   } = useInfiniteQuery({
-    queryKey: ['featured-providers', userLat, userLng, stateFilter, lgaFilter],
+    // Use stateFilter and lgaFilter in the key instead of locationLabel
+    queryKey: ['featured-providers', userLat, userLng, stateFilter, lgaFilter, currentStateName],
     queryFn: async ({ pageParam = 0 }) => {
+      
       const { data, error } = await db.rpc('get_featured_providers', {
         limit_count: 20,
-        offset_count: pageParam
+        offset_count: pageParam,
+        p_state_name: currentStateName, // 🔥 Pass the URL-derived state name
+        p_lga_id: lgaFilter ? parseInt(lgaFilter) : null
       });
 
-      if (error || !data) {
+      if (error) {
+        console.error("SUPABASE RPC ERROR:", error);
+        return { items: [] as ProviderWithProfile[], rawCount: 0 };
+      }
+      if (!data) {
         return { items: [] as ProviderWithProfile[], rawCount: 0 };
       }
 
       const providers: any[] = Array.isArray(data) ? data : [];
 
-      let filtered = providers;
-      if (lgaFilter) {
-        filtered = providers.filter((p: any) => p.profile?.lga_id?.toString() === lgaFilter);
-      } else if (stateFilter) {
-        filtered = providers.filter((p: any) => 
-          p.profile?.state_name?.toLowerCase() === locationLabel.toLowerCase() || 
-          p.profile?.lga_id?.toString() === stateFilter
-        );
-      }
-
-      let result = (filtered.map((item: any) => ({
+      let result = (providers.map((item: any) => ({
         id: item.id,
         business_name: item.business_name,
         description: item.description,
@@ -288,11 +292,11 @@ export function HomeClient({ initialProviders, initialTopProviders }: HomeClient
     },
     initialPageParam: 0,
     getNextPageParam: (lastPage, allPages) => {
-      if (lastPage.rawCount < 20) return undefined; // No more pages
+      if (lastPage.rawCount < 20) return undefined;
       const totalFetched = allPages.reduce((sum, page) => sum + page.rawCount, 0);
       return totalFetched;
     },
-    initialData: {
+    placeholderData: (previousData) => previousData || {
       pages: [{ items: initialProviders, rawCount: initialProviders.length }],
       pageParams: [0],
     },
@@ -364,6 +368,7 @@ export function HomeClient({ initialProviders, initialTopProviders }: HomeClient
       setLocationLabel(label);
     } else {
       params.set('lga', id);
+      params.delete('state');
       setLocationLabel(label);
     }
     router.push(`?${params.toString()}`);
@@ -437,7 +442,8 @@ export function HomeClient({ initialProviders, initialTopProviders }: HomeClient
     const show = isClient ? featuredProviders : initialProviders;
     const isClientMounted = isClient && mounted;
 
-    if (isClient && isLoading && featuredProviders.length === 0) {
+    // 🔥 BULLETPROOF FLICKER FIX: If it's empty AND we are fetching, keep the skeleton up
+    if (isClient && show.length === 0 && (isLoading || isFetching)) {
       return <ProviderGridSkeleton />;
     }
 
@@ -468,7 +474,6 @@ export function HomeClient({ initialProviders, initialTopProviders }: HomeClient
           </div>
         )}
         
-        {/* Load More Button */}
         {hasNextPage && (
           <div className="flex justify-center mt-8 w-full">
             <button
@@ -504,106 +509,91 @@ export function HomeClient({ initialProviders, initialTopProviders }: HomeClient
             Connect with professionals near you
           </p>
           <div className="bg-white/80 backdrop-blur-md rounded-lg shadow-sm border border-gray-200/50 p-4 max-w-3xl mx-auto">
-            <div className="flex flex-col gap-3">
-              {/* Row 1: Location + Find Providers */}
-              <div className="flex flex-row gap-3">
-                <div className="relative flex-1">
-                  <button
-                    ref={locationButtonRef}
-                    onClick={() => setShowLocationDropdown(!showLocationDropdown)}
-                    className="w-full bg-white text-[#008751] border border-[#008751]/30 rounded-lg px-3 md:px-4 py-3 flex items-center justify-between gap-1 md:gap-2 hover:bg-green-50 transition"
-                  >
-                    <div className="flex items-center gap-1 md:gap-2">
-                      <MapPin className="h-5 w-5 flex-shrink-0" />
-                      <span className="truncate">{locationLabel}</span>
-                    </div>
-                    <ChevronDown className="h-4 w-4 flex-shrink-0" />
-                  </button>
-                  {showLocationDropdown && (
-                    <LocationDropdown
-                      onSelectState={(id, name) => handleLocationSelect('state', id, name)}
-                      onSelectLga={(id, name) => handleLocationSelect('lga', id, `${name} LGA`)}
-                      onClear={clearLocation}
-                      onClose={() => setShowLocationDropdown(false)}
-                      preloadedStates={states}
-                      preloadedLgas={preloadedLgas}
-                      triggerRef={locationButtonRef}
-                    />
-                  )}
-                </div>
+            
+            {/* HORIZONTAL LAYOUT: Location + Search in one row */}
+            <div className="flex flex-row gap-2 sm:gap-3 items-center w-full">
+              
+              {/* Location Dropdown - Fixed smaller width so it doesn't break the row */}
+              <div className="relative w-[130px] sm:w-44 flex-shrink-0">
                 <button
-                  onClick={() => setRadarOpen(true)}
-                  className="flex sm:hidden items-center justify-center gap-2 bg-purple-50 border border-purple-200 text-purple-700 rounded-lg px-4 py-3 hover:bg-purple-100 transition font-medium text-sm flex-shrink-0"
+                  ref={locationButtonRef}
+                  onClick={() => setShowLocationDropdown(!showLocationDropdown)}
+                  className="w-full bg-white text-[#008751] border border-[#008751]/30 rounded-lg px-2 sm:px-3 py-3 flex items-center justify-between gap-1 hover:bg-green-50 transition"
                 >
-                  <Crosshair className="h-5 w-5 animate-spin" />
-                  <span>Find</span>
+                  <div className="flex items-center gap-1 min-w-0">
+                    <MapPin className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
+                    <span className="truncate text-sm">{locationLabel}</span>
+                  </div>
+                  <ChevronDown className="h-4 w-4 flex-shrink-0" />
                 </button>
+                {showLocationDropdown && (
+                  <LocationDropdown
+                    onSelectState={(id, name) => handleLocationSelect('state', id, name)}
+                    onSelectLga={(id, name) => handleLocationSelect('lga', id, `${name} LGA`)}
+                    onClear={clearLocation}
+                    onClose={() => setShowLocationDropdown(false)}
+                    preloadedStates={states}
+                    preloadedLgas={preloadedLgas}
+                    triggerRef={locationButtonRef}
+                  />
+                )}
               </div>
 
-              {/* Row 2: Search with autocomplete */}
-              <div className="flex flex-row gap-3">
-                <div className="relative flex-1">
-                  <form onSubmit={handleSearch} className="flex bg-white rounded-lg overflow-hidden border border-[#008751]/30">
-                    <input
-                      ref={searchInputRef}
-                      type="text"
-                      value={searchInput}
-                      onChange={(e) => { setSearchInput(e.target.value); setShowSuggestions(true); }}
-                      onFocus={() => { if (suggestions.length > 0) setShowSuggestions(true); }}
-                      placeholder="Search services..."
-                      className="w-full px-3 py-3 text-gray-900 focus:outline-none text-sm"
-                    />
-                    {searchInput && (
-                      <button
-                        type="button"
-                        onClick={() => { setSearchInput(''); setSuggestions([]); }}
-                        className="text-gray-400 hover:text-gray-600 px-2"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    )}
-                    <button type="submit" className="bg-[#008751] hover:bg-green-700 text-white px-3 transition flex items-center justify-center">
-                      <Search className="h-5 w-5" />
+              {/* Search Bar - Flex-1 to fill the remaining space */}
+              <div className="relative flex-1 min-w-0">
+                <form onSubmit={handleSearch} className="flex bg-white rounded-lg overflow-hidden border border-[#008751]/30 shadow-sm">
+                  <input
+                    ref={searchInputRef}
+                    type="text"
+                    value={searchInput}
+                    onChange={(e) => { setSearchInput(e.target.value); setShowSuggestions(true); }}
+                    onFocus={() => { if (suggestions.length > 0) setShowSuggestions(true); }}
+                    placeholder="Search services..."
+                    className="w-full px-3 sm:px-4 py-3 text-gray-900 focus:outline-none text-sm sm:text-base"
+                  />
+                  {searchInput && (
+                    <button
+                      type="button"
+                      onClick={() => { setSearchInput(''); setSuggestions([]); }}
+                      className="text-gray-400 hover:text-gray-600 px-2"
+                    >
+                      <X className="h-5 w-5" />
                     </button>
-                  </form>
-
-                  {/* Suggestions dropdown with images */}
-                  {showSuggestions && debouncedSearchTerm && suggestions.length > 0 && (
-                    <div ref={suggestionsRef} className="absolute z-20 mt-1 w-full bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
-                      {suggestions.map((s, idx) => (
-                        <button
-                          key={idx}
-                          onClick={() => handleSuggestionClick(s)}
-                          className="w-full flex items-center px-4 py-3 hover:bg-gray-50 transition text-left border-b last:border-0"
-                        >
-                          {s.image ? (
-                            <img
-                              src={`${s.image}?width=32&height=32&quality=60&resize=cover`}
-                              alt=""
-                              className="w-8 h-8 rounded-full object-cover mr-3 flex-shrink-0 bg-gray-200"
-                              onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                            />
-                          ) : (
-                            <div className="w-8 h-8 rounded-full bg-primary-50 flex items-center justify-center mr-3 flex-shrink-0">
-                              <Search className="h-4 w-4 text-primary-500" />
-                            </div>
-                          )}
-                          <div>
-                            <p className="text-sm font-medium text-gray-900">{s.text}</p>
-                            {s.subtext && <p className="text-xs text-gray-500">{s.subtext}</p>}
-                          </div>
-                        </button>
-                      ))}
-                    </div>
                   )}
-                </div>
-                <button
-                  onClick={() => setRadarOpen(true)}
-                  className="hidden sm:flex items-center justify-center gap-2 bg-purple-50 border border-purple-200 text-purple-700 rounded-lg px-4 py-3 hover:bg-purple-100 transition font-medium text-sm flex-shrink-0"
-                >
-                  <Crosshair className="h-5 w-5 animate-spin" />
-                  <span>Find Providers</span>
-                </button>
+                  <button type="submit" className="bg-[#008751] hover:bg-green-700 text-white px-3 sm:px-5 transition flex items-center justify-center">
+                    <Search className="h-5 w-5" />
+                  </button>
+                </form>
+
+                {/* Suggestions dropdown with images */}
+                {showSuggestions && debouncedSearchTerm && suggestions.length > 0 && (
+                  <div ref={suggestionsRef} className="absolute z-20 mt-1 w-full bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+                    {suggestions.map((s, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => handleSuggestionClick(s)}
+                        className="w-full flex items-center px-4 py-3 hover:bg-gray-50 transition text-left border-b last:border-0"
+                      >
+                        {s.image ? (
+                          <img
+                            src={`${s.image}?width=32&height=32&quality=60&resize=cover`}
+                            alt=""
+                            className="w-8 h-8 rounded-full object-cover mr-3 flex-shrink-0 bg-gray-200"
+                            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                          />
+                        ) : (
+                          <div className="w-8 h-8 rounded-full bg-primary-50 flex items-center justify-center mr-3 flex-shrink-0">
+                            <Search className="h-4 w-4 text-primary-500" />
+                          </div>
+                        )}
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">{s.text}</p>
+                          {s.subtext && <p className="text-xs text-gray-500">{s.subtext}</p>}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -615,10 +605,9 @@ export function HomeClient({ initialProviders, initialTopProviders }: HomeClient
           <div className="w-64 flex-shrink-0 self-start">
             <CategorySidebar providerCounts={providerCounts} subcategoryCounts={subcategoryCounts} />
           </div>
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <TopProvidersSlider initialData={initialTopProviders} />
             <div className="flex items-center justify-between mb-4">
-              {/* Pill header (replaces the old <h2>Recommended Providers</h2>) */}
               <div className="flex items-center gap-3">
                 <img
                   src="/top.png"
@@ -658,7 +647,6 @@ export function HomeClient({ initialProviders, initialTopProviders }: HomeClient
           </div>
           <section>
             <div className="flex items-center justify-between mb-3 px-4">
-              {/* Pill header (replaces the old <h2>Recommended</h2>) */}
               <div className="flex items-center gap-2">
                 <img
                   src="/top.png"
@@ -691,12 +679,6 @@ export function HomeClient({ initialProviders, initialTopProviders }: HomeClient
           </section>
         </div>
       </div>
-      <FindProvidersRadar
-        isOpen={radarOpen}
-        onClose={() => setRadarOpen(false)}
-        userLat={userLat ?? null}
-        userLng={userLng ?? null}
-      />
     </>
   );
 }
