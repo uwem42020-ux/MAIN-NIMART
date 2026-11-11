@@ -41,14 +41,14 @@ export default function ProviderProfile() {
   const [age, setAge] = useState('');
   const [education, setEducation] = useState('');
   const [languages, setLanguages] = useState('');
-  const [experienceYears, setExperienceYears] = useState(''); // NEW
+  const [experienceYears, setExperienceYears] = useState('');
 
   // --- UI states ---
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [uploadingCover, setUploadingCover] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savingDescription, setSavingDescription] = useState(false);
-  const [savingAdditional, setSavingAdditional] = useState(false); // NEW
+  const [savingAdditional, setSavingAdditional] = useState(false);
   const [phoneError, setPhoneError] = useState('');
   const [initialDataLoaded, setInitialDataLoaded] = useState(false);
   const [isSetupComplete, setIsSetupComplete] = useState(true);
@@ -60,6 +60,9 @@ export default function ProviderProfile() {
   const [changingLocation, setChangingLocation] = useState(false);
 
   const [hasPassword, setHasPassword] = useState(false);
+
+  // --- Detect if user signed up with Google ---
+  const isGoogleUser = user?.app_metadata?.provider === 'google' || user?.app_metadata?.providers?.includes('google');
 
   // --- Helper: fetch location change status ---
   const fetchLocationStatus = async () => {
@@ -102,7 +105,7 @@ export default function ProviderProfile() {
         setAge(p.age ? String(p.age) : '');
         setEducation(p.education || '');
         setLanguages(p.languages || '');
-        setExperienceYears(p.experience_years ? String(p.experience_years) : ''); // NEW
+        setExperienceYears(p.experience_years ? String(p.experience_years) : '');
         setLgaName(p.lga_name || '');
         setLat(p.lat);
         setLng(p.lng);
@@ -213,7 +216,7 @@ export default function ProviderProfile() {
     }
   };
 
-  // --- NEW: Save Additional Info (Gender, Age, Education, Languages, Experience) ---
+  // --- Save Additional Info ---
   const handleSaveAdditionalInfo = async () => {
     if (!user) return;
     setSavingAdditional(true);
@@ -223,7 +226,7 @@ export default function ProviderProfile() {
         age: age ? parseInt(age) : null,
         education: education.trim() || null,
         languages: languages.trim() || null,
-        experience_years: experienceYears ? parseInt(experienceYears) : null, // NEW
+        experience_years: experienceYears ? parseInt(experienceYears) : null,
       }).eq('id', user.id);
       
       if (error) throw error;
@@ -243,7 +246,8 @@ export default function ProviderProfile() {
       toast.error('Please upload a profile picture before continuing.');
       return;
     }
-    if (!hasPassword) {
+    // 🔥 GOOGLE USER BYPASS: Only block if they don't have a password AND are not a Google user
+    if (!hasPassword && !isGoogleUser) {
       toast.error('Please set a password for your account.');
       return;
     }
@@ -355,7 +359,8 @@ export default function ProviderProfile() {
     );
   }
 
-  const showWarning = !avatarUrl || !hasPassword;
+  // 🔥 GOOGLE USER BYPASS: Don't show warning for password if they are Google user
+  const showWarning = !avatarUrl || (!hasPassword && !isGoogleUser);
   const showCustomerPromo = (profile as any)?.customer_complete !== true;
   const descriptionChanged = description.trim() !== initialDescription.trim();
 
@@ -392,7 +397,7 @@ export default function ProviderProfile() {
             <p className="font-medium text-amber-800">Action required</p>
             <ul className="text-sm text-amber-700 mt-1 list-disc list-inside">
               {!avatarUrl && <li>Upload a profile picture (mandatory)</li>}
-              {!hasPassword && <li>Set a password for your account</li>}
+              {!hasPassword && !isGoogleUser && <li>Set a password for your account</li>}
             </ul>
           </div>
         </div>
@@ -495,10 +500,17 @@ export default function ProviderProfile() {
             </div>
           </div>
 
-          {/* Set Password */}
+          {/* Set Password (Google Users Bypass) */}
           <div className="bg-white rounded-lg shadow-sm border p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Set a Password *</h2>
-            <SetPasswordForm onSuccess={() => setHasPassword(true)} initialCompleted={hasPassword} userId={user?.id} />
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Account Security</h2>
+            {isGoogleUser ? (
+              <div className="flex items-center gap-2 text-green-600">
+                <CheckCircle className="h-5 w-5" />
+                <span className="text-sm font-medium">Signed in with Google (No password needed)</span>
+              </div>
+            ) : (
+              <SetPasswordForm onSuccess={() => setHasPassword(true)} initialCompleted={hasPassword} userId={user?.id} />
+            )}
           </div>
 
           {/* Additional Information */}
@@ -550,7 +562,7 @@ export default function ProviderProfile() {
       <div className="flex justify-end mt-6">
         <button
           onClick={handleFinalSubmit}
-          disabled={saving || !avatarUrl || !hasPassword}
+          disabled={saving || !avatarUrl || (!hasPassword && !isGoogleUser)}
           className="bg-primary-600 text-white px-6 py-3 rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2"
         >
           {saving ? <><Loader2 className="h-5 w-5 animate-spin" /> Saving...</> : <><Save className="h-5 w-5" /> Complete & Go to Dashboard</>}
