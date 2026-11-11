@@ -55,8 +55,31 @@ export default async function HomePage() {
       />
       <Suspense
         fallback={
-          <div className="min-h-screen flex items-center justify-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600" />
+          <div className="min-h-screen flex flex-col items-center justify-center bg-white fixed inset-0 z-50">
+            {/* The CSS Animation for the sliding line */}
+            <style>{`
+              @keyframes sliding-line {
+                0% { transform: translateX(-100%); }
+                100% { transform: translateX(300%); }
+              }
+              .animate-sliding-line {
+                animation: sliding-line 1.5s infinite ease-in-out;
+              }
+            `}</style>
+
+            {/* The Logo - Clean, borderless, soft shadow */}
+            <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full shadow-sm mb-6 flex items-center justify-center">
+              <img
+                src="/loadhome.png"
+                alt="Nimart"
+                className="w-full h-full object-contain"
+              />
+            </div>
+
+            {/* The Loading Line (Gmail Style) */}
+            <div className="w-40 sm:w-48 h-1 bg-gray-100 rounded-full overflow-hidden relative">
+              <div className="absolute top-0 left-0 h-full w-1/3 bg-[#008751] rounded-full animate-sliding-line" />
+            </div>
           </div>
         }
       >
