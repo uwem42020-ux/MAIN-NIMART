@@ -53,10 +53,10 @@ export const ProviderCard = memo(function ProviderCard({
   const hasPrice =
     typeof provider.starting_price === 'number' && provider.starting_price > 0;
 
-  // Portrait uses a larger image; horizontal smaller.
+  // Portrait uses the original height (passing undefined), horizontal uses a square.
   const imageSrc =
     variant === 'portrait'
-      ? getProviderImageSrc(provider, 400, 500)
+      ? getProviderImageSrc(provider, 400, undefined) 
       : getProviderImageSrc(provider, 200, 200);
 
   const isPortrait = variant === 'portrait';
@@ -78,20 +78,27 @@ export const ProviderCard = memo(function ProviderCard({
       <div
         className={cn(
           'relative bg-gray-200 overflow-hidden flex-shrink-0',
-          isPortrait ? 'w-full aspect-[4/5]' : 'w-28 sm:w-32'
+          isPortrait ? 'w-full' : 'w-28 sm:w-32 aspect-square'
         )}
       >
         {/* Link wraps ONLY the image + overlays. */}
         <Link
           href={`/provider/${provider.id}`}
           onMouseEnter={handleMouseEnter}
-          className="block absolute inset-0"
+          className={cn(
+            'block',
+            isPortrait ? 'relative w-full' : 'absolute inset-0'
+          )}
           aria-label={`View ${displayName}`}
         >
           <img
             src={imageSrc}
             alt={displayName}
-            className="absolute inset-0 w-full h-full object-cover"
+            className={cn(
+              isPortrait 
+                ? 'w-full h-auto block' 
+                : 'absolute inset-0 w-full h-full object-cover object-top'
+            )}
             loading={imageLoading}
             {...(imageLoading === 'eager' ? { fetchPriority: 'high' as const } : {})}
             onError={(e) => {
