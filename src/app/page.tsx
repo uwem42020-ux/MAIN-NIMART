@@ -67,8 +67,8 @@ export default async function HomePage() {
               }
             `}</style>
 
-            {/* The Logo - Clean, borderless, soft shadow */}
-            <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full shadow-sm mb-6 flex items-center justify-center">
+            {/* The Logo inside a perfect round circle (Now with Green Background) */}
+            <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full shadow-sm mb-6 flex items-center justify-center bg-[#008751] overflow-hidden">
               <img
                 src="/loadhome.png"
                 alt="Nimart"
