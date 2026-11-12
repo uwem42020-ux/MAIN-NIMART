@@ -1,7 +1,7 @@
 // src/components/provider/ProviderCard.tsx
 'use client';
 
-import { memo } from 'react';
+import { memo, useState } from 'react';
 import Link from 'next/link';
 import { MapPin, Star, Briefcase, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -60,6 +60,9 @@ export const ProviderCard = memo(function ProviderCard({
       : getProviderImageSrc(provider, 200, 200);
 
   const isPortrait = variant === 'portrait';
+  
+  // 🔥 NEW: State to track if the image has finished loading
+  const [isImgLoaded, setIsImgLoaded] = useState(false);
 
   return (
     <div
@@ -91,29 +94,38 @@ export const ProviderCard = memo(function ProviderCard({
           )}
           aria-label={`View ${displayName}`}
         >
+          {/* 🔥 NEW: Pulsing skeleton while the image downloads on slow networks */}
+          {!isImgLoaded && (
+            <div className="absolute inset-0 bg-gray-200 animate-pulse z-0" />
+          )}
+          
           <img
             src={imageSrc}
             alt={displayName}
             className={cn(
               isPortrait 
                 ? 'w-full h-auto block' 
-                : 'absolute inset-0 w-full h-full object-cover object-top'
+                : 'absolute inset-0 w-full h-full object-cover object-top',
+              'transition-opacity duration-500 ease-in-out z-10 relative', // Smooth fade-in
+              isImgLoaded ? 'opacity-100' : 'opacity-0' // Hide until loaded
             )}
+            onLoad={() => setIsImgLoaded(true)} // 🔥 Trigger fade when loaded
             loading={imageLoading}
             {...(imageLoading === 'eager' ? { fetchPriority: 'high' as const } : {})}
             onError={(e) => {
               e.currentTarget.src = '/profile.png';
+              setIsImgLoaded(true); // Stop skeleton if image fails
             }}
           />
         </Link>
 
         {/* FavoriteButton — OUTSIDE the Link, absolutely positioned. */}
-        <div className="absolute top-2 left-2 z-10">
+        <div className="absolute top-2 left-2 z-20">
           <FavoriteButton providerId={provider.id} size="sm" />
         </div>
 
         {isVerified && (
-          <div className="absolute top-2 right-2 bg-white rounded-full p-0.5 shadow-sm z-10 pointer-events-none">
+          <div className="absolute top-2 right-2 bg-white rounded-full p-0.5 shadow-sm z-20 pointer-events-none">
             <img
               src="/verify.png"
               alt="Verified"
@@ -125,7 +137,7 @@ export const ProviderCard = memo(function ProviderCard({
         {isBoosted && (
           <div
             className={cn(
-              'absolute left-0 bg-amber-500 text-white rounded-r-md shadow-md z-10',
+              'absolute left-0 bg-amber-500 text-white rounded-r-md shadow-md z-20',
               isPortrait ? 'bottom-3 px-2 py-2' : 'bottom-2 px-1.5 py-1.5'
             )}
             style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}
@@ -260,7 +272,7 @@ export const ProviderCard = memo(function ProviderCard({
           )}
         </div>
 
-        {/* ===== NEW: Price footer ===== */}
+        {/* ===== Price footer ===== */}
         <div className="border-t border-gray-100 pt-2 mt-1">
           {hasPrice ? (
             <>
