@@ -45,14 +45,17 @@ export function HomeClient({ initialProviders, initialTopProviders }: HomeClient
   const searchParams = useSearchParams();
   const stateFilter = searchParams.get('state');
   const lgaFilter = searchParams.get('lga');
+
   const [showLocationDropdown, setShowLocationDropdown] = useState(false);
   const [locationLabel, setLocationLabel] = useState('All Nigeria');
   const [states, setStates] = useState<any[]>([]);
   const [preloadedLgas, setPreloadedLgas] = useState<Record<string, any[]>>({});
+  const [locationLoadError, setLocationLoadError] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const searchInputRef = useRef<HTMLInputElement>(null);
   const locationButtonRef = useRef<HTMLButtonElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
+  const prefetchedIdsRef = useRef<Set<string>>(new Set());
   const isOffline = useOffline();
   const [mounted, setMounted] = useState(false);
 
@@ -61,8 +64,6 @@ export function HomeClient({ initialProviders, initialTopProviders }: HomeClient
   const [showSuggestions, setShowSuggestions] = useState(false);
   const debouncedSearchTerm = useDebounce(searchInput, 300);
 
-  const [isClient, setIsClient] = useState(false);
-  useEffect(() => { setIsClient(true); }, []);
   useEffect(() => { setMounted(true); }, []);
 
   useGeolocation();
@@ -161,61 +162,119 @@ export function HomeClient({ initialProviders, initialTopProviders }: HomeClient
     setShowSuggestions(false);
   };
 
+  // ── Preload locations (with error handling) ──
   useEffect(() => {
     async function preloadLocations() {
-      const { data: allStates } = await supabase
-        .from('lga_centers')
-        .select('state_id, state_name')
-        .order('state_name');
-      const uniqueStates = (allStates as any[])?.filter((v: any, i: number, a: any[]) => a.findIndex((t: any) => t.state_id === v.state_id) === i) || [];
-      setStates(uniqueStates);
+      try {
+        const { data: allStates, error: e1 } = await supabase
+          .from('lga_centers')
+          .select('state_id, state_name')
+          .order('state_name');
+        if (e1) throw e1;
+        const uniqueStates = (allStates as any[])?.filter(
+          (v: any, i: number, a: any[]) => a.findIndex((t: any) => t.state_id === v.state_id) === i
+        ) || [];
+        setStates(uniqueStates);
 
-      const { data: allLgas } = await supabase
-        .from('lga_centers')
-        .select('lga_id, lga_name, state_id, lat, lng')
-        .order('lga_name');
-      if (allLgas) {
-        const grouped: Record<string, any[]> = {};
-        (allLgas as any[]).forEach((lga) => {
-          const key = lga.state_id.toString();
-          if (!grouped[key]) grouped[key] = [];
-          grouped[key].push(lga);
-        });
-        setPreloadedLgas(grouped);
+        const { data: allLgas, error: e2 } = await supabase
+          .from('lga_centers')
+          .select('lga_id, lga_name, state_id, lat, lng')
+          .order('lga_name');
+        if (e2) throw e2;
+        if (allLgas) {
+          const grouped: Record<string, any[]> = {};
+          (allLgas as any[]).forEach((lga) => {
+            const key = lga.state_id.toString();
+            if (!grouped[key]) grouped[key] = [];
+            grouped[key].push(lga);
+          });
+          setPreloadedLgas(grouped);
+        }
+      } catch (e) {
+        console.error('preloadLocations failed:', e);
+        setLocationLoadError(true);
       }
     }
     preloadLocations();
   }, []);
 
-  // 🔥 RACE CONDITION FIX: Derive the state name directly from the URL, not from the UI label
+  // Sync label with URL (refresh / back-forward)
+  useEffect(() => {
+    if (!mounted) return;
+
+    if (stateFilter && states.length > 0) {
+      const state = states.find(s => s.state_id.toString() === stateFilter);
+      if (state) setLocationLabel(state.state_name);
+    } else if (lgaFilter && Object.keys(preloadedLgas).length > 0) {
+      for (const key in preloadedLgas) {
+        const lga = preloadedLgas[key].find(l => l.lga_id.toString() === lgaFilter);
+        if (lga) { setLocationLabel(`${lga.lga_name} LGA`); break; }
+      }
+    } else if (!stateFilter && !lgaFilter) {
+      setLocationLabel('All Nigeria');
+    }
+  }, [stateFilter, lgaFilter, states, preloadedLgas, mounted]);
+
   const currentStateName = useMemo(() => {
     if (!stateFilter) return null;
     const state = states.find(s => s.state_id.toString() === stateFilter);
     return state ? state.state_name : null;
   }, [stateFilter, states]);
 
-  // ── The Infinite Query ──
+  // Whether the active location filter is resolved enough to render
+  const locationResolved = useMemo(() => {
+    if (!stateFilter && !lgaFilter) return true;
+    if (stateFilter) return currentStateName !== null;
+    if (lgaFilter) return Object.keys(preloadedLgas).length > 0;
+    return true;
+  }, [stateFilter, lgaFilter, currentStateName, preloadedLgas]);
+
+  // Clear invalid state ID from URL
+  useEffect(() => {
+    if (!mounted || !stateFilter || states.length === 0) return;
+    const state = states.find(s => s.state_id.toString() === stateFilter);
+    if (!state) router.replace('/');
+  }, [mounted, stateFilter, states, router]);
+
+  // Clear invalid LGA ID from URL
+  useEffect(() => {
+    if (!mounted || !lgaFilter || Object.keys(preloadedLgas).length === 0) return;
+    let found = false;
+    for (const key in preloadedLgas) {
+      if (preloadedLgas[key].some(l => l.lga_id.toString() === lgaFilter)) { found = true; break; }
+    }
+    if (!found) router.replace('/');
+  }, [mounted, lgaFilter, preloadedLgas, router]);
+
+  // Clear URL if preload failed and a filter is in the URL
+  useEffect(() => {
+    if (locationLoadError && (stateFilter || lgaFilter)) {
+      router.replace('/');
+    }
+  }, [locationLoadError, stateFilter, lgaFilter, router]);
+
+  // ── Infinite Query ──
   const {
     data: featuredProvidersData,
     isLoading,
     isFetching,
+    isError,
     fetchNextPage,
     hasNextPage,
-    isFetchingNextPage
+    isFetchingNextPage,
   } = useInfiniteQuery({
-    // Use stateFilter and lgaFilter in the key instead of locationLabel
     queryKey: ['featured-providers', userLat, userLng, stateFilter, lgaFilter, currentStateName],
+    enabled: !stateFilter || !!currentStateName,
     queryFn: async ({ pageParam = 0 }) => {
-      
       const { data, error } = await db.rpc('get_featured_providers', {
         limit_count: 20,
         offset_count: pageParam,
-        p_state_name: currentStateName, // 🔥 Pass the URL-derived state name
-        p_lga_id: lgaFilter ? parseInt(lgaFilter) : null
+        p_state_name: currentStateName,
+        p_lga_id: lgaFilter ? parseInt(lgaFilter) : null,
       });
 
       if (error) {
-        console.error("SUPABASE RPC ERROR:", error);
+        console.error('SUPABASE RPC ERROR:', error);
         return { items: [] as ProviderWithProfile[], rawCount: 0 };
       }
       if (!data) {
@@ -272,22 +331,7 @@ export function HomeClient({ initialProviders, initialTopProviders }: HomeClient
         }
       }
 
-      result.sort((a, b) => {
-        const now = new Date();
-        const aBoosted = a.boost_until && new Date(a.boost_until) > now ? 1 : 0;
-        const bBoosted = b.boost_until && new Date(b.boost_until) > now ? 1 : 0;
-        if (aBoosted !== bBoosted) return bBoosted - aBoosted;
-
-        if (smartSortData?.length) {
-          const scoreMap = new Map(smartSortData.map(s => [s.provider_id, s.score]));
-          const aScore = scoreMap.get(a.id) || 0;
-          const bScore = scoreMap.get(b.id) || 0;
-          return bScore - aScore;
-        }
-
-        return (b.average_rating ?? 0) - (a.average_rating ?? 0);
-      });
-
+      // No client sort here — done in useMemo after combining pages.
       return { items: result, rawCount: providers.length };
     },
     initialPageParam: 0,
@@ -296,50 +340,67 @@ export function HomeClient({ initialProviders, initialTopProviders }: HomeClient
       const totalFetched = allPages.reduce((sum, page) => sum + page.rawCount, 0);
       return totalFetched;
     },
-    placeholderData: (previousData) => previousData || {
-      pages: [{ items: initialProviders, rawCount: initialProviders.length }],
-      pageParams: [0],
+    placeholderData: (previousData) => {
+      if (previousData) return previousData;
+      // Don't use unfiltered SSR data when a location filter is active.
+      if (stateFilter || lgaFilter) return undefined;
+      return {
+        pages: [{ items: initialProviders, rawCount: initialProviders.length }],
+        pageParams: [0],
+      };
     },
     staleTime: 1000 * 60 * 5,
   });
 
+  // Combine pages, then sort the whole list globally.
   const featuredProviders = useMemo(() => {
-    return featuredProvidersData?.pages.flatMap((page) => page.items) ?? [];
-  }, [featuredProvidersData]);
+    const combined = featuredProvidersData?.pages.flatMap((page) => page.items) ?? [];
+    const scoreMap = smartSortData?.length
+      ? new Map(smartSortData.map(s => [s.provider_id, s.score]))
+      : null;
+    const nowMs = Date.now();
 
-  const { data: allProviderCounts } = useQuery({
+    return [...combined].sort((a, b) => {
+      const aBoosted = a.boost_until && new Date(a.boost_until).getTime() > nowMs ? 1 : 0;
+      const bBoosted = b.boost_until && new Date(b.boost_until).getTime() > nowMs ? 1 : 0;
+      if (aBoosted !== bBoosted) return bBoosted - aBoosted;
+
+      if (scoreMap) {
+        const aScore = scoreMap.get(a.id) || 0;
+        const bScore = scoreMap.get(b.id) || 0;
+        return bScore - aScore;
+      }
+      return (b.average_rating ?? 0) - (a.average_rating ?? 0);
+    });
+  }, [featuredProvidersData, smartSortData]);
+
+  // Fast category counts from the new RPCs
+  const { data: providerCounts = {} } = useQuery({
     queryKey: ['provider-counts'],
     queryFn: async () => {
-      const { data, error } = await db.rpc('get_search_providers');
+      const { data, error } = await db.rpc('get_search_provider_counts');
       if (error || !data) return {};
-      const providers: any[] = Array.isArray(data) ? data : [];
-      const counts: Record<string, number> = {};
-      providers.forEach((p: any) => {
-        if (p.selected_category_slug) {
-          counts[p.selected_category_slug] = (counts[p.selected_category_slug] || 0) + 1;
-        }
-      });
-      return counts;
+      return data as Record<string, number>;
     },
     staleTime: 1000 * 60 * 10,
   });
 
-  const providerCounts = allProviderCounts ?? {};
+  const { data: subcategoryCounts = {} } = useQuery({
+    queryKey: ['subcategory-counts'],
+    queryFn: async () => {
+      const { data, error } = await db.rpc('get_search_subcategory_counts');
+      if (error || !data) return {};
+      return data as Record<string, number>;
+    },
+    staleTime: 1000 * 60 * 10,
+  });
 
-  const subcategoryCounts = useMemo(() => {
-    const providers = isClient ? featuredProviders : initialProviders;
-    const counts: Record<number, number> = {};
-    (providers ?? []).forEach(p => {
-      if (p.selected_subcategory_id) {
-        counts[p.selected_subcategory_id] = (counts[p.selected_subcategory_id] || 0) + 1;
-      }
-    });
-    return counts;
-  }, [isClient, featuredProviders, initialProviders]);
-
+  // Prefetch top 5 (dedupe by id — safe against any rerender loops)
   useEffect(() => {
     if (!featuredProviders?.length) return;
     featuredProviders.slice(0, 5).forEach(provider => {
+      if (prefetchedIdsRef.current.has(provider.id)) return;
+      prefetchedIdsRef.current.add(provider.id);
       queryClient.prefetchQuery({
         queryKey: ['provider', provider.id],
         queryFn: () => fetchProviderProfile(provider.id),
@@ -348,6 +409,7 @@ export function HomeClient({ initialProviders, initialTopProviders }: HomeClient
     });
   }, [featuredProviders, queryClient]);
 
+  // Realtime: invalidate on provider updates
   useEffect(() => {
     const channel = supabase
       .channel('providers-status')
@@ -439,22 +501,26 @@ export function HomeClient({ initialProviders, initialTopProviders }: HomeClient
   );
 
   const renderContent = () => {
-    const show = isClient ? featuredProviders : initialProviders;
-    const isClientMounted = isClient && mounted;
+    const show = mounted ? featuredProviders : initialProviders;
 
-    // 🔥 BULLETPROOF FLICKER FIX: If it's empty AND we are fetching, keep the skeleton up
-    if (isClient && show.length === 0 && (isLoading || isFetching)) {
+    // Guard: filter is in the URL but not yet resolved → skeleton, don't flash unfiltered data
+    if (mounted && !locationResolved) {
+      return <ProviderGridSkeleton />;
+    }
+
+    // Loading state (also covers the 1-frame window when enabled just flipped true)
+    if (mounted && show.length === 0 && !isError && (isLoading || isFetching || !featuredProvidersData)) {
       return <ProviderGridSkeleton />;
     }
 
     if (!show || show.length === 0) {
-      if (isClientMounted && isOffline) return <OfflineBanner />;
+      if (mounted && isOffline) return <OfflineBanner />;
       return <NoProvidersBanner />;
     }
 
     return (
       <>
-        {isClientMounted && isOffline && <OfflineBanner />}
+        {mounted && isOffline && <OfflineBanner />}
         {viewMode === 'grid' ? (
           <div className="columns-2 sm:columns-3 lg:columns-3 xl:columns-3 gap-4 pr-2">
             {show.map((provider, index) => (
@@ -473,7 +539,7 @@ export function HomeClient({ initialProviders, initialTopProviders }: HomeClient
             ))}
           </div>
         )}
-        
+
         {hasNextPage && (
           <div className="flex justify-center mt-8 w-full">
             <button
@@ -509,11 +575,7 @@ export function HomeClient({ initialProviders, initialTopProviders }: HomeClient
             Connect with professionals near you
           </p>
           <div className="bg-white/80 backdrop-blur-md rounded-lg shadow-sm border border-gray-200/50 p-4 max-w-3xl mx-auto">
-            
-            {/* HORIZONTAL LAYOUT: Location + Search in one row */}
             <div className="flex flex-row gap-2 sm:gap-3 items-center w-full">
-              
-              {/* Location Dropdown - Fixed smaller width so it doesn't break the row */}
               <div className="relative w-[130px] sm:w-44 flex-shrink-0">
                 <button
                   ref={locationButtonRef}
@@ -539,7 +601,6 @@ export function HomeClient({ initialProviders, initialTopProviders }: HomeClient
                 )}
               </div>
 
-              {/* Search Bar - Flex-1 to fill the remaining space */}
               <div className="relative flex-1 min-w-0">
                 <form onSubmit={handleSearch} className="flex bg-white rounded-lg overflow-hidden border border-[#008751]/30 shadow-sm">
                   <input
@@ -565,7 +626,6 @@ export function HomeClient({ initialProviders, initialTopProviders }: HomeClient
                   </button>
                 </form>
 
-                {/* Suggestions dropdown with images */}
                 {showSuggestions && debouncedSearchTerm && suggestions.length > 0 && (
                   <div ref={suggestionsRef} className="absolute z-20 mt-1 w-full bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
                     {suggestions.map((s, idx) => (
@@ -600,83 +660,78 @@ export function HomeClient({ initialProviders, initialTopProviders }: HomeClient
         </div>
       </section>
 
+      {/* ⬇️ SINGLE responsive tree — no double render of ProviderCards */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="hidden md:flex gap-6">
-          <div className="w-64 flex-shrink-0 self-start">
+        <div className="flex flex-col md:flex-row md:gap-6">
+          {/* Sidebar — desktop only */}
+          <div className="hidden md:block md:w-64 md:flex-shrink-0 md:self-start">
             <CategorySidebar providerCounts={providerCounts} subcategoryCounts={subcategoryCounts} />
           </div>
+
           <div className="flex-1 min-w-0">
             <TopProvidersSlider initialData={initialTopProviders} />
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <img
-                  src="/top.png"
-                  alt=""
-                  className="h-7 w-7 object-contain animate-nimart-gentle-float flex-shrink-0"
-                />
-                <div
-                  className="px-4 py-1.5 rounded-full text-sm font-semibold text-white shadow-md"
-                  style={{
-                    background: 'linear-gradient(to left, #597400, #98BC00)',
-                    boxShadow: '0 4px 12px rgba(89, 116, 0, 0.25)',
-                  }}
-                >
-                  {lgaFilter
-                    ? `Popular Providers in ${locationName}`
-                    : stateFilter
-                    ? `Popular Providers in ${locationName}`
-                    : 'Popular Providers in Nigeria'}
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="flex border border-gray-200 rounded-lg overflow-hidden">
-                  <button onClick={() => setViewMode('grid')} className={cn('p-2 text-gray-500 hover:text-primary-600', viewMode === 'grid' && 'bg-primary-50 text-primary-600')} title="Grid view"><LayoutGrid className="h-5 w-5" /></button>
-                  <button onClick={() => setViewMode('list')} className={cn('p-2 text-gray-500 hover:text-primary-600', viewMode === 'list' && 'bg-primary-50 text-primary-600')} title="List view"><List className="h-5 w-5" /></button>
-                </div>
-                <Link href="/search" className="text-primary-600 hover:text-primary-700 text-sm font-medium">View all →</Link>
-              </div>
-            </div>
-            {renderContent()}
-          </div>
-        </div>
 
-        <div className="block md:hidden">
-          <TopProvidersSlider initialData={initialTopProviders} />
-          <div className="mb-4 px-4">
-            <CategoryButtons providerCounts={providerCounts} subcategoryCounts={subcategoryCounts} />
-          </div>
-          <section>
-            <div className="flex items-center justify-between mb-3 px-4">
-              <div className="flex items-center gap-2">
+            {/* Category pill row — mobile only */}
+            <div className="md:hidden mb-4 px-4">
+              <CategoryButtons providerCounts={providerCounts} subcategoryCounts={subcategoryCounts} />
+            </div>
+
+            {/* Responsive header — one instance */}
+            <div className="flex items-center justify-between mb-3 md:mb-4 px-4 md:px-0">
+              <div className="flex items-center gap-2 md:gap-3">
                 <img
                   src="/top.png"
                   alt=""
-                  className="h-6 w-6 object-contain animate-nimart-gentle-float flex-shrink-0"
+                  className="h-6 w-6 md:h-7 md:w-7 object-contain animate-nimart-gentle-float flex-shrink-0"
                 />
                 <div
-                  className="px-3 py-1 rounded-full text-xs font-semibold text-white shadow-md"
+                  className="px-3 md:px-4 py-1 md:py-1.5 rounded-full text-xs md:text-sm font-semibold text-white shadow-md"
                   style={{
                     background: 'linear-gradient(to left, #597400, #98BC00)',
                     boxShadow: '0 4px 12px rgba(89, 116, 0, 0.25)',
                   }}
                 >
-                  {lgaFilter
-                    ? `Popular in ${locationName}`
-                    : stateFilter
-                    ? `Popular in ${locationName}`
-                    : 'Popular Providers'}
+                  <span className="md:hidden">
+                    {lgaFilter
+                      ? `Popular in ${locationName}`
+                      : stateFilter
+                      ? `Popular in ${locationName}`
+                      : 'Popular Providers'}
+                  </span>
+                  <span className="hidden md:inline">
+                    {lgaFilter
+                      ? `Popular Providers in ${locationName}`
+                      : stateFilter
+                      ? `Popular Providers in ${locationName}`
+                      : 'Popular Providers in Nigeria'}
+                  </span>
                 </div>
               </div>
               <div className="flex items-center gap-2">
                 <div className="flex border border-gray-200 rounded-lg overflow-hidden">
-                  <button onClick={() => setViewMode('grid')} className={cn('p-2', viewMode === 'grid' && 'bg-primary-50 text-primary-600')} title="Grid view"><LayoutGrid className="h-4 w-4" /></button>
-                  <button onClick={() => setViewMode('list')} className={cn('p-2', viewMode === 'list' && 'bg-primary-50 text-primary-600')} title="List view"><List className="h-4 w-4" /></button>
+                  <button
+                    onClick={() => setViewMode('grid')}
+                    className={cn('p-1.5 md:p-2 text-gray-500 hover:text-primary-600', viewMode === 'grid' && 'bg-primary-50 text-primary-600')}
+                    title="Grid view"
+                  >
+                    <LayoutGrid className="h-4 w-4 md:h-5 md:w-5" />
+                  </button>
+                  <button
+                    onClick={() => setViewMode('list')}
+                    className={cn('p-1.5 md:p-2 text-gray-500 hover:text-primary-600', viewMode === 'list' && 'bg-primary-50 text-primary-600')}
+                    title="List view"
+                  >
+                    <List className="h-4 w-4 md:h-5 md:w-5" />
+                  </button>
                 </div>
-                <Link href="/search" className="text-xs text-primary-600 font-medium">View all →</Link>
+                <Link href="/search" className="text-xs md:text-sm text-primary-600 hover:text-primary-700 font-medium">
+                  View all →
+                </Link>
               </div>
             </div>
+
             {renderContent()}
-          </section>
+          </div>
         </div>
       </div>
     </>

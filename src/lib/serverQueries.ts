@@ -3,7 +3,7 @@ import { db } from '@/lib/supabase-any';
 import type { ProviderWithProfile } from '@/components/provider/ProviderCardPortrait';
 
 export async function fetchInitialProviders(): Promise<ProviderWithProfile[]> {
-  const { data, error } = await db.rpc('get_featured_providers', { limit_count: 25 } as any);
+  const { data, error } = await db.rpc('get_featured_providers', { limit_count: 20 } as any);
   if (error || !data) return [];
 
   const providers: any[] = Array.isArray(data) ? data : [];

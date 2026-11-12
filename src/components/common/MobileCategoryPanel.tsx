@@ -11,7 +11,9 @@ interface MobileCategoryPanelProps {
   tierName: string;
   tierIcon: string;
   providerCounts: Record<string, number>;
-  subcategoryCounts: Record<number, number>;
+  // ✅ FIX: json_object_agg returns string keys, so this is Record<string, number>.
+  // Runtime lookups like `subcategoryCounts[sub.id]` still work (number→string coercion).
+  subcategoryCounts: Record<string, number>;
   onClose: () => void;
 }
 
