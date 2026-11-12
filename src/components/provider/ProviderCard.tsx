@@ -57,11 +57,11 @@ export const ProviderCard = memo(function ProviderCard({
   const imageSrc =
     variant === 'portrait'
       ? getProviderImageSrc(provider, 400, undefined) 
-      : getProviderImageSrc(provider, 200, 200);
+      : getProviderImageSrc(provider, 400, 400);
 
   const isPortrait = variant === 'portrait';
   
-  // 🔥 NEW: State to track if the image has finished loading
+  // 🔥 State to track if the image has finished loading
   const [isImgLoaded, setIsImgLoaded] = useState(false);
 
   return (
@@ -69,9 +69,8 @@ export const ProviderCard = memo(function ProviderCard({
       className={cn(
         'bg-white rounded-lg shadow-sm overflow-hidden flex break-inside-avoid',
         isPortrait
-          ? 'flex-col w-full'
-          : 'flex-row items-stretch max-w-[280px] mx-auto border border-gray-100 hover:shadow-md transition-shadow',
-        isPortrait && !isBoosted && !isVerified && 'border border-gray-100',
+          ? 'flex-col w-full border border-gray-100'
+          : 'flex-row w-full border border-gray-100 hover:shadow-md transition-shadow',
         isBoosted && 'border-2 border-amber-500',
         isVerified && !isBoosted && 'border-2 border-primary-500',
         className
@@ -81,10 +80,10 @@ export const ProviderCard = memo(function ProviderCard({
       <div
         className={cn(
           'relative bg-gray-200 overflow-hidden flex-shrink-0',
-          isPortrait ? 'w-full' : 'w-28 sm:w-32 aspect-square'
+          // Made horizontal image larger for desktop
+          isPortrait ? 'w-full' : 'w-32 sm:w-40 md:w-48 aspect-square'
         )}
       >
-        {/* Link wraps ONLY the image + overlays. */}
         <Link
           href={`/provider/${provider.id}`}
           onMouseEnter={handleMouseEnter}
@@ -94,7 +93,6 @@ export const ProviderCard = memo(function ProviderCard({
           )}
           aria-label={`View ${displayName}`}
         >
-          {/* 🔥 NEW: Pulsing skeleton while the image downloads on slow networks */}
           {!isImgLoaded && (
             <div className="absolute inset-0 bg-gray-200 animate-pulse z-0" />
           )}
@@ -106,20 +104,19 @@ export const ProviderCard = memo(function ProviderCard({
               isPortrait 
                 ? 'w-full h-auto block' 
                 : 'absolute inset-0 w-full h-full object-cover object-top',
-              'transition-opacity duration-500 ease-in-out z-10 relative', // Smooth fade-in
-              isImgLoaded ? 'opacity-100' : 'opacity-0' // Hide until loaded
+              'transition-opacity duration-500 ease-in-out z-10 relative',
+              isImgLoaded ? 'opacity-100' : 'opacity-0'
             )}
-            onLoad={() => setIsImgLoaded(true)} // 🔥 Trigger fade when loaded
+            onLoad={() => setIsImgLoaded(true)}
             loading={imageLoading}
             {...(imageLoading === 'eager' ? { fetchPriority: 'high' as const } : {})}
             onError={(e) => {
               e.currentTarget.src = '/profile.png';
-              setIsImgLoaded(true); // Stop skeleton if image fails
+              setIsImgLoaded(true);
             }}
           />
         </Link>
 
-        {/* FavoriteButton — OUTSIDE the Link, absolutely positioned. */}
         <div className="absolute top-2 left-2 z-20">
           <FavoriteButton providerId={provider.id} size="sm" />
         </div>
@@ -158,7 +155,7 @@ export const ProviderCard = memo(function ProviderCard({
       <div
         className={cn(
           'flex flex-col flex-1 min-w-0',
-          isPortrait ? 'p-2 sm:p-4' : 'p-3 sm:p-4 justify-between'
+          isPortrait ? 'p-2 sm:p-4' : 'p-4 sm:p-5 justify-between'
         )}
       >
         {/* Name + status */}
@@ -174,7 +171,7 @@ export const ProviderCard = memo(function ProviderCard({
             onMouseEnter={handleMouseEnter}
             className={cn(
               'font-semibold text-primary-600 hover:underline flex-1',
-              isPortrait ? 'line-clamp-2 text-sm leading-tight' : 'truncate'
+              isPortrait ? 'line-clamp-2 text-sm leading-tight' : 'truncate text-base'
             )}
           >
             {displayName}
@@ -186,7 +183,7 @@ export const ProviderCard = memo(function ProviderCard({
           <p
             className={cn(
               'text-xs text-gray-600',
-              isPortrait ? 'line-clamp-2 mb-2' : 'line-clamp-1 mt-0.5'
+              isPortrait ? 'line-clamp-2 mb-2' : 'line-clamp-2 mt-1'
             )}
           >
             {provider.description}
@@ -194,7 +191,7 @@ export const ProviderCard = memo(function ProviderCard({
         )}
 
         {/* Category pill */}
-        <div className={isPortrait ? 'mb-2' : 'mt-2'}>
+        <div className={isPortrait ? 'mb-2 mt-1' : 'mt-2'}>
           <Link
             href={categoryHref}
             className="inline-flex items-center gap-1 bg-primary-600 text-white text-xs px-2.5 py-0.5 rounded-full hover:bg-primary-700 transition"
@@ -207,7 +204,7 @@ export const ProviderCard = memo(function ProviderCard({
 
         {/* Location */}
         {isPortrait ? (
-          <div className="flex items-start text-xs text-gray-600 mb-1">
+          <div className="flex items-start text-xs text-gray-600 mb-1 mt-1">
             <MapPin className="h-3.5 w-3.5 mr-1 flex-shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
               <span className="line-clamp-1">
@@ -253,7 +250,7 @@ export const ProviderCard = memo(function ProviderCard({
         <div
           className={cn(
             'flex items-center justify-between',
-            isPortrait ? 'mb-2 mt-auto' : 'mt-2'
+            isPortrait ? 'mb-2 mt-auto' : 'mt-3'
           )}
         >
           {renderDistance()}
@@ -272,48 +269,53 @@ export const ProviderCard = memo(function ProviderCard({
           )}
         </div>
 
-        {/* ===== Price footer ===== */}
-        <div className="border-t border-gray-100 pt-2 mt-1">
-          {hasPrice ? (
-            <>
-              <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
-                Starting from
-              </div>
+        {/* ===== Price & Book Now (Flex-Row for horizontal) ===== */}
+        <div className={cn(
+          "border-t border-gray-100 pt-3 mt-3 flex",
+          isPortrait ? "flex-col gap-2" : "flex-row items-center justify-between gap-4"
+        )}>
+          <div>
+            {hasPrice ? (
+              <>
+                <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+                  Starting from
+                </div>
+                <div
+                  className={cn(
+                    'font-extrabold text-gray-900',
+                    isPortrait ? 'text-lg' : 'text-xl'
+                  )}
+                >
+                  ₦{provider.starting_price!.toLocaleString()}
+                </div>
+              </>
+            ) : (
               <div
                 className={cn(
-                  'font-extrabold text-gray-900 mt-0.5',
-                  isPortrait ? 'text-lg' : 'text-sm'
+                  'font-semibold text-gray-500',
+                  isPortrait ? 'text-sm' : 'text-sm'
                 )}
               >
-                ₦{provider.starting_price!.toLocaleString()}
+                Contact for pricing
               </div>
-            </>
-          ) : (
-            <div
-              className={cn(
-                'font-semibold text-gray-500',
-                isPortrait ? 'text-sm' : 'text-xs'
-              )}
-            >
-              Contact for pricing
-            </div>
-          )}
-        </div>
+            )}
+          </div>
 
-        {/* Book Now */}
-        <button
-          onClick={handleBookNow}
-          disabled={provider.status === 'away'}
-          className={cn(
-            'w-full text-center font-medium rounded-lg transition-colors mt-2',
-            isPortrait ? 'py-2 text-sm' : 'py-1.5 text-xs px-3',
-            provider.status === 'away'
-              ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-              : 'bg-primary-600 hover:bg-primary-700 text-white'
-          )}
-        >
-          {provider.status === 'away' ? 'Not Available' : 'Book Now'}
-        </button>
+          {/* Book Now Button */}
+          <button
+            onClick={handleBookNow}
+            disabled={provider.status === 'away'}
+            className={cn(
+              'text-center font-medium rounded-lg transition-colors',
+              isPortrait ? 'w-full py-2 text-sm' : 'px-6 py-2 text-sm w-max',
+              provider.status === 'away'
+                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                : 'bg-primary-600 hover:bg-primary-700 text-white'
+            )}
+          >
+            {provider.status === 'away' ? 'Not Available' : 'Book Now'}
+          </button>
+        </div>
       </div>
     </div>
   );
