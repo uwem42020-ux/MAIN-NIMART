@@ -70,9 +70,9 @@ export default async function HomePage() {
             {/* The Logo inside a perfect round circle (Now with Green Background) */}
             <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full shadow-sm mb-6 flex items-center justify-center bg-[#008751] overflow-hidden">
               <img
-                src="/loadhome.png"
+                src="/scalelogo.svg"
                 alt="Nimart"
-                className="w-full h-full object-contain"
+                className="w-16 h-16 sm:w-20 sm:h-20 object-contain"
               />
             </div>
 
