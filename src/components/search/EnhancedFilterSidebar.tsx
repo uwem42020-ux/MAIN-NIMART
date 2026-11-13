@@ -38,7 +38,17 @@ export function EnhancedFilterSidebar() {
 
   const [minRating, setMinRating] = useState(searchParams.get('rating') || '');
 
-  // Helper to update URL params without full navigation
+  // 🔥 FIX: Sync internal state when the URL changes from the outside (e.g. clicking a link or clearing all)
+  useEffect(() => {
+    setSelectedTier(searchParams.get('tier') || '');
+    setSelectedCategory(searchParams.get('category') || '');
+    setSelectedSubcategory(searchParams.get('subcategory') || '');
+    setSelectedState(searchParams.get('state') || '');
+    setSelectedLga(searchParams.get('lga') || '');
+    setStatuses(searchParams.get('status')?.split(',').filter(Boolean) || []);
+    setMinRating(searchParams.get('rating') || '');
+  }, [searchParams]);
+
   const updateSearchParams = useCallback(
     (updates: Record<string, string | null>) => {
       const params = new URLSearchParams(searchParams.toString());
@@ -91,26 +101,31 @@ export function EnhancedFilterSidebar() {
   useEffect(() => {
     if (selectedTier) {
       setCategories(CATEGORIES.filter(c => c.tier_slug === selectedTier));
-      setSelectedCategory('');
-      setSubcategories([]);
-      setSelectedSubcategory('');
+      // Don't clear category if it came from the URL, but do clear if user manually changes tier
+      if (!searchParams.get('category')) {
+        setSelectedCategory('');
+        setSubcategories([]);
+        setSelectedSubcategory('');
+      }
     } else {
       setCategories([]);
       setSelectedCategory('');
       setSubcategories([]);
       setSelectedSubcategory('');
     }
-  }, [selectedTier]);
+  }, [selectedTier, searchParams]);
 
   useEffect(() => {
     if (selectedCategory) {
       setSubcategories(getSubcategoriesByCategory(selectedCategory));
-      setSelectedSubcategory('');
+      if (!searchParams.get('subcategory')) {
+        setSelectedSubcategory('');
+      }
     } else {
       setSubcategories([]);
       setSelectedSubcategory('');
     }
-  }, [selectedCategory]);
+  }, [selectedCategory, searchParams]);
 
   const handleStatusToggle = (status: string) => {
     const newStatuses = statuses.includes(status)
@@ -122,20 +137,12 @@ export function EnhancedFilterSidebar() {
 
   const clearAll = () => {
     router.push('/search');
-    setSelectedTier('');
-    setSelectedCategory('');
-    setSelectedSubcategory('');
-    setSelectedState('');
-    setSelectedLga('');
-    setStatuses([]);
-    setMinRating('');
   };
 
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 space-y-6">
       <h3 className="font-semibold text-gray-900">Filters</h3>
 
-      {/* Location */}
       <div>
         <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
           <MapPin className="h-4 w-4" /> Location
@@ -171,7 +178,6 @@ export function EnhancedFilterSidebar() {
         )}
       </div>
 
-      {/* Service Tier */}
       <div>
         <h4 className="text-sm font-medium text-gray-700 mb-2">Service Tier</h4>
         <select
@@ -193,7 +199,6 @@ export function EnhancedFilterSidebar() {
         </select>
       </div>
 
-      {/* Category */}
       {selectedTier && (
         <div>
           <h4 className="text-sm font-medium text-gray-700 mb-2">Category</h4>
@@ -216,7 +221,6 @@ export function EnhancedFilterSidebar() {
         </div>
       )}
 
-      {/* Subcategory */}
       {selectedCategory && subcategories.length > 0 && (
         <div>
           <h4 className="text-sm font-medium text-gray-700 mb-2">Subcategory</h4>
@@ -236,7 +240,6 @@ export function EnhancedFilterSidebar() {
         </div>
       )}
 
-      {/* Availability */}
       <div>
         <h4 className="text-sm font-medium text-gray-700 mb-2">Availability</h4>
         <div className="space-y-2">
@@ -254,7 +257,6 @@ export function EnhancedFilterSidebar() {
         </div>
       </div>
 
-      {/* Minimum Rating */}
       <div>
         <h4 className="text-sm font-medium text-gray-700 mb-2">Minimum Rating</h4>
         <select

@@ -13,28 +13,9 @@ import { ProviderCardHorizontal } from '@/components/provider/ProviderCardHorizo
 import { Breadcrumbs } from '@/components/common/Breadcrumbs';
 import { FavoriteButton } from '@/components/common/FavoriteButton';
 import {
-  MapPin,
-  Star,
-  Calendar,
-  ArrowLeft,
-  X,
-  MessageCircle,
-  Flag,
-  Phone,
-  Clock,
-  Package,
-  ArrowRight,
-  Share2,
-  GraduationCap,
-  Languages,
-  User,
-  LayoutGrid,
-  List,
-  Maximize2,
-  ExternalLink,
-  Search,
-  Compass,
-  Briefcase, // NEW IMPORT
+  MapPin, Star, Calendar, ArrowLeft, X, MessageCircle, Flag, Phone, Clock,
+  Package, ArrowRight, Share2, GraduationCap, Languages, User, LayoutGrid,
+  List, Maximize2, ExternalLink, Search, Compass, Briefcase,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
@@ -47,7 +28,7 @@ import dynamic from 'next/dynamic';
 const BookingFormModal = dynamic(
   () => import('@/components/customer/BookingFormModal').then(mod => ({ default: mod.BookingFormModal })),
   {
-    ssr: false,
+    ssr: false, // Fine for modals
     loading: () => (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
         <div className="bg-white rounded-xl p-6 text-sm text-gray-600">Loading booking form…</div>
@@ -56,14 +37,9 @@ const BookingFormModal = dynamic(
   }
 );
 
+// 🔥 FIX: Removed `ssr: false` so Google can crawl your reviews!
 const ReviewsList = dynamic(
-  () => import('@/components/reviews/ReviewsList').then(mod => ({ default: mod.ReviewsList })),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="py-8 text-center text-sm text-gray-400">Loading reviews…</div>
-    ),
-  }
+  () => import('@/components/reviews/ReviewsList').then(mod => ({ default: mod.ReviewsList }))
 );
 
 type ProviderRow = Database['public']['Tables']['providers']['Row'];
@@ -110,11 +86,7 @@ function getOptimizedUrl(url: string | null | undefined, width: number = 400, he
   return `${url}?width=${width}&height=${h}&quality=50&resize=cover`;
 }
 
-export function ProviderProfileClient({
-  initialProvider,
-}: {
-  initialProvider: FullProvider;
-}) {
+export function ProviderProfileClient({ initialProvider }: { initialProvider: FullProvider }) {
   const id = initialProvider.id;
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -139,13 +111,7 @@ export function ProviderProfileClient({
     queryKey: ['provider', id],
     queryFn: async () => {
       const [
-        providerRes,
-        profileRes,
-        portfolioRes,
-        reviewsRes,
-        servicesRes,
-        completedRes,
-        lastSignInRes,
+        providerRes, profileRes, portfolioRes, reviewsRes, servicesRes, completedRes, lastSignInRes,
       ] = await Promise.all([
         db.from('providers').select('*').eq('id', id).single(),
         db.from('profiles').select('*').eq('id', id).single(),
@@ -185,11 +151,9 @@ export function ProviderProfileClient({
     queryFn: async () => {
       if (!id || !provider) return [];
 
-      const { data: currentProfile } = await db
-        .from('profiles')
-        .select('lat, lng')
-        .eq('id', id)
-        .single();
+      // 🔥 FIX: Removed the redundant `currentProfile` fetch. We already have the coords!
+      const userLat = provider.profile?.lat;
+      const userLng = provider.profile?.lng;
 
       const { data: allProviders } = await db
         .from('providers')
@@ -209,9 +173,6 @@ export function ProviderProfileClient({
 
       const profileMap = new Map<string, any>();
       profiles?.forEach((prof: any) => profileMap.set(prof.id, prof));
-
-      const userLat = (currentProfile as any)?.lat;
-      const userLng = (currentProfile as any)?.lng;
 
       const enriched = allProviders
         .filter((p: any) => profileMap.has(p.id))
@@ -284,24 +245,13 @@ export function ProviderProfileClient({
   const startConversation = async () => {
     if (!user || !id) return;
 
-    let { data: existingThread } = await db
+    // 🔥 FIX: Combined the double DB lookups into one query using OR
+    const { data: existingThread } = await db
       .from('threads')
       .select('id')
-      .eq('provider_id', user.id)
-      .eq('customer_id', id)
+      .or(`and(provider_id.eq.${id},customer_id.eq.${user.id}),and(provider_id.eq.${user.id},customer_id.eq.${id})`)
       .limit(1)
       .maybeSingle();
-
-    if (!existingThread) {
-      const { data: reverse } = await db
-        .from('threads')
-        .select('id')
-        .eq('provider_id', id)
-        .eq('customer_id', user.id)
-        .limit(1)
-        .maybeSingle();
-      existingThread = reverse;
-    }
 
     const basePath = profile?.role === 'provider' ? '/provider/messages' : '/customer/messages';
 
@@ -434,9 +384,7 @@ export function ProviderProfileClient({
     ? `${provider.profile.lga_name}, ${(provider.profile as any)?.state_name || ''}`
     : 'Location not set';
 
-  const joinedYear = provider?.created_at
-    ? new Date(provider.created_at).getFullYear()
-    : null;
+  const joinedYear = provider?.created_at ? new Date(provider.created_at).getFullYear() : null;
 
   const categoryName = provider?.selected_category_slug
     ?.split('-')
@@ -643,7 +591,6 @@ export function ProviderProfileClient({
             <h2 className="text-base font-bold text-gray-900 mb-3 flex items-center gap-2">
               <span className="w-1 h-5 bg-gray-300 rounded-full" /> Experience
             </h2>
-            {/* NEW EXPERIENCE BADGE */}
             {(provider?.profile as any)?.experience_years ? (
               <span className="inline-flex items-center gap-1.5 bg-green-50 text-green-700 px-3 py-1.5 text-sm font-medium rounded-lg border border-green-200 mb-4">
                 <Briefcase className="h-4 w-4" /> {(provider.profile as any).experience_years} {(provider.profile as any).experience_years === 1 ? 'Year' : 'Years'} of Experience
@@ -802,7 +749,6 @@ export function ProviderProfileClient({
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
           <Card>
             <h2 className="text-lg font-bold text-gray-900 mb-4">Experience</h2>
-            {/* NEW EXPERIENCE BADGE */}
             {(provider?.profile as any)?.experience_years ? (
               <span className="inline-flex items-center gap-1.5 bg-green-50 text-green-700 px-3 py-1.5 text-sm font-medium rounded-lg border border-green-200 mb-4">
                 <Briefcase className="h-4 w-4" /> {(provider.profile as any).experience_years} {(provider.profile as any).experience_years === 1 ? 'Year' : 'Years'} of Experience

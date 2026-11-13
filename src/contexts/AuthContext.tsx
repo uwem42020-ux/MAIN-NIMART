@@ -1,7 +1,7 @@
 // src/contexts/AuthContext.tsx
 'use client';
 
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { db } from '@/lib/supabase-any';
@@ -41,7 +41,7 @@ export function AuthProvider({
   const [profile, setProfile] = useState<Profile | null>(initialProfile);
   const [isLoading, setIsLoading] = useState(!initialUser);
 
-  const fetchProfile = async (userId: string) => {
+  const fetchProfile = useCallback(async (userId: string) => {
     const { data } = await db
       .from('profiles')
       .select('*')
@@ -49,13 +49,13 @@ export function AuthProvider({
       .single();
     setProfile(data as Profile);
     return data;
-  };
+  }, []);
 
-  const refreshProfile = async () => {
+  const refreshProfile = useCallback(async () => {
     if (user) {
       await fetchProfile(user.id);
     }
-  };
+  }, [user, fetchProfile]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -78,24 +78,24 @@ export function AuthProvider({
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [fetchProfile]);
 
-  const signIn = async (email: string, password: string) => {
+  const signIn = useCallback(async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
-  };
+  }, []);
 
-  const signInWithOTP = async (email: string) => {
+  const signInWithOTP = useCallback(async (email: string) => {
     const { error } = await supabase.auth.signInWithOtp({ email });
     if (error) throw error;
-  };
+  }, []);
 
-  const verifyOTP = async (email: string, token: string) => {
+  const verifyOTP = useCallback(async (email: string, token: string) => {
     const { error } = await supabase.auth.verifyOtp({ email, token, type: 'email' });
     if (error) throw error;
-  };
+  }, []);
 
-  const signInWithGoogle = async () => {
+  const signInWithGoogle = useCallback(async () => {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
@@ -103,9 +103,9 @@ export function AuthProvider({
       },
     });
     if (error) throw error;
-  };
+  }, []);
 
-  const signUp = async (email: string, password: string, fullName: string, role: 'customer' | 'provider') => {
+  const signUp = useCallback(async (email: string, password: string, fullName: string, role: 'customer' | 'provider') => {
     const { error } = await supabase.auth.signUp({
       email,
       password,
@@ -117,14 +117,14 @@ export function AuthProvider({
       },
     });
     if (error) throw error;
-  };
+  }, []);
 
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
-  };
+  }, []);
 
-  const updateProfile = async (updates: Partial<Profile>) => {
+  const updateProfile = useCallback(async (updates: Partial<Profile>) => {
     if (!user) throw new Error('No user logged in');
     const { error } = await db
       .from('profiles')
@@ -132,17 +132,16 @@ export function AuthProvider({
       .eq('id', user.id);
     if (error) throw error;
     await refreshProfile();
-  };
+  }, [user, refreshProfile]);
 
-  // Capability flags — source of truth for new code.
-  // Fallback to `role` so accounts created before the capability migration
-  // (with is_customer/is_provider unset) still behave correctly.
+  // Capability flags
   const isCustomer =
     profile?.is_customer ??
     (profile?.role === 'customer' || profile?.role === undefined);
   const isProvider = profile?.is_provider ?? profile?.role === 'provider';
 
-  const value = {
+  // 🔥 FIX: Memoize the value object so consumers only re-render when data actually changes
+  const value = useMemo(() => ({
     session,
     user,
     profile,
@@ -157,7 +156,10 @@ export function AuthProvider({
     signOut,
     updateProfile,
     refreshProfile,
-  };
+  }), [
+    session, user, profile, isLoading, isCustomer, isProvider,
+    signIn, signInWithOTP, verifyOTP, signInWithGoogle, signUp, signOut, updateProfile, refreshProfile
+  ]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

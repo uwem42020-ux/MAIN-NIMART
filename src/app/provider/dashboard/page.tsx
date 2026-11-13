@@ -80,36 +80,50 @@ export default function ProviderDashboard() {
   }, [user]);
 
   async function fetchAllData() {
+    if (!user?.id) return;
     setLoading(true);
     try {
-      const [providerRes, bookingsRes, reviewsRes, verificationRes, referralsRes, portfolioRes, servicesRes] = await Promise.all([
-        db.from('providers').select('*').eq('id', user!.id).single(),
-        db.from('bookings').select('*').eq('provider_id', user!.id),
-        db.from('reviews').select('rating').eq('provider_id', user!.id),
-        db.from('verification_documents').select('status').eq('provider_id', user!.id).eq('status', 'pending').limit(1),
-        db.from('referrals').select('*', { count: 'exact', head: false }).eq('referrer_id', user!.id),
-        db.from('portfolio_images').select('id', { count: 'exact', head: true }).eq('provider_id', user!.id),
-        db.from('provider_services').select('id', { count: 'exact', head: true }).eq('provider_id', user!.id),
+      // 🔥 FIX: Use count: 'exact', head: true to get numbers without downloading rows
+      const [
+        providerRes, 
+        bookingsTotalRes,
+        bookingsPendingRes,
+        bookingsCompletedRes,
+        reviewsRes, 
+        verificationRes, 
+        referralsRes, 
+        portfolioRes, 
+        servicesRes,
+        profileRes
+      ] = await Promise.all([
+        db.from('providers').select('*').eq('id', user.id).single(),
+        db.from('bookings').select('*', { count: 'exact', head: true }).eq('provider_id', user.id),
+        db.from('bookings').select('*', { count: 'exact', head: true }).eq('provider_id', user.id).eq('status', 'pending'),
+        db.from('bookings').select('*', { count: 'exact', head: true }).eq('provider_id', user.id).eq('status', 'completed'),
+        db.from('reviews').select('rating').eq('provider_id', user.id),
+        db.from('verification_documents').select('status').eq('provider_id', user.id).eq('status', 'pending').limit(1),
+        db.from('referrals').select('*').eq('referrer_id', user.id),
+        db.from('portfolio_images').select('id', { count: 'exact', head: true }).eq('provider_id', user.id),
+        db.from('provider_services').select('id', { count: 'exact', head: true }).eq('provider_id', user.id),
+        db.from('profiles').select('*').eq('id', user.id).single(),
       ]);
 
       const provider = providerRes.data as any;
-      const bookings = (bookingsRes.data || []) as any[];
+      const profileData = profileRes.data as any;
       const reviews = (reviewsRes.data || []) as any[];
       const pendingVerification = (verificationRes.data || []) as any[];
 
-      const { data: profileData } = await db.from('profiles').select('*').eq('id', user!.id).single();
-
       setProviderData({ ...provider, profile: profileData });
-      setIsVerified((profileData as any)?.is_verified || false);
+      setIsVerified(profileData?.is_verified || false);
       setHasPendingVerification(pendingVerification.length > 0);
       setCoinBalance(provider?.coin_balance || 0);
-      setPortfolioCount((portfolioRes as any).count || 0);
-      setServicesCount((servicesRes as any).count || 0);
+      setPortfolioCount(portfolioRes.count || 0);
+      setServicesCount(servicesRes.count || 0);
 
       setStats({
-        totalBookings: bookings.length,
-        pendingBookings: bookings.filter((b: any) => b.status === 'pending').length,
-        completedBookings: bookings.filter((b: any) => b.status === 'completed').length,
+        totalBookings: bookingsTotalRes.count || 0,
+        pendingBookings: bookingsPendingRes.count || 0,
+        completedBookings: bookingsCompletedRes.count || 0,
         averageRating: reviews.length
           ? reviews.reduce((acc: number, r: any) => acc + r.rating, 0) / reviews.length
           : 0,
@@ -117,9 +131,9 @@ export default function ProviderDashboard() {
       });
 
       if (provider && !provider.referral_code) {
-        const name = provider.business_name || (profileData as any)?.full_name || 'Provider';
+        const name = provider.business_name || profileData?.full_name || 'Provider';
         const code = await generateUniqueReferralCode(name);
-        await db.from('providers').update({ referral_code: code }).eq('id', user!.id);
+        await db.from('providers').update({ referral_code: code }).eq('id', user.id);
         setReferralCode(code);
       } else if (provider?.referral_code) {
         setReferralCode(provider.referral_code);
@@ -132,9 +146,13 @@ export default function ProviderDashboard() {
         awarded: refs.filter((r: any) => r.status === 'awarded').length,
       });
 
-      if (provider && profileData && (!(profileData as any)?.lga_id || !provider.business_name)) {
+      if (provider && profileData && (!profileData?.lga_id || !provider.business_name)) {
         router.push('/provider/setup');
       }
+    } catch (error) {
+      // 🔥 FIX: Added error handling so it doesn't spin forever if a fetch fails
+      console.error("Dashboard fetch error:", error);
+      toast.error("Failed to load dashboard data.");
     } finally {
       setLoading(false);
     }
@@ -160,17 +178,21 @@ export default function ProviderDashboard() {
       const duration = boostType === 'standard' ? 7 : 30;
       const newBoost = new Date();
       newBoost.setDate(newBoost.getDate() + duration);
-      await db.rpc('purchase_boost', {
+      
+      const { error } = await db.rpc('purchase_boost', {
         p_provider_id: user!.id,
         p_cost: cost,
         p_boost_until: newBoost.toISOString(),
       });
+      
+      if (error) throw error;
+      
       setCoinBalance(prev => prev - cost);
       toast.success(`Profile boosted for ${duration} days!`);
       setShowBoostModal(false);
       fetchAllData();
     } catch (error: any) {
-      toast.error(error.message);
+      toast.error(error.message || 'Failed to apply boost');
     } finally {
       setBoostLoading(false);
     }
@@ -195,17 +217,21 @@ export default function ProviderDashboard() {
       }
       const newTop = new Date();
       newTop.setDate(newTop.getDate() + 7);
-      await db.rpc('purchase_top_placement', {
+      
+      const { error } = await db.rpc('purchase_top_placement', {
         p_provider_id: user!.id,
         p_cost: cost,
         p_top_until: newTop.toISOString(),
       });
+
+      if (error) throw error;
+
       setCoinBalance(prev => prev - cost);
       toast.success('Top placement activated for 7 days!');
       setShowTopPlacementModal(false);
       fetchAllData();
     } catch (error: any) {
-      toast.error(error.message);
+      toast.error(error.message || 'Failed to apply top placement');
     } finally {
       setBoostLoading(false);
     }
@@ -216,17 +242,18 @@ export default function ProviderDashboard() {
     setBoostLoading(true);
     try {
       const cost = EXTRA_CATEGORY_COST;
-      await db.rpc('purchase_extra_category', {
+      const { error } = await db.rpc('purchase_extra_category', {
         p_provider_id: user!.id,
         p_category_slug: extraCategorySlug,
         p_cost: cost,
       });
+      if (error) throw error;
       setCoinBalance(prev => prev - cost);
       toast.success('Extra category added!');
       setShowExtraCategoryModal(false);
       fetchAllData();
     } catch (error: any) {
-      toast.error(error.message);
+      toast.error(error.message || 'Failed to add category');
     } finally {
       setBoostLoading(false);
     }
@@ -249,15 +276,7 @@ export default function ProviderDashboard() {
     }
   };
 
-  if (!user) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <NimartSpinner size="lg" />
-      </div>
-    );
-  }
-
-  if (loading) {
+  if (!user || loading) {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="animate-pulse space-y-6">
@@ -334,7 +353,7 @@ export default function ProviderDashboard() {
         </div>
       )}
 
-      {/* Portfolio nudge — hidden once 3+ photos exist */}
+      {/* Portfolio nudge */}
       {portfolioCount < MIN_PORTFOLIO_PHOTOS && (
         <div className="bg-red-50 border border-red-200 rounded-2xl p-4 sm:p-5 mb-6 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center gap-3">

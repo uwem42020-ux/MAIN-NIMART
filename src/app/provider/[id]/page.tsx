@@ -1,9 +1,11 @@
 // src/app/provider/[id]/page.tsx
 import { Metadata } from 'next';
+import { cache } from 'react'; // 🔥 Added to deduplicate getProvider
 import { ProviderProfileClient } from './ProviderProfileClient';
 import { buildMetadata } from '@/lib/seo';
 
-async function getProvider(id: string) {
+// 🔥 FIX: Wrapped in cache() to prevent double network requests
+const getProvider = cache(async (id: string) => {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
@@ -11,11 +13,14 @@ async function getProvider(id: string) {
     apikey: serviceKey,
     Authorization: `Bearer ${serviceKey}`,
   };
+  
+  // 🔥 FIX: Added cache: 'no-store' so profile updates show immediately
+  const fetchOpts = { headers, cache: 'no-store' as RequestCache };
 
   try {
     const providerRes = await fetch(
       `${supabaseUrl}/rest/v1/providers?id=eq.${id}&select=*`,
-      { headers }
+      fetchOpts
     );
     if (!providerRes.ok) return null;
     const providers = await providerRes.json();
@@ -30,19 +35,21 @@ async function getProvider(id: string) {
       completedRes,
       lastSignInRes,
     ] = await Promise.all([
-      fetch(`${supabaseUrl}/rest/v1/profiles?id=eq.${id}&select=*`, { headers }),
-      fetch(`${supabaseUrl}/rest/v1/portfolio_images?provider_id=eq.${id}&order=created_at.desc`, { headers }),
-      fetch(`${supabaseUrl}/rest/v1/reviews?provider_id=eq.${id}&select=id,rating,content,created_at,reviewer:reviewer_id(full_name,avatar_url)&order=created_at.desc`, { headers }),
-      fetch(`${supabaseUrl}/rest/v1/provider_services?provider_id=eq.${id}&order=created_at.asc`, { headers }),
+      fetch(`${supabaseUrl}/rest/v1/profiles?id=eq.${id}&select=*`, fetchOpts),
+      fetch(`${supabaseUrl}/rest/v1/portfolio_images?provider_id=eq.${id}&order=created_at.desc`, fetchOpts),
+      fetch(`${supabaseUrl}/rest/v1/reviews?provider_id=eq.${id}&select=id,rating,content,created_at,reviewer:reviewer_id(full_name,avatar_url)&order=created_at.desc`, fetchOpts),
+      fetch(`${supabaseUrl}/rest/v1/provider_services?provider_id=eq.${id}&order=created_at.asc`, fetchOpts),
       fetch(`${supabaseUrl}/rest/v1/rpc/get_provider_completed_bookings`, {
         method: 'POST',
         headers: { ...headers, 'Content-Type': 'application/json' },
         body: JSON.stringify({ provider_id: id }),
+        cache: 'no-store'
       }),
       fetch(`${supabaseUrl}/rest/v1/rpc/get_user_last_sign_in`, {
         method: 'POST',
         headers: { ...headers, 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_id: id }),
+        cache: 'no-store'
       }),
     ]);
 
@@ -75,7 +82,7 @@ async function getProvider(id: string) {
   } catch {
     return null;
   }
-}
+});
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id } = await params;
@@ -119,6 +126,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 
 export default async function ProviderPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  // This now reuses the cache from generateMetadata — no duplicate DB call!
   const initialProvider = await getProvider(id);
 
   if (!initialProvider) {

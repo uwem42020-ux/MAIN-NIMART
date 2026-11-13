@@ -10,13 +10,14 @@ export async function fetchProviderProfile(id: string) {
   if (providerError) throw providerError;
   if (!providerData) throw new Error('Provider not found');
 
+  // 🔥 FIX: Destructure the full response objects to check for errors instead of silently ignoring them
   const [
-    { data: profileData },
-    { data: portfolioImages },
-    { data: reviews },
-    { data: services },
-    { data: completedData },
-    { data: lastSignInData },
+    profileRes,
+    portfolioRes,
+    reviewsRes,
+    servicesRes,
+    completedRes,
+    lastSignInRes,
   ] = await Promise.all([
     db.from('profiles').select('*').eq('id', id).single(),
     db.from('portfolio_images').select('*').eq('provider_id', id).order('created_at', { ascending: false }),
@@ -26,14 +27,22 @@ export async function fetchProviderProfile(id: string) {
     db.rpc('get_user_last_sign_in', { user_id: id } as any),
   ]);
 
+  // Log errors so they show up in your monitoring, but don't crash the whole profile page if a non-critical table fails
+  if (profileRes.error) console.error('Profile fetch error:', profileRes.error);
+  if (portfolioRes.error) console.error('Portfolio fetch error:', portfolioRes.error);
+  if (reviewsRes.error) console.error('Reviews fetch error:', reviewsRes.error);
+  if (servicesRes.error) console.error('Services fetch error:', servicesRes.error);
+  if (completedRes.error) console.error('Completed bookings fetch error:', completedRes.error);
+  if (lastSignInRes.error) console.error('Last sign in fetch error:', lastSignInRes.error);
+
   return {
     ...(providerData as any),
-    profile: profileData ?? null,
-    portfolio_images: portfolioImages ?? [],
-    reviews: reviews ?? [],
-    services: services ?? [],
-    completedBookings: completedData ?? 0,
-    lastSignInAt: lastSignInData,
-    created_at: (profileData as any)?.created_at,
+    profile: profileRes.data ?? null,
+    portfolio_images: portfolioRes.data ?? [],
+    reviews: reviewsRes.data ?? [],
+    services: servicesRes.data ?? [],
+    completedBookings: completedRes.data ?? 0,
+    lastSignInAt: lastSignInRes.data,
+    created_at: (profileRes.data as any)?.created_at,
   };
 }

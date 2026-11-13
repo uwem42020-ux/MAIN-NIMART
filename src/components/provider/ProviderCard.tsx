@@ -81,7 +81,8 @@ export const ProviderCard = memo(function ProviderCard({
         className={cn(
           'relative bg-gray-200 overflow-hidden flex-shrink-0',
           // Made horizontal image larger for desktop
-          isPortrait ? 'w-full' : 'w-32 sm:w-40 md:w-48 aspect-square'
+          // 🔥 FIX: Added aspect-[4/5] to isPortrait to prevent layout shift (CLS)
+          isPortrait ? 'w-full aspect-[4/5]' : 'w-32 sm:w-40 md:w-48 aspect-square'
         )}
       >
         <Link

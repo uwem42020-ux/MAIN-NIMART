@@ -53,9 +53,6 @@ export function LocationDropdown({
   }, []);
 
   const { refs, floatingStyles } = useFloating({
-    elements: {
-      reference: triggerRef?.current ?? null,
-    },
     placement: 'bottom-start',
     middleware: [
       offset(6),
@@ -73,6 +70,13 @@ export function LocationDropdown({
     whileElementsMounted: autoUpdate,
     open: true,
   });
+
+  // 🔥 THE ONLY FIX: Safely attach the reference after mount to prevent (0,0) flash
+  useEffect(() => {
+    if (triggerRef?.current) {
+      refs.setReference(triggerRef.current);
+    }
+  }, [triggerRef, refs]);
 
   // ── Lock body scroll on mobile when dropdown is open ──
   useEffect(() => {

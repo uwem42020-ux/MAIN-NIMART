@@ -80,7 +80,8 @@ export default function ProviderBookings() {
         .from('bookings')
         .select('*')
         .eq('provider_id', user.id)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(100); // 🔥 FIX: Prevent downloading entire booking history
 
       if (activeTab === 'cancelled') {
         query = query.in('status', ['cancelled_by_customer', 'cancelled_by_provider', 'declined', 'expired']);
@@ -134,7 +135,6 @@ export default function ProviderBookings() {
   } : {};
 
   const updateStatus = async (bookingId: string, newStatus: string, booking: Booking) => {
-    // Determine expected current status for the RPC's optimistic-concurrency guard.
     let expected: string;
     switch (newStatus) {
       case 'confirmed':
@@ -149,7 +149,7 @@ export default function ProviderBookings() {
         expected = 'on_the_way';
         break;
       case 'in_progress':
-        expected = 'arrived'; // Note: Mobile allows confirmed -> in_progress directly, but web assumes travel
+        expected = 'arrived';
         break;
       case 'completed':
         expected = 'in_progress';
@@ -180,49 +180,56 @@ export default function ProviderBookings() {
     queryClient.invalidateQueries({ queryKey: ['provider-bookings', user?.id] });
 
     if (newStatus === 'completed') {
-      const { data: customerProfile } = await db
-        .from('profiles')
-        .select('email, fcm_token')
-        .eq('id', booking.customer_id)
-        .single();
+      // 🔥 FIX: Fire-and-forget background task so the UI doesn't freeze
+      void (async () => {
+        try {
+          const { data: customerProfile } = await db
+            .from('profiles')
+            .select('email, fcm_token')
+            .eq('id', booking.customer_id)
+            .single();
 
-      if (customerProfile?.email) {
-        await sendEmail(
-          customerProfile.email,
-          'Your Booking Has Been Completed',
-          `<h2>${booking.service_name} has been marked as completed</h2>
-           <p>Please confirm the job and leave a review for the provider.</p>`
-        );
-      }
+          if (customerProfile?.email) {
+            await sendEmail(
+              customerProfile.email,
+              'Your Booking Has Been Completed',
+              `<h2>${booking.service_name} has been marked as completed</h2>
+               <p>Please confirm the job and leave a review for the provider.</p>`
+            );
+          }
 
-      if (customerProfile?.fcm_token) {
-        await sendPushNotification(
-          customerProfile.fcm_token,
-          'Booking Completed',
-          `${booking.service_name} has been marked as completed. Please confirm the job.`
-        );
-      }
+          if (customerProfile?.fcm_token) {
+            await sendPushNotification(
+              customerProfile.fcm_token,
+              'Booking Completed',
+              `${booking.service_name} has been marked as completed. Please confirm the job.`
+            );
+          }
 
-      const { count: completedCount } = await db
-        .from('bookings')
-        .select('*', { count: 'exact', head: true })
-        .eq('provider_id', booking.provider_id)
-        .eq('status', 'completed');
+          const { count: completedCount } = await db
+            .from('bookings')
+            .select('*', { count: 'exact', head: true })
+            .eq('provider_id', booking.provider_id)
+            .eq('status', 'completed');
 
-      if (completedCount === 1) {
-        const { data: referral } = await db
-          .from('referrals')
-          .select('id, referrer_id, status')
-          .eq('referred_provider_id', booking.provider_id)
-          .eq('status', 'pending')
-          .single();
+          if (completedCount === 1) {
+            const { data: referral } = await db
+              .from('referrals')
+              .select('id, referrer_id, status')
+              .eq('referred_provider_id', booking.provider_id)
+              .eq('status', 'pending')
+              .single();
 
-        if (referral) {
-          await db.rpc('adjust_coin_balance', { p_provider_id: referral.referrer_id, p_amount: REFERRAL_BONUS });
-          await db.rpc('adjust_coin_balance', { p_provider_id: booking.provider_id, p_amount: REFERRAL_BONUS });
-          await db.from('referrals').update({ status: 'awarded', awarded_at: new Date().toISOString() }).eq('id', referral.id);
+            if (referral) {
+              await db.rpc('adjust_coin_balance', { p_provider_id: referral.referrer_id, p_amount: REFERRAL_BONUS });
+              await db.rpc('adjust_coin_balance', { p_provider_id: booking.provider_id, p_amount: REFERRAL_BONUS });
+              await db.from('referrals').update({ status: 'awarded', awarded_at: new Date().toISOString() }).eq('id', referral.id);
+            }
+          }
+        } catch (err) {
+          console.error('Background completion logic failed:', err);
         }
-      }
+      })();
     }
   };
 

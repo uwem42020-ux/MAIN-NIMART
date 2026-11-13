@@ -2,9 +2,13 @@
 import { useEffect, useState } from 'react';
 
 export function useOffline() {
-  const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  // 🔥 FIX: Start as false so SSR doesn't crash (navigator is undefined on server)
+  const [isOffline, setIsOffline] = useState(false);
 
   useEffect(() => {
+    // Set the actual state once mounted on the client
+    setIsOffline(!navigator.onLine);
+
     const handleOnline = () => setIsOffline(false);
     const handleOffline = () => setIsOffline(true);
 

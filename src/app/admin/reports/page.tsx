@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react';
 import { db } from '@/lib/supabase-any';
 import { format } from 'date-fns';
-import { CheckCircle, XCircle, Eye } from 'lucide-react';
+import { Eye } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { cn } from '@/lib/utils';
 import { NimartSpinner } from '@/components/common/NimartSpinner';
@@ -38,14 +38,23 @@ export default function AdminReports() {
         reporter:reporter_id(full_name),
         provider:provider_id(business_name)
       `)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .limit(100); // 🔥 FIX: Prevent loading infinite reports
 
     if (filter !== 'all') {
       query = query.eq('status', filter);
     }
 
-    const { data } = await query;
-    setReports(data || []);
+    const { data, error } = await query; // 🔥 FIX: Added error handling
+    
+    if (error) {
+      console.error('Failed to fetch reports:', error);
+      toast.error('Failed to load reports');
+      setReports([]);
+    } else {
+      setReports(data || []);
+    }
+    
     setLoading(false);
   }
 
@@ -70,13 +79,13 @@ export default function AdminReports() {
     <div className="max-w-7xl mx-auto px-4 py-8">
       <h1 className="text-3xl font-bold text-gray-900 mb-6">User Reports</h1>
 
-      <div className="flex gap-2 mb-6 border-b">
+      <div className="flex gap-2 mb-6 border-b overflow-x-auto">
         {['pending', 'reviewed', 'resolved', 'all'].map((f) => (
           <button
             key={f}
             onClick={() => setFilter(f as any)}
             className={cn(
-              'px-4 py-2 font-medium capitalize',
+              'px-4 py-2 font-medium capitalize whitespace-nowrap',
               filter === f ? 'text-primary-600 border-b-2 border-primary-600' : 'text-gray-500'
             )}
           >
@@ -86,26 +95,26 @@ export default function AdminReports() {
       </div>
 
       {reports.length === 0 ? (
-        <p className="text-gray-500 text-center py-12">No reports found.</p>
+        <p className="text-gray-500 text-center py-12 bg-white rounded-lg border shadow-sm">No reports found.</p>
       ) : (
         <div className="space-y-3">
           {reports.map((report) => (
             <div key={report.id} className="bg-white rounded-lg shadow-sm border p-4">
-              <div className="flex items-start justify-between">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div>
-                  <p className="font-medium">
-                    {report.reporter?.full_name} reported {report.provider?.business_name}
+                  <p className="font-medium text-gray-900">
+                    {report.reporter?.full_name || 'User'} reported {report.provider?.business_name || 'Provider'}
                   </p>
                   <p className="text-sm text-gray-600 mt-1">{report.reason}</p>
                   <p className="text-xs text-gray-400 mt-2">
                     {format(new Date(report.created_at), 'PPP p')}
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-shrink-0">
                   <select
                     value={report.status}
                     onChange={(e) => updateStatus(report.id, e.target.value)}
-                    className="text-sm border rounded-lg px-2 py-1"
+                    className="text-sm border rounded-lg px-2 py-2 outline-none focus:ring-2 focus:ring-primary-500"
                   >
                     <option value="pending">Pending</option>
                     <option value="reviewed">Reviewed</option>
@@ -116,7 +125,8 @@ export default function AdminReports() {
                     href={`/provider/${report.provider_id}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="p-2 text-primary-600 hover:bg-primary-50 rounded"
+                    className="p-2 text-primary-600 bg-primary-50 hover:bg-primary-100 rounded-lg transition"
+                    title="View Provider Profile"
                   >
                     <Eye className="h-4 w-4" />
                   </a>

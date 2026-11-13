@@ -7,6 +7,8 @@ import type { ProviderWithProfile } from '@/components/provider/ProviderCardPort
 import CategoryLandingClient from './CategoryLandingClient';
 import { buildMetadata } from '@/lib/seo';
 
+export const revalidate = 3600; // Cache page for 1 hour
+
 interface CategoryPageProps {
   params: Promise<{ categorySlug: string }>;
 }

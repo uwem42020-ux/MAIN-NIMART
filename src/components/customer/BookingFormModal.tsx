@@ -22,28 +22,34 @@ export function BookingFormModal({ isOpen, onClose, providerId, providerName, pr
   const { user, profile } = useAuth();
   const [loading, setLoading] = useState(false);
   const [gpsCoords, setGpsCoords] = useState<{ lat: number; lng: number } | null>(null);
-  const [formData, setFormData] = useState({
+  
+  const initialFormState = {
     serviceName: '',
     bookingDate: format(new Date(), 'yyyy-MM-dd'),
     bookingTime: '10:00',
     duration: 60,
     location: profile?.lga_name || '',
     specialInstructions: '',
-  });
+  };
 
-  // Capture GPS silently
+  const [formData, setFormData] = useState(initialFormState);
+
+  // 🔥 FIX 1: Reset the form every time the modal opens for a new provider
   useEffect(() => {
-    if (isOpen && navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setGpsCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-        },
-        () => {
-          // GPS not available – that's fine
-        }
-      );
+    if (isOpen) {
+      setFormData({
+        ...initialFormState,
+        location: profile?.lga_name || '',
+      });
+      
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => setGpsCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+          () => {}
+        );
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, profile?.lga_name]);
 
   if (!isOpen) return null;
 
@@ -56,10 +62,13 @@ export function BookingFormModal({ isOpen, onClose, providerId, providerName, pr
 
     setLoading(true);
     try {
-      // Basic VPN check
+      // VPN check wrapped with a 2-second timeout so it never blocks the booking
       let vpnDetected = false;
       try {
-        const ipRes = await fetch('https://ipapi.co/json/');
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2000);
+        const ipRes = await fetch('https://ipapi.co/json/', { signal: controller.signal });
+        clearTimeout(timeoutId);
         const ipData = await ipRes.json();
         vpnDetected = ipData?.proxy === true || ipData?.hosting === true || false;
       } catch {}
@@ -76,6 +85,7 @@ export function BookingFormModal({ isOpen, onClose, providerId, providerName, pr
         location: formData.location,
         special_instructions: formData.specialInstructions,
         status: 'pending',
+        customer_confirmation_status: 'pending', // 🔥 FIX 3: Explicitly set this so the UI works
         customer_gps_lat: gpsCoords?.lat || null,
         customer_gps_lng: gpsCoords?.lng || null,
         vpn_detected: vpnDetected,
@@ -85,80 +95,75 @@ export function BookingFormModal({ isOpen, onClose, providerId, providerName, pr
       if (error) throw error;
 
       toast.success('Booking request sent!');
+      
+      // 🔥 FIX 2: Close the modal immediately so the user isn't waiting.
+      onClose(); 
 
-      // ---- Send styled email + push to provider ----
-      const { data: providerProfile } = await db
-        .from('profiles')
-        .select('email, fcm_token')
-        .eq('id', providerId)
-        .single();
+      // ---- Fire and forget emails/push notifications in the background ----
+      (async () => {
+        try {
+          const { data: providerProfile } = await db.from('profiles').select('email, fcm_token').eq('id', providerId).single();
+          const prov = providerProfile as any;
 
-      const prov = providerProfile as any;
+          if (prov?.email) {
+            await sendEmail(
+              prov.email,
+              `New Booking Request – ${formData.serviceName}`,
+              providerNewBookingEmail({
+                serviceName: formData.serviceName,
+                bookingDate: formData.bookingDate,
+                bookingTime: formData.bookingTime,
+                location: formData.location,
+              })
+            );
+          }
 
-      if (prov?.email) {
-        await sendEmail(
-          prov.email,
-          `New Booking Request – ${formData.serviceName}`,
-          providerNewBookingEmail({
-            serviceName: formData.serviceName,
-            bookingDate: formData.bookingDate,
-            bookingTime: formData.bookingTime,
-            location: formData.location,
-          })
-        );
-      }
+          if (prov?.fcm_token) {
+            await sendPushNotification(
+              prov.fcm_token,
+              'New Booking Request',
+              `${formData.serviceName} — ${formData.bookingDate} at ${formData.bookingTime}`
+            );
+          }
 
-      if (prov?.fcm_token) {
-        await sendPushNotification(
-          prov.fcm_token,
-          'New Booking Request',
-          `${formData.serviceName} — ${formData.bookingDate} at ${formData.bookingTime}`
-        );
-      }
+          if (user.email) {
+            await sendEmail(
+              user.email,
+              `Booking Submitted – ${formData.serviceName}`,
+              customerBookingConfirmationEmail({
+                providerName: providerName,
+                serviceName: formData.serviceName,
+                bookingDate: formData.bookingDate,
+                bookingTime: formData.bookingTime,
+                location: formData.location,
+              })
+            );
+          }
 
-      // ---- Send styled email + push to customer ----
-      if (user.email) {
-        await sendEmail(
-          user.email,
-          `Booking Submitted – ${formData.serviceName}`,
-          customerBookingConfirmationEmail({
-            providerName: providerName,
-            serviceName: formData.serviceName,
-            bookingDate: formData.bookingDate,
-            bookingTime: formData.bookingTime,
-            location: formData.location,
-          })
-        );
-      }
+          const { data: customerProfile } = await db.from('profiles').select('fcm_token').eq('id', user.id).single();
+          const cust = customerProfile as any;
 
-      const { data: customerProfile } = await db
-        .from('profiles')
-        .select('fcm_token')
-        .eq('id', user.id)
-        .single();
+          if (cust?.fcm_token) {
+            await sendPushNotification(
+              cust.fcm_token,
+              'Booking Submitted',
+              `Your booking for ${formData.serviceName} has been sent to ${providerName}.`
+            );
+          }
+        } catch (err) {
+          console.error('Background notification failed:', err);
+        }
+      })();
 
-      const cust = customerProfile as any;
-
-      if (cust?.fcm_token) {
-        await sendPushNotification(
-          cust.fcm_token,
-          'Booking Submitted',
-          `Your booking for ${formData.serviceName} has been sent to ${providerName}.`
-        );
-      }
-
-      onClose();
     } catch (error: any) {
       toast.error(error.message);
-    } finally {
-      setLoading(false);
+      setLoading(false); // Only stop loading on error (since we close the modal on success)
     }
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
-        {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-100">
           <div>
             <h2 className="text-xl font-bold text-gray-900">Book Service</h2>
@@ -175,7 +180,6 @@ export function BookingFormModal({ isOpen, onClose, providerId, providerName, pr
           </button>
         </div>
 
-        {/* Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">
@@ -268,7 +272,6 @@ export function BookingFormModal({ isOpen, onClose, providerId, providerName, pr
             />
           </div>
 
-          {/* Safety notice */}
           <div className="bg-yellow-50 rounded-xl p-3 flex items-start gap-2">
             <Shield className="h-5 w-5 text-yellow-600 flex-shrink-0 mt-0.5" />
             <p className="text-xs text-yellow-800">

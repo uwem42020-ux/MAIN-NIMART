@@ -1,3 +1,4 @@
+// src/app/event-space-akwa-ibom/page.tsx
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { db } from '@/lib/supabase-any';
@@ -13,6 +14,8 @@ import {
   Calendar,
   Building2,
 } from 'lucide-react';
+
+export const revalidate = 3600; // Cache page for 1 hour
 
 export const metadata: Metadata = {
   title: 'Event Space in Akwa Ibom | Book Venues & Halls | Nimart',

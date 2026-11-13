@@ -14,6 +14,8 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 
+export const revalidate = 3600; // Cache page for 1 hour
+
 export const metadata: Metadata = {
   title: 'Fridge Repair Near Me – Open Now | Nimart',
   description:

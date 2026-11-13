@@ -6,7 +6,7 @@ import { db } from '@/lib/supabase-any';
 import Link from 'next/link';
 import { MapPin } from 'lucide-react';
 import { OptimizedImage } from '@/components/common/OptimizedImage';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react'; // 🔥 Added useMemo
 import { cn } from '@/lib/utils';
 
 /* ---------- local storage helpers ---------- */
@@ -74,6 +74,9 @@ const SkeletonCard = () => (
 export function TopProvidersSlider({ initialData = [] }: { initialData?: any[] }) {
   const [isOffline, setIsOffline] = useState(false);
   const [mounted, setMounted] = useState(false);
+
+  // 🔥 FIX: Memoize the localStorage read so it only happens once on mount
+  const cachedPlaceholder = useMemo(() => loadFromCache('top-providers-cache'), []);
 
   useEffect(() => {
     setIsOffline(!navigator.onLine);
@@ -149,7 +152,7 @@ export function TopProvidersSlider({ initialData = [] }: { initialData?: any[] }
     staleTime: 1000 * 60 * 60 * 6,
     gcTime: 1000 * 60 * 60 * 24,
     retry: 1,
-    placeholderData: loadFromCache('top-providers-cache'),
+    placeholderData: cachedPlaceholder, // 🔥 Using the memoized version
   });
 
   if (isLoading && !topProviders && initialData.length === 0) {

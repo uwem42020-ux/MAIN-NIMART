@@ -53,10 +53,8 @@ export default function CustomerMessages() {
     if (!user) return;
     const channel = supabase
       .channel('customer-threads-list')
+      // 🔥 FIX: Only listen to the threads table. Removed the global messages listener.
       .on('postgres_changes', { event: '*', schema: 'public', table: 'threads', filter: `customer_id=eq.${user.id}` }, () =>
-        queryClient.invalidateQueries({ queryKey: ['customer-threads', user.id] })
-      )
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, () =>
         queryClient.invalidateQueries({ queryKey: ['customer-threads', user.id] })
       )
       .subscribe();

@@ -15,6 +15,7 @@ export function SortDropdown({ value, onChange }: SortDropdownProps) {
         onChange={(e) => onChange(e.target.value)}
         className="border-none outline-none bg-transparent text-xs sm:text-sm font-medium text-gray-700 cursor-pointer w-full"
       >
+        <option value="recommended">Recommended</option>
         <option value="distance">Nearest first</option>
         <option value="rating">Highest rated</option>
         <option value="availability">Available now</option>

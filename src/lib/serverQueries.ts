@@ -31,13 +31,7 @@ export async function fetchInitialProviders(): Promise<ProviderWithProfile[]> {
 }
 
 /**
- * Server-side search providers with DB-level filtering.
- *
- * NOTE: Previously this called `db.rpc('get_search_providers')` which returned
- * EVERY provider in the database, then filtered in JS. That was the root cause
- * of the 2-5s "View all →" hang. Now it filters at the DB level using direct
- * Supabase queries (matching SearchClient's client-side behavior for
- * consistency between SSR and hydration).
+ * Server-side search providers with DB-level filtering and pagination.
  */
 export async function fetchSearchProviders(searchParams: {
   q?: string;
@@ -46,34 +40,40 @@ export async function fetchSearchProviders(searchParams: {
   subcategory?: string;
   state?: string;
   lga?: string;
+  status?: string;
+  rating?: string;
+  limit?: number;
+  offset?: number;
 }): Promise<ProviderWithProfile[]> {
-  const { q, tier, category, subcategory, state, lga } = searchParams;
+  const { q, tier, category, subcategory, state, lga, status, rating, limit = 24, offset = 0 } = searchParams;
 
   let query = db
     .from('providers')
     .select(`
       id, business_name, description, status, is_available,
       selected_tier_slug, selected_category_slug, selected_subcategory_id,
-      tags, boost_until, top_placement_until
+      tags, boost_until, top_placement_until, cached_avg_rating
     `)
     .eq('is_available', true);
 
   if (q) {
-    const pattern = `%${q}%`;
-    // Match full_name too (matches SearchClient's behavior)
-    const { data: profilesByName } = await db
-      .from('profiles')
-      .select('id')
-      .ilike('full_name', pattern);
+    const safeQ = q.replace(/[%(),]/g, '').trim();
+    if (safeQ) {
+      const pattern = `%${safeQ}%`;
+      const { data: profilesByName } = await db
+        .from('profiles')
+        .select('id')
+        .ilike('full_name', pattern);
 
-    const providerIdsFromName = ((profilesByName as any[]) ?? []).map((p: any) => p.id);
+      const providerIdsFromName = ((profilesByName as any[]) ?? []).map((p: any) => p.id);
 
-    if (providerIdsFromName.length > 0) {
-      query = query.or(
-        `business_name.ilike.${pattern},description.ilike.${pattern},id.in.(${providerIdsFromName.join(',')})`
-      );
-    } else {
-      query = query.or(`business_name.ilike.${pattern},description.ilike.${pattern}`);
+      if (providerIdsFromName.length > 0) {
+        query = query.or(
+          `business_name.ilike.${pattern},description.ilike.${pattern},id.in.(${providerIdsFromName.join(',')})`
+        );
+      } else {
+        query = query.or(`business_name.ilike.${pattern},description.ilike.${pattern}`);
+      }
     }
   }
 
@@ -81,7 +81,14 @@ export async function fetchSearchProviders(searchParams: {
   if (category) query = query.eq('selected_category_slug', category);
   if (subcategory) query = query.eq('selected_subcategory_id', parseInt(subcategory));
 
-  // Location filtering — resolve profile IDs first, then filter providers by id
+  if (status) {
+    const statusArray = status.split(',').filter(Boolean);
+    if (statusArray.length > 0) query = query.in('status', statusArray);
+  }
+  if (rating) {
+    query = query.gte('cached_avg_rating', parseFloat(rating));
+  }
+
   if (lga) {
     const lgaId = parseInt(lga);
     if (!isNaN(lgaId)) {
@@ -94,7 +101,6 @@ export async function fetchSearchProviders(searchParams: {
       query = query.in('id', ids);
     }
   } else if (state) {
-    // state can arrive as numeric ID or as state name (SEO URLs)
     let stateId: number | null = null;
     const parsed = parseInt(state);
     if (!isNaN(parsed)) {
@@ -127,8 +133,7 @@ export async function fetchSearchProviders(searchParams: {
     query = query.in('id', ids);
   }
 
-  // Bound the result set — the client only ever displays this many anyway
-  const { data: providersData, error } = await query.limit(100);
+  const { data: providersData, error } = await query.range(offset, offset + limit - 1);
   if (error || !(providersData as any[])?.length) return [];
 
   const providerIds = (providersData as any[]).map((p: any) => p.id);
@@ -177,7 +182,6 @@ export async function fetchSearchProviders(searchParams: {
     } as ProviderWithProfile;
   });
 
-  // Sort: boosted first, then by rating (matches client default sort)
   const now = new Date();
   const boosted: ProviderWithProfile[] = [];
   const notBoosted: ProviderWithProfile[] = [];
@@ -253,11 +257,13 @@ export async function fetchTopProviders(): Promise<any[]> {
     .select('id, avatar_url, full_name, lga_id, is_verified')
     .in('id', providerIds);
 
-  const { data: lgas } = await db
-    .from('lga_centers')
-    .select('lga_id, lga_name, state_name');
-
   const profilesList = (profiles || []) as any[];
+
+  const requiredLgaIds = profilesList.map((p: any) => p.lga_id).filter((id: any) => id != null);
+  const { data: lgas } = requiredLgaIds.length > 0
+    ? await db.from('lga_centers').select('lga_id, lga_name, state_name').in('lga_id', requiredLgaIds)
+    : { data: [] };
+
   const lgasList = (lgas || []) as any[];
 
   const lgaMap = new Map<number, { lga_name: string; state_name: string }>();

@@ -1,7 +1,7 @@
 // app/search/SearchClient.tsx
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { db } from '@/lib/supabase-any';
@@ -11,16 +11,10 @@ import { useAuth } from '@/contexts/AuthContext';
 import { EnhancedFilterSidebar } from '@/components/search/EnhancedFilterSidebar';
 import { SortDropdown } from '@/components/search/SortDropdown';
 import { ProviderGridSkeleton } from '@/components/skeletons/ProviderGridSkeleton';
-import { useState, useEffect, useRef, useMemo } from 'react'; // Added useMemo
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useDebounce } from '@/hooks/useDebounce';
 import { useSmartSort } from '@/hooks/useSmartSort';
-import {
-  Search as SearchIcon,
-  X,
-  LayoutGrid,
-  List,
-  SlidersHorizontal,
-} from 'lucide-react';
+import { Search as SearchIcon, X, LayoutGrid, List, SlidersHorizontal, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ProviderWithProfile } from '@/components/provider/ProviderCardPortrait';
 
@@ -41,6 +35,8 @@ interface SearchClientProps {
     subcategory?: string;
     state?: string;
     lga?: string;
+    status?: string;
+    rating?: string;
   };
 }
 
@@ -48,6 +44,7 @@ export function SearchClient({ initialProviders, searchParams: initialSearchPara
   const { profile } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
+  
   const [sortBy, setSortBy] = useState<string>('recommended');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -58,18 +55,13 @@ export function SearchClient({ initialProviders, searchParams: initialSearchPara
   const subcategory = searchParams.get('subcategory') || initialSearchParams.subcategory || undefined;
   const state = searchParams.get('state') || initialSearchParams.state || undefined;
   const lga = searchParams.get('lga') || initialSearchParams.lga || undefined;
+  const status = searchParams.get('status') || initialSearchParams.status || undefined;
+  const rating = searchParams.get('rating') || initialSearchParams.rating || undefined;
 
   const userLat = profile?.lat ?? undefined;
   const userLng = profile?.lng ?? undefined;
 
-  const { data: smartSortData } = useSmartSort(
-    profile?.id,
-    userLat,
-    userLng,
-    tier,
-    category,
-    50
-  );
+  const { data: smartSortData } = useSmartSort(profile?.id, userLat, userLng, tier, category, 50);
 
   const [searchInput, setSearchInput] = useState(keyword);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
@@ -88,36 +80,20 @@ export function SearchClient({ initialProviders, searchParams: initialSearchPara
       setSuggestions([]);
       return;
     }
-
     const fetchSuggestions = async () => {
       const term = debouncedSearchTerm.trim();
       const pattern = `%${term}%`;
-
       const [providerRes, serviceRes] = await Promise.all([
         db.from('providers').select('id, business_name').ilike('business_name', pattern).limit(3),
         db.from('provider_services').select('id, name, provider_id').ilike('name', pattern).limit(3),
       ]);
-
       const providerIds = ((providerRes.data || []) as any[]).map((p: any) => p.id);
-
-      const { data: profiles } = providerIds.length > 0
-        ? await db.from('profiles').select('id, avatar_url').in('id', providerIds)
-        : { data: [] };
-
+      const { data: profiles } = providerIds.length > 0 ? await db.from('profiles').select('id, avatar_url').in('id', providerIds) : { data: [] };
       const avatarMap = new Map((profiles as any[])?.map((p: any) => [p.id, p.avatar_url]) || []);
-
       const newSuggestions: Suggestion[] = [];
 
       (providerRes.data as any[])?.forEach((p: any) => {
-        if (p.business_name) {
-          newSuggestions.push({
-            type: 'provider',
-            text: p.business_name,
-            subtext: 'Provider',
-            link: `/provider/${p.id}`,
-            image: avatarMap.get(p.id) || undefined,
-          });
-        }
+        if (p.business_name) newSuggestions.push({ type: 'provider', text: p.business_name, subtext: 'Provider', link: `/provider/${p.id}`, image: avatarMap.get(p.id) || undefined });
       });
 
       const serviceProviderIds = ((serviceRes.data || []) as any[]).map((s: any) => s.provider_id).filter(Boolean);
@@ -128,31 +104,17 @@ export function SearchClient({ initialProviders, searchParams: initialSearchPara
       }
 
       (serviceRes.data as any[])?.forEach((s: any) => {
-        newSuggestions.push({
-          type: 'service',
-          text: s.name,
-          subtext: serviceProvidersMap.get(s.provider_id) || 'Service',
-          link: `/search?q=${encodeURIComponent(s.name)}`,
-          image: undefined,
-        });
+        newSuggestions.push({ type: 'service', text: s.name, subtext: serviceProvidersMap.get(s.provider_id) || 'Service', link: `/search?q=${encodeURIComponent(s.name)}`, image: undefined });
       });
 
       setSuggestions(newSuggestions.slice(0, 6));
     };
-
     fetchSuggestions();
   }, [debouncedSearchTerm]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (
-        suggestionsRef.current &&
-        !suggestionsRef.current.contains(e.target as Node) &&
-        inputRef.current &&
-        !inputRef.current.contains(e.target as Node)
-      ) {
-        setShowSuggestions(false);
-      }
+      if (suggestionsRef.current && !suggestionsRef.current.contains(e.target as Node) && inputRef.current && !inputRef.current.contains(e.target as Node)) setShowSuggestions(false);
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -162,19 +124,15 @@ export function SearchClient({ initialProviders, searchParams: initialSearchPara
     e?.preventDefault();
     const params = new URLSearchParams(searchParams.toString());
     const trimmed = searchInput.trim();
-    if (trimmed) {
-      params.set('q', trimmed);
-    } else {
-      params.delete('q');
-    }
+    if (trimmed) params.set('q', trimmed);
+    else params.delete('q');
     router.push(`/search?${params.toString()}`);
     setShowSuggestions(false);
   };
 
   const handleSuggestionClick = (suggestion: Suggestion) => {
-    if (suggestion.type === 'provider') {
-      router.push(suggestion.link);
-    } else {
+    if (suggestion.type === 'provider') router.push(suggestion.link);
+    else {
       const params = new URLSearchParams(searchParams.toString());
       params.set('q', suggestion.text);
       router.push(`/search?${params.toString()}`);
@@ -183,69 +141,69 @@ export function SearchClient({ initialProviders, searchParams: initialSearchPara
     setShowSuggestions(false);
   };
 
-  const { data: providers, isLoading } = useQuery({
-    // 1. Removed sortBy and smartSortData from the queryKey so changing sort doesn't refetch from DB
-    queryKey: ['search-providers', keyword, tier, category, subcategory, state, lga, userLat, userLng],
-    queryFn: async () => {
+  // 🔥 FIX: Switched to useInfiniteQuery for pagination
+  const { 
+    data: providersData, 
+    isLoading,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage
+  } = useInfiniteQuery({
+    queryKey: ['search-providers', keyword, tier, category, subcategory, state, lga, status, rating, userLat, userLng],
+    queryFn: async ({ pageParam = 0 }) => {
+      const LIMIT = 24;
+      const offset = pageParam * LIMIT;
+
       let query = db
         .from('providers')
         .select(`
-          id,
-          business_name,
-          description,
-          status,
-          is_available,
-          selected_tier_slug,
-          selected_category_slug,
-          selected_subcategory_id,
-          tags,
-          boost_until
+          id, business_name, description, status, is_available,
+          selected_tier_slug, selected_category_slug, selected_subcategory_id,
+          tags, boost_until, cached_avg_rating
         `)
         .eq('is_available', true);
 
       if (keyword) {
-        const pattern = `%${keyword}%`;
-        const { data: profilesByName } = await db
-          .from('profiles')
-          .select('id')
-          .ilike('full_name', pattern);
-
-        const providerIdsFromName = (profilesByName as any[])?.map((p: any) => p.id) || [];
-        if (providerIdsFromName.length > 0) {
-          query = query.or(`business_name.ilike.${pattern},description.ilike.${pattern},id.in.(${providerIdsFromName.join(',')})`);
-        } else {
-          query = query.or(`business_name.ilike.${pattern},description.ilike.${pattern}`);
+        const safeKeyword = keyword.replace(/[%(),]/g, '').trim();
+        if (safeKeyword) {
+          const pattern = `%${safeKeyword}%`;
+          const { data: profilesByName } = await db.from('profiles').select('id').ilike('full_name', pattern);
+          const providerIdsFromName = (profilesByName as any[])?.map((p: any) => p.id) || [];
+          if (providerIdsFromName.length > 0) {
+            query = query.or(`business_name.ilike.${pattern},description.ilike.${pattern},id.in.(${providerIdsFromName.join(',')})`);
+          } else {
+            query = query.or(`business_name.ilike.${pattern},description.ilike.${pattern}`);
+          }
         }
       }
+
       if (tier) query = query.eq('selected_tier_slug', tier);
       if (category) query = query.eq('selected_category_slug', category);
       if (subcategory) query = query.eq('selected_subcategory_id', parseInt(subcategory));
 
+      if (status) {
+        const statusArray = status.split(',').filter(Boolean);
+        if (statusArray.length > 0) query = query.in('status', statusArray);
+      }
+      if (rating) query = query.gte('cached_avg_rating', parseFloat(rating));
+
       if (lga) {
         const { data: profilesInLga } = await db.from('profiles').select('id').eq('lga_id', parseInt(lga));
-        if ((profilesInLga as any[])?.length) {
-          query = query.in('id', (profilesInLga as any[]).map((p: any) => p.id));
-        } else {
-          return [] as ProviderWithProfile[];
-        }
+        if ((profilesInLga as any[])?.length) query = query.in('id', (profilesInLga as any[]).map((p: any) => p.id));
+        else return { items: [] as ProviderWithProfile[], count: 0 };
       } else if (state) {
         const { data: lgasInState } = await db.from('lga_centers').select('lga_id').eq('state_id', parseInt(state));
         if ((lgasInState as any[])?.length) {
           const lgaIds = (lgasInState as any[]).map((l: any) => l.lga_id);
           const { data: profilesInState } = await db.from('profiles').select('id').in('lga_id', lgaIds);
-          if ((profilesInState as any[])?.length) {
-            query = query.in('id', (profilesInState as any[]).map((p: any) => p.id));
-          } else {
-            return [] as ProviderWithProfile[];
-          }
-        } else {
-          return [] as ProviderWithProfile[];
-        }
+          if ((profilesInState as any[])?.length) query = query.in('id', (profilesInState as any[]).map((p: any) => p.id));
+          else return { items: [] as ProviderWithProfile[], count: 0 };
+        } else return { items: [] as ProviderWithProfile[], count: 0 };
       }
 
-      const { data: providersData, error } = await query;
+      const { data: providersData, error } = await query.range(offset, offset + LIMIT - 1);
       if (error) throw error;
-      if (!(providersData as any[])?.length) return [] as ProviderWithProfile[];
+      if (!(providersData as any[])?.length) return { items: [] as ProviderWithProfile[], count: 0 };
 
       const providerIds = (providersData as any[]).map((p: any) => p.id);
 
@@ -269,26 +227,14 @@ export function SearchClient({ initialProviders, searchParams: initialSearchPara
 
       let distancesMap: Record<string, number> = {};
       if (userLat && userLng) {
-        const { data: distances } = await db.rpc('get_provider_distances', {
-          user_lat: userLat,
-          user_lng: userLng,
-          provider_ids: providerIds,
-        } as any);
-        if (distances) {
-          (distances as any[]).forEach((d: any) => {
-            distancesMap[d.provider_id] = d.distance_meters;
-          });
-        }
+        const { data: distances } = await db.rpc('get_provider_distances', { user_lat: userLat, user_lng: userLng, provider_ids: providerIds } as any);
+        if (distances) (distances as any[]).forEach((d: any) => { distancesMap[d.provider_id] = d.distance_meters; });
       }
 
       let lastSignInMap: Record<string, string | null> = {};
       if (providerIds.length > 0) {
         const { data: signInData } = await db.rpc('get_users_last_sign_in', { user_ids: providerIds } as any);
-        if (signInData) {
-          (signInData as any[]).forEach((row: any) => {
-            lastSignInMap[row.user_id] = row.last_sign_in_at;
-          });
-        }
+        if (signInData) (signInData as any[]).forEach((row: any) => { lastSignInMap[row.user_id] = row.last_sign_in_at; });
       }
 
       const providersWithDetails = (providersData as any[]).map((provider: any) => {
@@ -312,18 +258,28 @@ export function SearchClient({ initialProviders, searchParams: initialSearchPara
         } as ProviderWithProfile;
       });
 
-      // 2. Removed the sorting logic here. We just return the data.
-      return providersWithDetails;
+      return { items: providersWithDetails, count: providersData.length };
     },
-    // 3. Removed initialData and added placeholderData to prevent the flash
-    placeholderData: (previousData) => previousData ?? initialProviders,
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) => {
+      if (lastPage.count < 24) return undefined;
+      return allPages.length;
+    },
+    placeholderData: (previousData) => previousData || {
+      pages: [{ items: initialProviders, count: initialProviders.length }],
+      pageParams: [0],
+    },
     staleTime: 1000 * 60 * 2,
   });
 
-  // 4. Added useMemo to sort the data instantly on the client side
+  // 🔥 FIX: Combine pages and deduplicate, THEN sort.
   const sortedProviders = useMemo(() => {
-    if (!providers) return [];
-    const sorted = [...providers];
+    if (!providersData) return [];
+    const combined = providersData.pages.flatMap(p => p.items);
+    
+    // Deduplicate
+    const unique = Array.from(new Map(combined.map(p => [p.id, p])).values());
+    const sorted = [...unique];
     
     const now = new Date();
     const boosted = sorted.filter((p: any) => p.boost_until && new Date(p.boost_until) > now);
@@ -347,14 +303,10 @@ export function SearchClient({ initialProviders, searchParams: initialSearchPara
         }
 
         switch (sortBy) {
-          case 'distance':
-            return (a.distance ?? Infinity) - (b.distance ?? Infinity);
-          case 'rating':
-            return (b.average_rating ?? 0) - (a.average_rating ?? 0);
-          case 'availability':
-            return 0;
-          default:
-            return (b.average_rating ?? 0) - (a.average_rating ?? 0);
+          case 'distance': return (a.distance ?? Infinity) - (b.distance ?? Infinity);
+          case 'rating': return (b.average_rating ?? 0) - (a.average_rating ?? 0);
+          case 'availability': return 0;
+          default: return (b.average_rating ?? 0) - (a.average_rating ?? 0);
         }
       });
     };
@@ -363,18 +315,14 @@ export function SearchClient({ initialProviders, searchParams: initialSearchPara
     sortGroup(notBoosted);
 
     return [...boosted, ...notBoosted];
-  }, [providers, sortBy, smartSortData]);
+  }, [providersData, sortBy, smartSortData]);
 
-  const formatCategoryName = (slug?: string) =>
-    slug ? slug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') : '';
+  const formatCategoryName = (slug?: string) => slug ? slug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') : '';
 
   return (
     <div className="max-w-7xl mx-auto px-0 sm:px-4 lg:px-8 py-6">
       <div className="px-4 sm:px-0 mb-4">
-        <button
-          className="lg:hidden flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg"
-          onClick={() => setMobileSidebarOpen(true)}
-        >
+        <button className="lg:hidden flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg" onClick={() => setMobileSidebarOpen(true)}>
           <SlidersHorizontal className="h-5 w-5" /> Filters
         </button>
       </div>
@@ -385,9 +333,7 @@ export function SearchClient({ initialProviders, searchParams: initialSearchPara
           <aside className="relative w-80 max-w-[85%] bg-white h-full overflow-y-auto p-4 ml-auto shadow-xl">
             <div className="flex justify-between items-center mb-4">
               <h3 className="font-semibold">Filters</h3>
-              <button onClick={() => setMobileSidebarOpen(false)} className="p-1 hover:bg-gray-100 rounded">
-                <X className="h-5 w-5" />
-              </button>
+              <button onClick={() => setMobileSidebarOpen(false)} className="p-1 hover:bg-gray-100 rounded"><X className="h-5 w-5" /></button>
             </div>
             <EnhancedFilterSidebar />
           </aside>
@@ -408,27 +354,13 @@ export function SearchClient({ initialProviders, searchParams: initialSearchPara
                   ref={inputRef}
                   type="text"
                   value={searchInput}
-                  onChange={(e) => {
-                    setSearchInput(e.target.value);
-                    setShowSuggestions(true);
-                  }}
+                  onChange={(e) => { setSearchInput(e.target.value); setShowSuggestions(true); }}
                   onFocus={() => setShowSuggestions(true)}
                   placeholder="Search services..."
                   className="w-full pl-12 pr-10 py-3 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900 shadow-sm"
                 />
                 {searchInput && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSearchInput('');
-                      setSuggestions([]);
-                      const params = new URLSearchParams(searchParams.toString());
-                      params.delete('q');
-                      router.push(`/search?${params.toString()}`);
-                      inputRef.current?.focus();
-                    }}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                  >
+                  <button type="button" onClick={() => { setSearchInput(''); setSuggestions([]); const params = new URLSearchParams(searchParams.toString()); params.delete('q'); router.push(`/search?${params.toString()}`); inputRef.current?.focus(); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
                     <X className="h-4 w-4" />
                   </button>
                 )}
@@ -436,35 +368,18 @@ export function SearchClient({ initialProviders, searchParams: initialSearchPara
               <button type="submit" className="hidden">Search</button>
             </form>
 
-            {/* Suggestions dropdown with images */}
             {showSuggestions && debouncedSearchTerm && suggestions.length > 0 && (
-              <div
-                ref={suggestionsRef}
-                className="absolute z-20 mt-1 w-full bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden"
-              >
+              <div ref={suggestionsRef} className="absolute z-20 mt-1 w-full bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
                 {suggestions.map((s, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => handleSuggestionClick(s)}
-                    className="w-full flex items-center px-4 py-3 hover:bg-gray-50 transition text-left border-b last:border-0"
-                  >
+                  <button key={idx} onClick={() => handleSuggestionClick(s)} className="w-full flex items-center px-4 py-3 hover:bg-gray-50 transition text-left border-b last:border-0">
                     {s.image ? (
-                      <img
-                        src={`${s.image}?width=32&height=32&quality=60&resize=cover`}
-                        alt=""
-                        className="w-8 h-8 rounded-full object-cover mr-3 flex-shrink-0 bg-gray-200"
-                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                      />
+                      <img src={`${s.image}?width=32&height=32&quality=60&resize=cover`} alt="" className="w-8 h-8 rounded-full object-cover mr-3 flex-shrink-0 bg-gray-200" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                     ) : (
-                      <div className="w-8 h-8 rounded-full bg-primary-50 flex items-center justify-center mr-3 flex-shrink-0">
-                        <SearchIcon className="h-4 w-4 text-primary-500" />
-                      </div>
+                      <div className="w-8 h-8 rounded-full bg-primary-50 flex items-center justify-center mr-3 flex-shrink-0"><SearchIcon className="h-4 w-4 text-primary-500" /></div>
                     )}
                     <div>
                       <p className="text-sm font-medium text-gray-900">{s.text}</p>
-                      {s.subtext && (
-                        <p className="text-xs text-gray-500">{s.subtext}</p>
-                      )}
+                      {s.subtext && <p className="text-xs text-gray-500">{s.subtext}</p>}
                     </div>
                   </button>
                 ))}
@@ -478,95 +393,61 @@ export function SearchClient({ initialProviders, searchParams: initialSearchPara
             </h1>
             <div className="flex items-center gap-2">
               <div className="flex border border-gray-200 rounded-lg overflow-hidden">
-                <button
-                  onClick={() => setViewMode('grid')}
-                  className={cn('p-2', viewMode === 'grid' ? 'bg-primary-50 text-primary-600' : 'text-gray-500 hover:text-primary-600')}
-                  title="Grid view"
-                >
-                  <LayoutGrid className="h-5 w-5" />
-                </button>
-                <button
-                  onClick={() => setViewMode('list')}
-                  className={cn('p-2', viewMode === 'list' ? 'bg-primary-50 text-primary-600' : 'text-gray-500 hover:text-primary-600')}
-                  title="List view"
-                >
-                  <List className="h-5 w-5" />
-                </button>
+                <button onClick={() => setViewMode('grid')} className={cn('p-2', viewMode === 'grid' ? 'bg-primary-50 text-primary-600' : 'text-gray-500 hover:text-primary-600')} title="Grid view"><LayoutGrid className="h-5 w-5" /></button>
+                <button onClick={() => setViewMode('list')} className={cn('p-2', viewMode === 'list' ? 'bg-primary-50 text-primary-600' : 'text-gray-500 hover:text-primary-600')} title="List view"><List className="h-5 w-5" /></button>
               </div>
-              <Link href="/map" className="p-2 border border-gray-200 rounded-lg text-gray-500 hover:text-primary-600" title="Map view">
-                <svg className="w-5 h-5" aria-hidden="true">
-                  <use href="/icons/sprite.svg#map" />
-                </svg>
-              </Link>
+              <Link href="/map" className="p-2 border border-gray-200 rounded-lg text-gray-500 hover:text-primary-600" title="Map view"><svg className="w-5 h-5" aria-hidden="true"><use href="/icons/sprite.svg#map" /></svg></Link>
               <SortDropdown value={sortBy} onChange={setSortBy} />
             </div>
           </div>
 
-          {/* 5. Updated skeleton logic to only show if we have no data at all */}
           {isLoading && sortedProviders.length === 0 ? (
             <ProviderGridSkeleton />
           ) : !sortedProviders || sortedProviders.length === 0 ? (
             <div className="text-center py-16 bg-white rounded-xl border border-gray-200 shadow-sm px-4">
               <img src="/logo.png" alt="Nimart" className="h-12 w-auto mx-auto mb-4" />
               <h3 className="text-xl font-bold text-gray-900 mb-2">
-                {keyword || category || lga || state
-                  ? `Be the First Provider in ${
-                      lga
-                        ? 'this LGA'
-                        : state
-                        ? 'this State'
-                        : keyword
-                        ? `"${keyword}"`
-                        : formatCategoryName(category)
-                    }`
-                  : "Be the First Provider in Your Area!"}
+                {keyword || category || lga || state ? `Be the First Provider in ${lga ? 'this LGA' : state ? 'this State' : keyword ? `"${keyword}"` : formatCategoryName(category)}` : "Be the First Provider in Your Area!"}
               </h3>
-              <p className="text-gray-600 mb-1">
-                {`No providers found${keyword ? ` for "${keyword}"` : ''}${lga || state ? ` in this location` : ''}.`}
-              </p>
-              <p className="text-primary-700 font-semibold mb-4">
-                Get <span className="text-xl">₦1,000</span> when you register as the first provider in this LGA.
-              </p>
-              <Link
-                href={`/auth/signup?role=provider${lga ? `&lga=${lga}` : ''}${state ? `&state=${state}` : ''}`}
-                className="inline-block bg-primary-600 text-white px-8 py-3 rounded-xl font-semibold hover:bg-primary-700 transition shadow-md"
-              >
-                Claim ₦1,000 Now →
-              </Link>
+              <p className="text-gray-600 mb-1">{`No providers found${keyword ? ` for "${keyword}"` : ''}${lga || state ? ` in this location` : ''}.`}</p>
+              <p className="text-primary-700 font-semibold mb-4">Get <span className="text-xl">₦1,000</span> when you register as the first provider in this LGA.</p>
+              <Link href={`/auth/signup?role=provider${lga ? `&lga=${lga}` : ''}${state ? `&state=${state}` : ''}`} className="inline-block bg-primary-600 text-white px-8 py-3 rounded-xl font-semibold hover:bg-primary-700 transition shadow-md">Claim ₦1,000 Now →</Link>
               <p className="text-xs text-gray-500 mt-4">Limited to first 10 providers per area. Terms apply.</p>
             </div>
           ) : (
             <>
-              <div className="block sm:hidden">
-                <div className="columns-2 gap-2">
-                  {/* 6. Changed providers.map to sortedProviders.map */}
+              {viewMode === 'grid' ? (
+                <div className="columns-2 md:columns-3 lg:columns-4 gap-2 md:gap-4">
                   {sortedProviders.map((provider) => (
-                    <div key={provider.id} className="mb-2 break-inside-avoid">
+                    <div key={provider.id} className="mb-2 md:mb-4 break-inside-avoid">
                       <ProviderCardPortrait provider={provider} />
                     </div>
                   ))}
                 </div>
-              </div>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  {sortedProviders.map((provider) => (
+                    <ProviderCardHorizontal key={provider.id} provider={provider} />
+                  ))}
+                </div>
+              )}
 
-              <div className="hidden sm:block">
-                {viewMode === 'grid' ? (
-                  <div className="columns-2 md:columns-3 lg:columns-4 gap-4">
-                    {/* 7. Changed providers.map to sortedProviders.map */}
-                    {sortedProviders.map((provider) => (
-                      <div key={provider.id} className="mb-4 break-inside-avoid">
-                        <ProviderCardPortrait provider={provider} />
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-3">
-                    {/* 8. Changed providers.map to sortedProviders.map */}
-                    {sortedProviders.map((provider) => (
-                      <ProviderCardHorizontal key={provider.id} provider={provider} />
-                    ))}
-                  </div>
-                )}
-              </div>
+              {/* 🔥 NEW: Load More button */}
+              {hasNextPage && (
+                <div className="flex justify-center mt-8 w-full">
+                  <button
+                    onClick={() => fetchNextPage()}
+                    disabled={isFetchingNextPage}
+                    className="flex items-center gap-2 bg-white border border-gray-200 shadow-sm text-gray-800 px-8 py-3 rounded-full font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
+                  >
+                    {isFetchingNextPage ? (
+                      <><Loader2 className="h-5 w-5 animate-spin" /> Loading...</>
+                    ) : (
+                      'Load More Providers'
+                    )}
+                  </button>
+                </div>
+              )}
             </>
           )}
         </main>

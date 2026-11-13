@@ -78,8 +78,8 @@ export default function CustomerBookings() {
         .from('bookings')
         .select('*')
         .eq('customer_id', user.id)
-        .order('booking_date', { ascending: true })
-        .order('booking_time', { ascending: true });
+        .order('created_at', { ascending: false }) // 🔥 FIX: Sort by newest created
+        .limit(100); // 🔥 FIX: Prevent loading 1000+ bookings
 
       if (activeTab === 'cancelled') {
         query = query.in('status', ['cancelled_by_customer', 'cancelled_by_provider']);

@@ -1,4 +1,4 @@
-// src/components/provider/useProviderCard.ts
+// src/components/provider/useProviderCard.tsx
 'use client';
 
 import { useCallback } from 'react';
@@ -170,6 +170,7 @@ export function useProviderCard(provider: ProviderWithProfile) {
         </span>
       );
     }
+    
     if (!permissionGranted) {
       return (
         <button
@@ -180,7 +181,14 @@ export function useProviderCard(provider: ProviderWithProfile) {
         </button>
       );
     }
-    return null;
+
+    // 🔥 THE FIX: If the user's location IS on (permissionGranted is true) 
+    // but the provider has no location in the DB, show a fallback instead of a blank space.
+    return (
+      <span className="text-xs text-gray-400">
+        Distance unknown
+      </span>
+    );
   }, [provider.distance, permissionGranted, handleEnableLocation]);
 
   return {

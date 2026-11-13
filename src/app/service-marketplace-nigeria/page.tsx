@@ -16,6 +16,8 @@ import {
   Sparkles,
 } from 'lucide-react';
 
+export const revalidate = 3600; // Cache page for 1 hour
+
 export const metadata: Metadata = {
   title: 'Service Marketplace Platform in Nigeria | Nimart',
   description:

@@ -2,7 +2,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
 import { db } from '@/lib/supabase-any';
 import { Search, Ban, Trash2, CheckCircle, XCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -10,7 +9,6 @@ import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { NimartSpinner } from '@/components/common/NimartSpinner';
 
-// Human-readable labels for signup_source values
 const SOURCE_LABELS: Record<string, string> = {
   facebook: 'Facebook',
   instagram: 'Instagram',
@@ -46,17 +44,20 @@ export default function AdminUsers() {
   const [filter, setFilter] = useState<'all' | 'customer' | 'provider' | 'banned'>('all');
   const [sourceFilter, setSourceFilter] = useState<string>('all');
 
+  // 🔥 FIX: Only fetch once on mount. Filtering happens in memory.
   useEffect(() => {
     fetchUsers();
-  }, [filter]);
+  }, []);
 
   async function fetchUsers() {
     setLoading(true);
 
+    // 🔥 FIX: Added .limit(100) to prevent downloading the entire database
     const { data: profiles, error: profilesError } = await db
       .from('profiles')
       .select('id, full_name, phone, role, is_banned, created_at, email, signup_source, signup_platform, provider_complete')
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .limit(100);
 
     if (profilesError) {
       console.error('Error fetching profiles:', profilesError);
@@ -68,27 +69,20 @@ export default function AdminUsers() {
 
     const { data: providers, error: providersError } = await db
       .from('providers')
-      .select('id, business_name');
+      .select('id, business_name')
+      .limit(100); // 🔥 FIX: Limit providers too
 
     if (providersError) {
       console.error('Error fetching providers:', providersError);
     }
 
-    const providerMap = new Map();
+    const providerMap = new Map<string, string>();
     (providers || []).forEach((p: any) => providerMap.set(p.id, p.business_name));
 
-    let usersList = (profiles || []).map((profile: any) => ({
+    const usersList = (profiles || []).map((profile: any) => ({
       ...profile,
       business_name: providerMap.get(profile.id) || null,
     }));
-
-    if (filter === 'customer') {
-      usersList = usersList.filter((u: any) => u.role === 'customer');
-    } else if (filter === 'provider') {
-      usersList = usersList.filter((u: any) => u.role === 'provider');
-    } else if (filter === 'banned') {
-      usersList = usersList.filter((u: any) => u.is_banned);
-    }
 
     setUsers(usersList);
     setLoading(false);
@@ -121,7 +115,6 @@ export default function AdminUsers() {
 
     try {
       const { error } = await db.rpc('admin_delete_user', { user_id: userId });
-
       if (error) throw error;
       toast.success('User permanently deleted');
       fetchUsers();
@@ -130,8 +123,12 @@ export default function AdminUsers() {
     }
   }
 
-  const filteredUsers = users.filter((u: any) => {
-    // Source filter (client-side, applies to already-loaded list)
+  // 🔥 FIX: Moved filtering here so it's instant and doesn't refetch from DB
+  const filteredUsers = users.filter((u) => {
+    if (filter === 'customer' && u.role !== 'customer') return false;
+    if (filter === 'provider' && u.role !== 'provider') return false;
+    if (filter === 'banned' && !u.is_banned) return false;
+
     if (sourceFilter !== 'all') {
       if (sourceFilter === 'unknown') {
         if (u.signup_source) return false;
@@ -140,7 +137,6 @@ export default function AdminUsers() {
       }
     }
 
-    // Text search
     const term = searchTerm.toLowerCase();
     if (!term) return true;
     return (
@@ -162,13 +158,13 @@ export default function AdminUsers() {
             placeholder="Search by name, email, or business..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border rounded-lg"
+            className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
           />
         </div>
         <select
           value={filter}
           onChange={(e) => setFilter(e.target.value as any)}
-          className="px-4 py-2 border rounded-lg"
+          className="px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary-500"
         >
           <option value="all">All Users</option>
           <option value="customer">Customers Only</option>
@@ -178,7 +174,7 @@ export default function AdminUsers() {
         <select
           value={sourceFilter}
           onChange={(e) => setSourceFilter(e.target.value)}
-          className="px-4 py-2 border rounded-lg"
+          className="px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary-500"
         >
           <option value="all">All Sources</option>
           {Object.entries(SOURCE_LABELS).map(([value, label]) => (
@@ -207,15 +203,13 @@ export default function AdminUsers() {
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {filteredUsers.map((user: any) => (
+                {filteredUsers.map((user) => (
                   <tr key={user.id} className={cn(user.is_banned && 'bg-red-50')}>
                     <td className="px-4 py-3">
                       <div>
                         <p className="font-medium text-gray-900">{user.full_name || 'Unnamed'}</p>
                         <p className="text-sm text-gray-500">{user.email}</p>
-                        {user.business_name && (
-                          <p className="text-xs text-primary-600">{user.business_name}</p>
-                        )}
+                        {user.business_name && <p className="text-xs text-primary-600">{user.business_name}</p>}
                       </div>
                     </td>
                     <td className="px-4 py-3">
@@ -239,9 +233,7 @@ export default function AdminUsers() {
                           <span className="px-2 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
                             {SOURCE_LABELS[user.signup_source] || user.signup_source}
                           </span>
-                          {user.signup_platform && (
-                            <p className="text-xs text-gray-400 mt-1">{user.signup_platform}</p>
-                          )}
+                          {user.signup_platform && <p className="text-xs text-gray-400 mt-1">{user.signup_platform}</p>}
                         </div>
                       ) : (
                         <span className="text-xs text-gray-400">—</span>
@@ -250,13 +242,11 @@ export default function AdminUsers() {
                     <td className="px-4 py-3">
                       {user.is_banned ? (
                         <span className="flex items-center gap-1 text-red-600">
-                          <XCircle className="h-4 w-4" />
-                          Banned
+                          <XCircle className="h-4 w-4" /> Banned
                         </span>
                       ) : (
                         <span className="flex items-center gap-1 text-green-600">
-                          <CheckCircle className="h-4 w-4" />
-                          Active
+                          <CheckCircle className="h-4 w-4" /> Active
                         </span>
                       )}
                     </td>
@@ -267,10 +257,7 @@ export default function AdminUsers() {
                       <div className="flex items-center justify-end gap-2">
                         <button
                           onClick={() => handleBanUser(user.id, user.is_banned)}
-                          className={cn(
-                            'p-2 rounded hover:bg-gray-100',
-                            user.is_banned ? 'text-green-600' : 'text-yellow-600'
-                          )}
+                          className={cn('p-2 rounded hover:bg-gray-100', user.is_banned ? 'text-green-600' : 'text-yellow-600')}
                           title={user.is_banned ? 'Unban User' : 'Ban User'}
                         >
                           <Ban className="h-4 w-4" />
@@ -289,9 +276,7 @@ export default function AdminUsers() {
               </tbody>
             </table>
           </div>
-          {filteredUsers.length === 0 && (
-            <div className="text-center py-8 text-gray-500">No users found</div>
-          )}
+          {filteredUsers.length === 0 && <div className="text-center py-8 text-gray-500">No users found</div>}
         </div>
       )}
     </div>

@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import { cache } from 'react';
 import { db } from '@/lib/supabase-any';
 import { ServiceLocationClient } from './ServiceLocationClient';
+import { DemandCapture } from '@/components/seo/DemandCapture';
 import { buildMetadata } from '@/lib/seo';
 
 async function getLocationData(lgaId: string) {
@@ -20,8 +21,6 @@ async function getLocationData(lgaId: string) {
 }
 
 // Check if any available providers exist for this category + LGA.
-// If not, the page should 404 so Google removes it from the index
-// (fixes the "soft 404" problem where empty pages returned 200).
 const hasProviders = cache(async (categorySlug: string, lgaId: string) => {
   const parsedId = parseInt(lgaId);
   if (isNaN(parsedId)) return false;
@@ -61,15 +60,6 @@ export async function generateMetadata({ params }: { params: Promise<{ categoryS
     };
   }
 
-  const exists = await hasProviders(categorySlug, lgaId);
-  if (!exists) {
-    return {
-      title: 'No Providers Found',
-      description: 'There are no providers in this category for this location yet.',
-      robots: { index: false, follow: false },
-    };
-  }
-
   const categoryName = categorySlug
     .split('-')
     .map(w => w.charAt(0).toUpperCase() + w.slice(1))
@@ -78,6 +68,18 @@ export async function generateMetadata({ params }: { params: Promise<{ categoryS
   const lgaName = lgaData.lga_name || 'your area';
   const stateName = lgaData.state_name || '';
   const locationString = [lgaName, stateName].filter(Boolean).join(', ');
+
+  const exists = await hasProviders(categorySlug, lgaId);
+  
+  if (!exists) {
+    // 🔥 FIX: Return noindex to prevent Google Soft 404 penalties, but follow links
+    return buildMetadata({
+      title: `Hiring ${categoryName} in ${locationString} – Join Nimart`,
+      description: `We are looking for ${categoryName.toLowerCase()} in ${locationString}. Claim your page, get verified, and get 1,000 free Nicoins. Customers are waiting!`,
+      path: `/services/${categorySlug}/in/${lgaId}`,
+      noindex: true, // 👈 CRITICAL FIX
+    });
+  }
 
   return buildMetadata({
     title: `${categoryName} in ${locationString} – Book Trusted Professionals`,
@@ -93,7 +95,22 @@ export default async function ServiceLocationPage({ params }: { params: Promise<
   if (!lgaData) return notFound();
 
   const exists = await hasProviders(categorySlug, lgaId);
-  if (!exists) return notFound();
+  
+  // Show the Demand Capture page instead of 404ing
+  if (!exists) {
+    const categoryName = categorySlug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    const locationName = [lgaData.lga_name, lgaData.state_name].filter(Boolean).join(', ');
+    
+    return (
+      <DemandCapture 
+        categoryName={categoryName} 
+        locationName={locationName} 
+        categorySlug={categorySlug} 
+        lgaId={lgaId} 
+        stateName={lgaData.state_name}
+      />
+    );
+  }
 
   return <ServiceLocationClient categorySlug={categorySlug} lgaId={lgaId} lgaData={lgaData} />;
 }

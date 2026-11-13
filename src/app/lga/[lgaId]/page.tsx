@@ -7,6 +7,8 @@ import type { ProviderWithProfile } from '@/components/provider/ProviderCardPort
 import LgaLandingClient from './LgaLandingClient';
 import { buildMetadata } from '@/lib/seo';
 
+export const revalidate = 3600; // Cache page for 1 hour
+
 interface LgaPageProps {
   params: Promise<{ lgaId: string }>;
 }

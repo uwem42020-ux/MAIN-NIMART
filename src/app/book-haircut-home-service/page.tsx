@@ -14,6 +14,8 @@ import {
   Home,
 } from 'lucide-react';
 
+export const revalidate = 3600; // Cache page for 1 hour
+
 export const metadata: Metadata = {
   title: 'Book Haircut Home Service in Nigeria | Nimart',
   description:

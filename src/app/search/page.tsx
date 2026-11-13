@@ -99,10 +99,13 @@ function generateSearchSchema(providers: ProviderWithProfile[]) {
 
 export default async function SearchPage({ searchParams }: SearchPageProps) {
   const params = await searchParams;
-  const { q, tier, category, subcategory, state, lga } = params as Record<string, string | undefined>;
+  const { q, tier, category, subcategory, state, lga, status, rating } = params as Record<string, string | undefined>;
 
+  // Fetch exactly 24 items for the first page
   const initialProviders = await fetchSearchProviders({
-    q, tier, category, subcategory, state, lga,
+    q, tier, category, subcategory, state, lga, status, rating,
+    limit: 24,
+    offset: 0,
   });
 
   const schemaJson = generateSearchSchema(initialProviders);
@@ -113,7 +116,10 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(schemaJson) }}
       />
-      <SearchClient initialProviders={initialProviders} searchParams={{ q, tier, category, subcategory, state, lga }} />
+      <SearchClient 
+        initialProviders={initialProviders} 
+        searchParams={{ q, tier, category, subcategory, state, lga, status, rating }} 
+      />
     </>
   );
 }

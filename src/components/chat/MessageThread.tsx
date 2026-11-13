@@ -8,19 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { db } from '@/lib/supabase-any';
 import {
-  ArrowLeft,
-  Send,
-  Paperclip,
-  XCircle,
-  Image,
-  File,
-  CheckCheck,
-  Check,
-  X,
-  MoreVertical,
-  BookOpen,
-  Flag,
-  Star,
+  ArrowLeft, Send, Paperclip, XCircle, Image, File, CheckCheck, Check, X, MoreVertical, BookOpen, Flag, Star, Edit2,
 } from 'lucide-react';
 import { format, isToday, isThisWeek, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -62,23 +50,30 @@ export function MessageThread({ threadId }: MessageThreadProps) {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{ message: Message; x: number; y: number } | null>(null);
   const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
+  const [editingMessage, setEditingMessage] = useState<Message | null>(null);
+  
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const throttleRef = useRef<NodeJS.Timeout | null>(null);
 
-  const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  // 🔥 FIX: Only scroll to bottom if the user is already near the bottom
+  const scrollToBottom = (force = false) => {
+    if (!scrollContainerRef.current) return;
+    const { scrollHeight, scrollTop, clientHeight } = scrollContainerRef.current;
+    const isNearBottom = scrollHeight - scrollTop - clientHeight < 150;
+    if (force || isNearBottom) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['thread', threadId],
     queryFn: async () => {
       if (!threadId || !user) return null;
-      const { data: threadData } = await db
-        .from('threads')
-        .select('*')
-        .eq('id', threadId)
-        .single();
+      const { data: threadData } = await db.from('threads').select('*').eq('id', threadId).single();
       if (!threadData) return null;
 
       const thread = threadData as any;
@@ -97,9 +92,8 @@ export function MessageThread({ threadId }: MessageThreadProps) {
     enabled: !!threadId && !!user,
   });
 
-  // Scroll to bottom when messages change
   useEffect(() => {
-    scrollToBottom();
+    if (data?.messages) scrollToBottom();
   }, [data?.messages, typingUser]);
 
   const startFakeProgress = () => {
@@ -113,7 +107,6 @@ export function MessageThread({ threadId }: MessageThreadProps) {
     setTimeout(() => setUploadProgress(0), 500);
   };
 
-  // Realtime subscriptions
   useEffect(() => {
     if (!threadId) return;
     const channel = supabase
@@ -124,18 +117,16 @@ export function MessageThread({ threadId }: MessageThreadProps) {
             if (!old) return old;
             return { ...old, messages: [...old.messages, payload.new] };
           });
-          scrollToBottom();
-        })
+        }
+      )
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages', filter: `thread_id=eq.${threadId}` },
         (payload) => {
           queryClient.setQueryData(['thread', threadId], (old: any) => {
             if (!old) return old;
-            return {
-              ...old,
-              messages: old.messages.map((m: Message) => m.id === payload.new.id ? { ...m, ...payload.new } : m),
-            };
+            return { ...old, messages: old.messages.map((m: Message) => m.id === payload.new.id ? { ...m, ...payload.new } : m) };
           });
-        })
+        }
+      )
       .subscribe();
 
     const typingChannel = supabase.channel(`typing-${threadId}`, { config: { broadcast: { self: true } } });
@@ -151,23 +142,40 @@ export function MessageThread({ threadId }: MessageThreadProps) {
       supabase.removeChannel(channel).catch(console.warn);
       supabase.removeChannel(typingChannel).catch(console.warn);
     };
-  }, [threadId, user?.id]);
+  }, [threadId, user?.id, queryClient]);
 
-  // Typing broadcast
+  // 🔥 FIX: Throttled typing broadcast to prevent network flooding
   useEffect(() => {
-    if (!threadId || !newMessage.trim()) return;
+    if (!threadId || !newMessage.trim() || !user || editingMessage) return;
+    if (throttleRef.current) return; // Already sent recently
+
     const channel = supabase.channel(`typing-${threadId}`);
-    channel.send({ type: 'broadcast', event: 'typing', payload: { userId: user?.id } });
-  }, [newMessage, threadId, user?.id]);
+    channel.send({ type: 'broadcast', event: 'typing', payload: { userId: user.id } });
+    
+    throttleRef.current = setTimeout(() => {
+      throttleRef.current = null;
+    }, 2000); // Only send once every 2 seconds max
+  }, [newMessage, threadId, user?.id, editingMessage]);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    // 🔥 FIX: Prevent uploading massive files (5MB limit)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('File size must be less than 5MB');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+    setAttachment(file);
+  };
 
   const uploadAttachment = async () => {
     if (!attachment || !threadId || !user) return null;
     setUploading(true);
     startFakeProgress();
     const fileName = `${user.id}/${threadId}/${Date.now()}-${attachment.name}`;
-    const { data, error } = await supabase.storage
-      .from('chat-attachments')
-      .upload(fileName, attachment);
+    const { data, error } = await supabase.storage.from('chat-attachments').upload(fileName, attachment);
     stopFakeProgress();
     setUploading(false);
     if (error) {
@@ -184,6 +192,17 @@ export function MessageThread({ threadId }: MessageThreadProps) {
 
     const thread = data.thread as any;
     const content = newMessage.trim() || (attachment ? attachment.name : '');
+    
+    // 🔥 FIX: Handle Edit Mode
+    if (editingMessage) {
+      setSending(true);
+      await db.from('messages').update({ content: content, edited_at: new Date().toISOString() }).eq('id', editingMessage.id);
+      setEditingMessage(null);
+      setNewMessage('');
+      setSending(false);
+      return;
+    }
+
     let attachmentUrl: string | null = null;
     let attachmentType: string | null = null;
 
@@ -198,22 +217,20 @@ export function MessageThread({ threadId }: MessageThreadProps) {
     const recipient = thread.provider_id === user.id ? thread.customer_id : thread.provider_id;
     setNewMessage('');
     setAttachment(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
     setSending(true);
 
     try {
       await db.from('messages').insert({
-        thread_id: thread.id,
-        sender_id: user.id,
-        recipient_id: recipient,
-        content: content || null,
-        attachment_url: attachmentUrl,
-        attachment_type: attachmentType,
+        thread_id: thread.id, sender_id: user.id, recipient_id: recipient,
+        content: content || null, attachment_url: attachmentUrl, attachment_type: attachmentType,
       } as any);
       await db.from('threads').update({ last_message: content, last_message_at: new Date().toISOString() } as any).eq('id', thread.id);
+      
       queryClient.invalidateQueries({ queryKey: ['provider-threads', thread.provider_id] });
       queryClient.invalidateQueries({ queryKey: ['customer-threads', thread.customer_id] });
       await refetch();
-      scrollToBottom();
+      scrollToBottom(true); // Force scroll when *you* send a message
     } catch (err) {
       console.error(err);
     } finally {
@@ -226,13 +243,11 @@ export function MessageThread({ threadId }: MessageThreadProps) {
     setContextMenu(null);
   };
 
-  const editMessage = async (msg: Message) => {
-    if (!msg.content) return;
-    const newContent = prompt('Edit message:', msg.content);
-    if (newContent !== null && newContent !== msg.content) {
-      await db.from('messages').update({ content: newContent, edited_at: new Date().toISOString() } as any).eq('id', msg.id);
-    }
+  const startEditing = (msg: Message) => {
+    setEditingMessage(msg);
+    setNewMessage(msg.content || '');
     setContextMenu(null);
+    setTimeout(() => document.getElementById('chat-input')?.focus(), 50);
   };
 
   const reportMessage = () => {
@@ -255,12 +270,9 @@ export function MessageThread({ threadId }: MessageThreadProps) {
     e.currentTarget.addEventListener('touchmove', () => clearTimeout(timer), { once: true });
   };
 
-  // Safely extract other participant details
   const thread = (data as any)?.thread;
   const otherRole = (data as any)?.otherParticipant?.role;
-  const otherId = thread?.provider_id === user?.id
-    ? thread?.customer_id
-    : thread?.provider_id;
+  const otherId = thread?.provider_id === user?.id ? thread?.customer_id : thread?.provider_id;
 
   const bookAction = () => {
     if (otherRole === 'provider' && otherId) window.open(`/provider/${otherId}?book=true`, '_blank');
@@ -284,18 +296,13 @@ export function MessageThread({ threadId }: MessageThreadProps) {
   }
 
   if (!data || !(data as any).thread) {
-    return (
-      <div className="text-center py-8 text-gray-500">
-        Conversation not found.
-      </div>
-    );
+    return <div className="text-center py-8 text-gray-500">Conversation not found.</div>;
   }
 
   const { otherParticipant, messages } = data as any;
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-4 h-[calc(100vh-64px)] flex flex-col">
-      {/* Header (white banner) */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 mb-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -339,7 +346,6 @@ export function MessageThread({ threadId }: MessageThreadProps) {
         </div>
       </div>
 
-      {/* Messages */}
       <div ref={scrollContainerRef} className="flex-1 overflow-y-auto bg-gray-50 rounded-xl p-4 space-y-3">
         {messages.length === 0 ? (
           <p className="text-center text-gray-500 mt-8">No messages yet. Say hello!</p>
@@ -405,7 +411,6 @@ export function MessageThread({ threadId }: MessageThreadProps) {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Attachment preview */}
       {attachment && (
         <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 rounded-t-xl mt-2">
           <Image className="h-5 w-5 text-gray-500" />
@@ -421,19 +426,29 @@ export function MessageThread({ threadId }: MessageThreadProps) {
         </div>
       )}
 
-      {/* Permanent respectful‑use notice */}
+      {/* 🔥 FIX: Editing indicator */}
+      {editingMessage && (
+        <div className="flex items-center justify-between px-4 py-2 bg-yellow-50 border-t border-yellow-200 mt-2">
+          <span className="text-xs text-yellow-800 font-medium flex items-center gap-1">
+            <Edit2 className="h-3 w-3" /> Editing message
+          </span>
+          <button onClick={() => { setEditingMessage(null); setNewMessage(''); }} className="text-yellow-600 hover:text-yellow-800">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
       <div className="px-4 py-1 text-[10px] text-gray-400 text-center">
         Be respectful. No abusive language.
       </div>
 
-      {/* Input */}
       <form onSubmit={sendMessage} className="mt-1 flex items-center gap-2">
         <input
           ref={fileInputRef}
           type="file"
           className="hidden"
           accept="image/*,.pdf,.doc,.docx"
-          onChange={(e) => setAttachment(e.target.files?.[0] || null)}
+          onChange={handleFileChange}
         />
         <button
           type="button"
@@ -444,29 +459,36 @@ export function MessageThread({ threadId }: MessageThreadProps) {
           <Paperclip className="h-5 w-5" />
         </button>
         <input
+          id="chat-input"
           type="text"
           value={newMessage}
-          onChange={(e) => setNewMessage(e.target.value)}
-          placeholder="Type a message..."
+          onChange={(e) => {
+            if (e.target.value.length > 1000) return; // 🔥 FIX: Max length
+            setNewMessage(e.target.value);
+          }}
+          maxLength={1000}
+          placeholder={editingMessage ? "Edit your message..." : "Type a message..."}
           className="flex-1 px-4 py-3 bg-gray-100 border-0 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
           disabled={sending || uploading}
         />
         <button
           type="submit"
           disabled={sending || uploading || (!newMessage.trim() && !attachment)}
-          className="p-3 bg-primary-600 text-white rounded-full hover:bg-primary-700 disabled:opacity-50 transition"
+          className={cn(
+            "p-3 text-white rounded-full transition disabled:opacity-50",
+            editingMessage ? "bg-yellow-500 hover:bg-yellow-600" : "bg-primary-600 hover:bg-primary-700"
+          )}
         >
-          <Send className="h-5 w-5" />
+          {editingMessage ? <Check className="h-5 w-5" /> : <Send className="h-5 w-5" />}
         </button>
       </form>
 
-      {/* Context menu */}
       {contextMenu && (
         <div className="fixed inset-0 z-50" onClick={() => setContextMenu(null)} onContextMenu={(e) => e.preventDefault()}>
           <div className="absolute bg-white rounded-xl shadow-lg border py-2 min-w-[120px]" style={{ left: contextMenu.x, top: contextMenu.y }}>
             {contextMenu.message.sender_id === user?.id && !contextMenu.message.deleted_at && (
               <>
-                <button className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50" onClick={() => editMessage(contextMenu.message)}>Edit</button>
+                <button className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50" onClick={() => startEditing(contextMenu.message)}>Edit</button>
                 <button className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 text-red-500" onClick={() => deleteMessage(contextMenu.message.id)}>Delete</button>
               </>
             )}
@@ -477,7 +499,6 @@ export function MessageThread({ threadId }: MessageThreadProps) {
         </div>
       )}
 
-      {/* Full‑screen image viewer */}
       {selectedImage && (
         <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center" onClick={() => setSelectedImage(null)}>
           <img src={selectedImage} alt="full" className="max-w-full max-h-full object-contain" />
@@ -488,4 +509,4 @@ export function MessageThread({ threadId }: MessageThreadProps) {
       )}
     </div>
   );
-};
+}
