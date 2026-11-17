@@ -53,15 +53,15 @@ export const ProviderCard = memo(function ProviderCard({
   const hasPrice =
     typeof provider.starting_price === 'number' && provider.starting_price > 0;
 
-  // Portrait uses the original height (passing undefined), horizontal uses a square.
+  // 🔥 FIX 1: Request 400x500 for portrait to match the 4:5 aspect ratio, square for horizontal
   const imageSrc =
     variant === 'portrait'
-      ? getProviderImageSrc(provider, 400, undefined) 
+      ? getProviderImageSrc(provider, 400, 500) 
       : getProviderImageSrc(provider, 400, 400);
 
   const isPortrait = variant === 'portrait';
   
-  // 🔥 State to track if the image has finished loading
+  // State to track if the image has finished loading
   const [isImgLoaded, setIsImgLoaded] = useState(false);
 
   return (
@@ -80,18 +80,13 @@ export const ProviderCard = memo(function ProviderCard({
       <div
         className={cn(
           'relative bg-gray-200 overflow-hidden flex-shrink-0',
-          // Made horizontal image larger for desktop
-          // 🔥 FIX: Added aspect-[4/5] to isPortrait to prevent layout shift (CLS)
           isPortrait ? 'w-full aspect-[4/5]' : 'w-32 sm:w-40 md:w-48 aspect-square'
         )}
       >
         <Link
           href={`/provider/${provider.id}`}
           onMouseEnter={handleMouseEnter}
-          className={cn(
-            'block',
-            isPortrait ? 'relative w-full' : 'absolute inset-0'
-          )}
+          className="absolute inset-0" // 🔥 FIX 2: Always absolute to fill container
           aria-label={`View ${displayName}`}
         >
           {!isImgLoaded && (
@@ -102,10 +97,8 @@ export const ProviderCard = memo(function ProviderCard({
             src={imageSrc}
             alt={displayName}
             className={cn(
-              isPortrait 
-                ? 'w-full h-auto block' 
-                : 'absolute inset-0 w-full h-full object-cover object-top',
-              'transition-opacity duration-500 ease-in-out z-10 relative',
+              'absolute inset-0 w-full h-full object-cover object-top', // 🔥 FIX 3: Always cover
+              'transition-opacity duration-500 ease-in-out z-10',
               isImgLoaded ? 'opacity-100' : 'opacity-0'
             )}
             onLoad={() => setIsImgLoaded(true)}

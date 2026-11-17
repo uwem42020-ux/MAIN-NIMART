@@ -13,7 +13,7 @@ import { LocationDropdown } from '@/components/common/LocationDropdown';
 import { TopProvidersSlider } from '@/components/common/TopProvidersSlider';
 import { CategoryButtons } from '@/components/common/CategoryButtons';
 import { CategorySidebar } from '@/components/common/CategorySidebar';
-import { MapPin, ChevronDown, Search, WifiOff, LayoutGrid, List, X, Loader2 } from 'lucide-react';
+import { MapPin, ChevronDown, Search, WifiOff, LayoutGrid, List, X } from 'lucide-react';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useLocationStore } from '@/stores/locationStore';
 import { useGeolocation } from '@/hooks/useGeolocation';
@@ -221,7 +221,6 @@ export function HomeClient({ initialProviders, initialTopProviders }: HomeClient
     return state ? state.state_name : null;
   }, [stateFilter, states]);
 
-  // Whether the active location filter is resolved enough to render
   const locationResolved = useMemo(() => {
     if (!stateFilter && !lgaFilter) return true;
     if (stateFilter) return currentStateName !== null;
@@ -229,14 +228,12 @@ export function HomeClient({ initialProviders, initialTopProviders }: HomeClient
     return true;
   }, [stateFilter, lgaFilter, currentStateName, preloadedLgas]);
 
-  // Clear invalid state ID from URL
   useEffect(() => {
     if (!mounted || !stateFilter || states.length === 0) return;
     const state = states.find(s => s.state_id.toString() === stateFilter);
     if (!state) router.replace('/');
   }, [mounted, stateFilter, states, router]);
 
-  // Clear invalid LGA ID from URL
   useEffect(() => {
     if (!mounted || !lgaFilter || Object.keys(preloadedLgas).length === 0) return;
     let found = false;
@@ -246,28 +243,24 @@ export function HomeClient({ initialProviders, initialTopProviders }: HomeClient
     if (!found) router.replace('/');
   }, [mounted, lgaFilter, preloadedLgas, router]);
 
-  // Clear URL if preload failed and a filter is in the URL
   useEffect(() => {
     if (locationLoadError && (stateFilter || lgaFilter)) {
       router.replace('/');
     }
   }, [locationLoadError, stateFilter, lgaFilter, router]);
 
-  // ── Infinite Query ──
+  // ── Infinite Query (Now loading 500 at once) ──
   const {
     data: featuredProvidersData,
     isLoading,
     isFetching,
     isError,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
   } = useInfiniteQuery({
     queryKey: ['featured-providers', userLat, userLng, stateFilter, lgaFilter, currentStateName],
     enabled: !stateFilter || !!currentStateName,
     queryFn: async ({ pageParam = 0 }) => {
       const { data, error } = await db.rpc('get_featured_providers', {
-        limit_count: 20,
+        limit_count: 500, // 🔥 LOAD EVERYTHING AT ONCE
         offset_count: pageParam,
         p_state_name: currentStateName,
         p_lga_id: lgaFilter ? parseInt(lgaFilter) : null,
@@ -331,18 +324,12 @@ export function HomeClient({ initialProviders, initialTopProviders }: HomeClient
         }
       }
 
-      // No client sort here — done in useMemo after combining pages.
       return { items: result, rawCount: providers.length };
     },
     initialPageParam: 0,
-    getNextPageParam: (lastPage, allPages) => {
-      if (lastPage.rawCount < 20) return undefined;
-      const totalFetched = allPages.reduce((sum, page) => sum + page.rawCount, 0);
-      return totalFetched;
-    },
+    getNextPageParam: () => undefined, // 🔥 No more pagination
     placeholderData: (previousData) => {
       if (previousData) return previousData;
-      // Don't use unfiltered SSR data when a location filter is active.
       if (stateFilter || lgaFilter) return undefined;
       return {
         pages: [{ items: initialProviders, rawCount: initialProviders.length }],
@@ -352,29 +339,12 @@ export function HomeClient({ initialProviders, initialTopProviders }: HomeClient
     staleTime: 1000 * 60 * 5,
   });
 
-  // Combine pages, then sort the whole list globally.
+  // 🔥 FINAL FIX: Deduplicate, DO NOT re-sort. The DB already sorts.
   const featuredProviders = useMemo(() => {
     const combined = featuredProvidersData?.pages.flatMap((page) => page.items) ?? [];
-    const scoreMap = smartSortData?.length
-      ? new Map(smartSortData.map(s => [s.provider_id, s.score]))
-      : null;
-    const nowMs = Date.now();
+    return Array.from(new Map(combined.map(p => [p.id, p])).values());
+  }, [featuredProvidersData]);
 
-    return [...combined].sort((a, b) => {
-      const aBoosted = a.boost_until && new Date(a.boost_until).getTime() > nowMs ? 1 : 0;
-      const bBoosted = b.boost_until && new Date(b.boost_until).getTime() > nowMs ? 1 : 0;
-      if (aBoosted !== bBoosted) return bBoosted - aBoosted;
-
-      if (scoreMap) {
-        const aScore = scoreMap.get(a.id) || 0;
-        const bScore = scoreMap.get(b.id) || 0;
-        return bScore - aScore;
-      }
-      return (b.average_rating ?? 0) - (a.average_rating ?? 0);
-    });
-  }, [featuredProvidersData, smartSortData]);
-
-  // Fast category counts from the new RPCs
   const { data: providerCounts = {} } = useQuery({
     queryKey: ['provider-counts'],
     queryFn: async () => {
@@ -395,7 +365,6 @@ export function HomeClient({ initialProviders, initialTopProviders }: HomeClient
     staleTime: 1000 * 60 * 10,
   });
 
-  // Prefetch top 5 (dedupe by id — safe against any rerender loops)
   useEffect(() => {
     if (!featuredProviders?.length) return;
     featuredProviders.slice(0, 5).forEach(provider => {
@@ -409,7 +378,6 @@ export function HomeClient({ initialProviders, initialTopProviders }: HomeClient
     });
   }, [featuredProviders, queryClient]);
 
-  // Realtime: invalidate on provider updates
   useEffect(() => {
     const channel = supabase
       .channel('providers-status')
@@ -503,12 +471,10 @@ export function HomeClient({ initialProviders, initialTopProviders }: HomeClient
   const renderContent = () => {
     const show = mounted ? featuredProviders : initialProviders;
 
-    // Guard: filter is in the URL but not yet resolved → skeleton, don't flash unfiltered data
     if (mounted && !locationResolved) {
       return <ProviderGridSkeleton />;
     }
 
-    // Loading state (also covers the 1-frame window when enabled just flipped true)
     if (mounted && show.length === 0 && !isError && (isLoading || isFetching || !featuredProvidersData)) {
       return <ProviderGridSkeleton />;
     }
@@ -537,22 +503,6 @@ export function HomeClient({ initialProviders, initialTopProviders }: HomeClient
             {show.map(provider => (
               <ProviderCardHorizontal key={provider.id} provider={provider} />
             ))}
-          </div>
-        )}
-
-        {hasNextPage && (
-          <div className="flex justify-center mt-8 w-full">
-            <button
-              onClick={() => fetchNextPage()}
-              disabled={isFetchingNextPage}
-              className="flex items-center gap-2 bg-white border border-gray-200 shadow-sm text-gray-800 px-8 py-3 rounded-full font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
-            >
-              {isFetchingNextPage ? (
-                <><Loader2 className="h-5 w-5 animate-spin" /> Loading...</>
-              ) : (
-                'Load More Providers'
-              )}
-            </button>
           </div>
         )}
       </>
@@ -660,10 +610,8 @@ export function HomeClient({ initialProviders, initialTopProviders }: HomeClient
         </div>
       </section>
 
-      {/* ⬇️ SINGLE responsive tree — no double render of ProviderCards */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex flex-col md:flex-row md:gap-6">
-          {/* Sidebar — desktop only */}
           <div className="hidden md:block md:w-64 md:flex-shrink-0 md:self-start">
             <CategorySidebar providerCounts={providerCounts} subcategoryCounts={subcategoryCounts} />
           </div>
@@ -671,12 +619,10 @@ export function HomeClient({ initialProviders, initialTopProviders }: HomeClient
           <div className="flex-1 min-w-0">
             <TopProvidersSlider initialData={initialTopProviders} />
 
-            {/* Category pill row — mobile only */}
             <div className="md:hidden mb-4 px-4">
               <CategoryButtons providerCounts={providerCounts} subcategoryCounts={subcategoryCounts} />
             </div>
 
-            {/* Responsive header — one instance */}
             <div className="flex items-center justify-between mb-3 md:mb-4 px-4 md:px-0">
               <div className="flex items-center gap-2 md:gap-3">
                 <img
