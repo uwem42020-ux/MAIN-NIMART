@@ -97,6 +97,12 @@ export function GoogleOneTap() {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) return;
 
+      // Don't compete with the signup page's own attribution flow.
+      // On /auth/* pages the user is already in a deliberate signup flow,
+      // so One Tap would bypass the mandatory "how did you hear about us?" dropdown
+      // and record the signup as 'google-one-tap' instead of their real source.
+      if (window.location.pathname.startsWith('/auth/')) return;
+
       if (window.google?.accounts?.id) {
         window.google.accounts.id.initialize({
           client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID!,
